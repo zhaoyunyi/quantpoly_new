@@ -1,0 +1,5 @@
+.DS_Store
+.tmux-logs/
+__pycache__/
+*.pyc
+README.md
