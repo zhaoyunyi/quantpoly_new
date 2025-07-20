@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "platform-core"
+version = "0.1.0"
+description = "QuantPoly 平台核心库：配置加载、统一响应、日志脱敏、camelCase 序列化"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "fastapi>=0.100",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "httpx>=0.24",
+]
+
+[project.scripts]
+platform-core = "platform_core.cli:main"
