@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "user-auth"
+version = "0.1.0"
+description = "QuantPoly 用户认证与会话管理库"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "fastapi>=0.100",
+    "bcrypt>=4.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "httpx>=0.24",
+]
+
+[project.scripts]
+user-auth = "user_auth.cli:main"
