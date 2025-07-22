@@ -20,4 +20,4 @@ def _add_lib_to_sys_path(lib_name: str) -> None:
 
 _add_lib_to_sys_path("platform_core")
 _add_lib_to_sys_path("user_auth")
-
+_add_lib_to_sys_path("monitoring_realtime")

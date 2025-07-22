@@ -3,6 +3,8 @@
 ### Requirement: Monitor WebSocket Endpoint
 后端 SHALL 在应用根路径暴露 `/ws/monitor` WebSocket 端点，并仅允许通过后端自管 `user-auth` 会话认证的用户建立连接。
 
+会话令牌解析优先级 SHALL 为：`Authorization: Bearer <session_token>` > `Cookie: session_token=<session_token>`。
+
 #### Scenario: 认证用户建立实时监控连接
 - **GIVEN** 用户浏览器携带有效后端 session token（httpOnly Cookie）
 - **WHEN** 前端连接 `ws(s)://<host>/ws/monitor`
@@ -17,5 +19,4 @@
 #### Scenario: 未认证访问被拒绝
 - **GIVEN** 请求未携带可验证的会话令牌
 - **WHEN** 客户端尝试连接 `/ws/monitor`
-- **THEN** 服务器拒绝握手并关闭连接，返回策略违规状态码（4401）
-
+- **THEN** 服务器关闭连接，返回策略违规状态码（4401）
