@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: quantpoly
+      POSTGRES_PASSWORD: quantpoly
+      POSTGRES_DB: quantpoly_test
+    ports:
+      - "54329:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantpoly -d quantpoly_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
