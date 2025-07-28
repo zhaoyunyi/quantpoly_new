@@ -18,6 +18,38 @@ def test_default_preferences_has_version():
     assert prefs.version == CURRENT_VERSION
 
 
+def test_default_preferences_contains_contract_fields():
+    from user_preferences.domain import default_preferences
+
+    prefs = default_preferences()
+
+    assert prefs.theme is not None
+    assert prefs.account is not None
+    assert prefs.notifications is not None
+    assert prefs.data is not None
+    assert isinstance(prefs.sync_enabled, bool)
+    assert prefs.last_updated is not None
+
+
+def test_migrate_legacy_partial_preferences_payload():
+    from user_preferences.domain import migrate_preferences, CURRENT_VERSION
+
+    migrated = migrate_preferences(
+        {
+            "version": 0,
+            "theme": {"primaryColor": "#000000", "darkMode": False},
+            "syncEnabled": False,
+        }
+    )
+
+    assert migrated.version == CURRENT_VERSION
+    assert migrated.theme.primary_color == "#000000"
+    assert migrated.account is not None
+    assert migrated.notifications is not None
+    assert migrated.data is not None
+    assert migrated.sync_enabled is False
+
+
 def test_deep_merge_keeps_unpatched_fields():
     from user_preferences.domain import default_preferences, apply_patch
 
@@ -66,3 +98,25 @@ def test_level_1_user_cannot_patch_advanced():
             user_level=1,
         )
 
+
+def test_apply_patch_updates_last_updated_with_server_merge_rule():
+    from user_preferences.domain import apply_patch, default_preferences
+
+    base = default_preferences()
+    patched = apply_patch(
+        base,
+        {
+            "theme": {
+                "primaryColor": "#123456",
+            },
+            "notifications": {
+                "browser": {"enabled": False},
+            },
+        },
+        user_level=2,
+    )
+
+    assert patched.version == base.version
+    assert patched.theme.primary_color == "#123456"
+    assert patched.notifications.browser.enabled is False
+    assert patched.last_updated is not None

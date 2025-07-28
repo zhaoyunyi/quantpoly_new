@@ -47,6 +47,17 @@ class TestMaskSensitive:
         result = mask_sensitive(text)
         assert result == text
 
+    def test_mask_json_like_context_fields(self):
+        text = (
+            "auth_failed ctx={'authorization': 'Bearer abcdefghijkl', "
+            "'cookie': 'session_token=verysecrettoken', 'password': 'Passw0rd!'}"
+        )
+        result = mask_sensitive(text)
+        assert "abcdefghijkl" not in result
+        assert "verysecrettoken" not in result
+        assert "Passw0rd!" not in result
+        assert "***" in result
+
 
 class TestSensitiveFilter:
     """Test日志过滤器集成。"""

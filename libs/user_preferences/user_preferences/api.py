@@ -62,15 +62,14 @@ def create_router(
     @router.post("/users/me/preferences/import")
     def import_preferences(body: Mapping[str, Any], current_user=Depends(get_current_user)):
         try:
-            incoming = Preferences.model_validate(body)
+            incoming = migrate_preferences(body)
         except Exception as e:  # pragma: no cover
             raise HTTPException(status_code=422, detail=str(e)) from e
         # 权限：低等级用户导入时不能包含 advanced
         if incoming.advanced is not None and getattr(current_user, "level", 1) < 2:
             raise HTTPException(status_code=403, detail="advanced requires elevated user level")
-        migrated = migrate_preferences(incoming)
-        store.set(current_user.id, migrated)
-        filtered = filter_for_user(migrated, user_level=getattr(current_user, "level", 1))
+        store.set(current_user.id, incoming)
+        filtered = filter_for_user(incoming, user_level=getattr(current_user, "level", 1))
         return success_response(data=filtered.model_dump(by_alias=True, exclude_none=True))
 
     return router

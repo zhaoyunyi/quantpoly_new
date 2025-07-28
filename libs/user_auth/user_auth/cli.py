@@ -14,6 +14,7 @@ import sys
 from user_auth.domain import User, PasswordTooWeakError
 from user_auth.session import Session, SessionStore
 from user_auth.repository import UserRepository
+from user_auth.token import extract_session_token
 
 # CLI 使用内存存储（每次运行独立）
 _repo = UserRepository()
@@ -38,10 +39,23 @@ def _cmd_register(args: argparse.Namespace) -> None:
     _output({"success": True, "data": {"userId": user.id, "email": user.email}})
 
 
+def _cmd_verify_email(args: argparse.Namespace) -> None:
+    user = _repo.get_by_email(args.email)
+    if user is None:
+        _output({"success": False, "error": {"code": "USER_NOT_FOUND", "message": "User not found"}})
+        return
+    user.verify_email()
+    _repo.save(user)
+    _output({"success": True, "message": "Email verified"})
+
+
 def _cmd_login(args: argparse.Namespace) -> None:
     user = _repo.get_by_email(args.email)
     if user is None or not user.authenticate(args.password):
         _output({"success": False, "error": {"code": "INVALID_CREDENTIALS", "message": "Invalid credentials"}})
+        return
+    if not user.email_verified:
+        _output({"success": False, "error": {"code": "EMAIL_NOT_VERIFIED", "message": "EMAIL_NOT_VERIFIED"}})
         return
     session = Session.create(user_id=user.id)
     _sessions.save(session)
@@ -49,7 +63,11 @@ def _cmd_login(args: argparse.Namespace) -> None:
 
 
 def _cmd_verify(args: argparse.Namespace) -> None:
-    session = _sessions.get_by_token(args.token)
+    token = extract_session_token(
+        headers={"Authorization": f"Bearer {args.token}"},
+        cookies={},
+    )
+    session = _sessions.get_by_token(token or "")
     if session is None:
         _output({"success": False, "error": {"code": "INVALID_TOKEN", "message": "Token is invalid or expired"}})
         return
@@ -61,11 +79,15 @@ def _cmd_verify(args: argparse.Namespace) -> None:
 
 
 def _cmd_logout(args: argparse.Namespace) -> None:
-    session = _sessions.get_by_token(args.token)
+    token = extract_session_token(
+        headers={"Authorization": f"Bearer {args.token}"},
+        cookies={},
+    )
+    session = _sessions.get_by_token(token or "")
     if session is None:
         _output({"success": False, "error": {"code": "INVALID_TOKEN", "message": "Token is invalid or expired"}})
         return
-    _sessions.revoke(args.token)
+    _sessions.revoke(token or "")
     _output({"success": True, "message": "Logged out"})
 
 
@@ -79,6 +101,9 @@ def build_parser() -> argparse.ArgumentParser:
     reg = sub.add_parser("register", help="注册用户")
     reg.add_argument("--email", required=True)
     reg.add_argument("--password", required=True)
+
+    verify_email = sub.add_parser("verify-email", help="验证邮箱")
+    verify_email.add_argument("--email", required=True)
 
     login = sub.add_parser("login", help="登录")
     login.add_argument("--email", required=True)
@@ -95,6 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 _COMMANDS = {
     "register": _cmd_register,
+    "verify-email": _cmd_verify_email,
     "login": _cmd_login,
     "verify": _cmd_verify,
     "logout": _cmd_logout,

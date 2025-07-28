@@ -39,6 +39,19 @@ class TestMonitorWebSocketAuth:
 
         assert exc.value.code == 4401
 
+    def test_rejects_with_4401_when_invalid_token(self):
+        app = create_app()
+        client = TestClient(app)
+
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect(
+                "/ws/monitor",
+                headers={"Authorization": "Bearer invalid-token"},
+            ) as ws:
+                ws.receive_json()
+
+        assert exc.value.code == 4401
+
     def test_accepts_with_cookie_token_and_sends_message(self):
         repo, sessions, token = _build_auth_state()
         app = create_app(user_repo=repo, session_store=sessions)
@@ -76,3 +89,23 @@ class TestMonitorWebSocketAuth:
                 ws.receive_json()
 
         assert exc.value.code == 4401
+
+    def test_accepts_legacy_secure_cookie_token_signature(self):
+        repo, sessions, token = _build_auth_state()
+        app = create_app(user_repo=repo, session_store=sessions)
+        client = TestClient(app)
+        client.cookies.set("__Secure-better-auth.session_token", f"{token}.signature")
+
+        with client.websocket_connect("/ws/monitor") as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "monitor.heartbeat"
+
+    def test_accepts_legacy_better_auth_cookie_token_signature(self):
+        repo, sessions, token = _build_auth_state()
+        app = create_app(user_repo=repo, session_store=sessions)
+        client = TestClient(app)
+        client.cookies.set("better-auth.session_token", f"{token}.signature")
+
+        with client.websocket_connect("/ws/monitor") as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "monitor.heartbeat"

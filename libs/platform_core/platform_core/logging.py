@@ -20,6 +20,15 @@ _KV_SENSITIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 匹配被引号包裹的 key: value 形式（如 JSON-like 结构）
+_JSON_LIKE_SENSITIVE_RE = re.compile(
+    r"((?:\"|')?(?:password|api_key|api[-_]?secret|token|cookie|secret_key)(?:\"|')?"
+    r"\s*:\s*(?:\"|'))"
+    r"([^\"']+)"
+    r"((?:\"|'))",
+    re.IGNORECASE,
+)
+
 
 def _mask_value(value: str) -> str:
     """保留前缀 + 掩码。"""
@@ -43,6 +52,11 @@ def mask_sensitive(text: str) -> str:
     # 再处理 key=value 形式
     result = _KV_SENSITIVE_RE.sub(
         lambda m: m.group(1) + _mask_value(m.group(2)),
+        result,
+    )
+    # 再处理 JSON-like 场景，例如 {'cookie': 'session_token=...'}
+    result = _JSON_LIKE_SENSITIVE_RE.sub(
+        lambda m: m.group(1) + _mask_value(m.group(2)) + m.group(3),
         result,
     )
     return result

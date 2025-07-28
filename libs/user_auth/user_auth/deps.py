@@ -34,6 +34,15 @@ def build_get_current_user(
 
     auth_logger = logger or logging.getLogger("user_auth.auth")
 
+    def _auth_error(*, code: str, message: str) -> HTTPException:
+        return HTTPException(
+            status_code=401,
+            detail={
+                "code": code,
+                "message": message,
+            },
+        )
+
     def get_current_user(request: Request) -> User:
         token = token_extractor(
             headers=request.headers,
@@ -41,17 +50,17 @@ def build_get_current_user(
         )
         if not token:
             auth_logger.warning("auth_failed reason=missing_token")
-            raise HTTPException(status_code=401, detail="Not authenticated")
+            raise _auth_error(code="MISSING_TOKEN", message="Not authenticated")
 
         session = session_store.get_by_token(token)
         if session is None:
             auth_logger.warning("auth_failed reason=invalid_or_expired token=%s", _mask_token(token))
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
+            raise _auth_error(code="INVALID_TOKEN", message="Invalid or expired token")
 
         user = user_repo.get_by_id(session.user_id)
         if user is None:
             auth_logger.warning("auth_failed reason=user_not_found token=%s", _mask_token(token))
-            raise HTTPException(status_code=401, detail="User not found")
+            raise _auth_error(code="USER_NOT_FOUND", message="User not found")
 
         return user
 

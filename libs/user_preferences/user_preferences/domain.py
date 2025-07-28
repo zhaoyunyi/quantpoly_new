@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,10 +36,117 @@ class ThemePreferences(BaseModel):
     )
 
 
+class AccountPreferences(BaseModel):
+    default_trading_account_id: str | None = None
+    risk_tolerance: str = "moderate"
+    default_currency: str = "USD"
+    auto_select_account: bool = True
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class NotificationEmailPreferences(BaseModel):
+    enabled: bool = True
+    trading_alerts: bool = True
+    risk_alerts: bool = True
+    system_updates: bool = False
+    market_summary: bool = False
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class NotificationBrowserPreferences(BaseModel):
+    enabled: bool = True
+    permission: str = "default"
+    trading_signals: bool = True
+    risk_warnings: bool = True
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class NotificationAlertThresholds(BaseModel):
+    profit_threshold: float = 10
+    loss_threshold: float = 5
+    risk_level: str = "medium"
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class NotificationPreferences(BaseModel):
+    email: NotificationEmailPreferences = Field(default_factory=NotificationEmailPreferences)
+    browser: NotificationBrowserPreferences = Field(default_factory=NotificationBrowserPreferences)
+    alert_thresholds: NotificationAlertThresholds = Field(default_factory=NotificationAlertThresholds)
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class DataChartPreferences(BaseModel):
+    default_chart_type: str = "line"
+    show_volume: bool = True
+    show_indicators: bool = False
+    auto_scale: bool = True
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class DataTablePreferences(BaseModel):
+    page_size: int = 20
+    compact_rows: bool = False
+    show_decimals: int = 2
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class DataPreferences(BaseModel):
+    default_time_range: str = "1M"
+    refresh_interval: str = "5s"
+    chart_preferences: DataChartPreferences = Field(default_factory=DataChartPreferences)
+    table_preferences: DataTablePreferences = Field(default_factory=DataTablePreferences)
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
 class Preferences(BaseModel):
     version: int
     theme: ThemePreferences
+    account: AccountPreferences
+    notifications: NotificationPreferences
+    data: DataPreferences
     advanced: dict[str, Any] | None = None
+    last_updated: str
+    sync_enabled: bool = True
 
     model_config = ConfigDict(
         extra="forbid",
@@ -51,18 +159,31 @@ def default_preferences() -> Preferences:
     return Preferences(
         version=CURRENT_VERSION,
         theme=ThemePreferences(),
+        account=AccountPreferences(),
+        notifications=NotificationPreferences(),
+        data=DataPreferences(),
         advanced={"betaFeatures": False},
+        last_updated=datetime.now(timezone.utc).isoformat(),
+        sync_enabled=True,
     )
 
 
-def migrate_preferences(preferences: Preferences) -> Preferences:
-    if preferences.version >= CURRENT_VERSION:
-        return preferences
+def migrate_preferences(preferences: Preferences | Mapping[str, Any]) -> Preferences:
+    incoming = preferences
+    if isinstance(preferences, Mapping):
+        incoming = Preferences.model_validate(
+            deep_merge(default_preferences().model_dump(by_alias=True), preferences)
+        )
+
+    if incoming.version >= CURRENT_VERSION:
+        return incoming
+
     merged = deep_merge(
         default_preferences().model_dump(by_alias=True),
-        preferences.model_dump(by_alias=True),
+        incoming.model_dump(by_alias=True),
     )
     merged["version"] = CURRENT_VERSION
+    merged["lastUpdated"] = datetime.now(timezone.utc).isoformat()
     return Preferences.model_validate(merged)
 
 
@@ -85,6 +206,7 @@ def apply_patch(
 
     merged = deep_merge(preferences.model_dump(by_alias=True), patch)
     merged["version"] = preferences.version
+    merged["lastUpdated"] = datetime.now(timezone.utc).isoformat()
 
     try:
         return Preferences.model_validate(merged)
@@ -100,4 +222,3 @@ def deep_merge(base: Mapping[str, Any], patch: Mapping[str, Any]) -> dict[str, A
         else:
             result[key] = value
     return result
-

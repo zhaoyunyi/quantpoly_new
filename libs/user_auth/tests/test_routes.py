@@ -62,6 +62,10 @@ class TestLogin:
             "/auth/register",
             json={"email": "login@example.com", "password": "StrongPass123!"},
         )
+        client.post(
+            "/auth/verify-email",
+            json={"email": "login@example.com"},
+        )
 
     def test_login_success_returns_token(self, client):
         self._register(client)
@@ -98,6 +102,35 @@ class TestLogin:
         )
         assert resp.status_code == 401
 
+    def test_login_rejects_unverified_email(self, client):
+        client.post(
+            "/auth/register",
+            json={"email": "unverified@example.com", "password": "StrongPass123!"},
+        )
+        resp = client.post(
+            "/auth/login",
+            json={"email": "unverified@example.com", "password": "StrongPass123!"},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "EMAIL_NOT_VERIFIED"
+
+    def test_login_allows_after_email_verification(self, client):
+        client.post(
+            "/auth/register",
+            json={"email": "verified@example.com", "password": "StrongPass123!"},
+        )
+        verify_resp = client.post(
+            "/auth/verify-email",
+            json={"email": "verified@example.com"},
+        )
+        assert verify_resp.status_code == 200
+
+        login = client.post(
+            "/auth/login",
+            json={"email": "verified@example.com", "password": "StrongPass123!"},
+        )
+        assert login.status_code == 200
+
 
 def _register_and_login(client):
     """辅助：注册并登录，返回 token。"""
@@ -105,6 +138,10 @@ def _register_and_login(client):
     client.post(
         "/auth/register",
         json={"email": "auth@example.com", "password": "StrongPass123!"},
+    )
+    client.post(
+        "/auth/verify-email",
+        json={"email": "auth@example.com"},
     )
     resp = client.post(
         "/auth/login",
@@ -179,3 +216,121 @@ class TestLogout:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert me_resp.status_code == 401
+
+
+class TestPasswordReset:
+    """Test密码找回与重置流程。"""
+
+    def test_reset_password_flow_invalidates_old_password(self, client):
+        client.post(
+            "/auth/register",
+            json={"email": "reset@example.com", "password": "StrongPass123!"},
+        )
+        client.post(
+            "/auth/verify-email",
+            json={"email": "reset@example.com"},
+        )
+
+        issue = client.post(
+            "/auth/password-reset/request",
+            json={"email": "reset@example.com"},
+        )
+        assert issue.status_code == 200
+        reset_token = issue.json()["data"]["resetToken"]
+
+        reset = client.post(
+            "/auth/password-reset/confirm",
+            json={"token": reset_token, "newPassword": "NewStrongPass123!"},
+        )
+        assert reset.status_code == 200
+
+        old_login = client.post(
+            "/auth/login",
+            json={"email": "reset@example.com", "password": "StrongPass123!"},
+        )
+        assert old_login.status_code == 401
+
+        new_login = client.post(
+            "/auth/login",
+            json={"email": "reset@example.com", "password": "NewStrongPass123!"},
+        )
+        assert new_login.status_code == 200
+
+    def test_reset_token_single_use(self, client):
+        client.post(
+            "/auth/register",
+            json={"email": "singleuse@example.com", "password": "StrongPass123!"},
+        )
+        client.post(
+            "/auth/verify-email",
+            json={"email": "singleuse@example.com"},
+        )
+
+        issue = client.post(
+            "/auth/password-reset/request",
+            json={"email": "singleuse@example.com"},
+        )
+        token = issue.json()["data"]["resetToken"]
+
+        first = client.post(
+            "/auth/password-reset/confirm",
+            json={"token": token, "newPassword": "NewStrongPass123!"},
+        )
+        assert first.status_code == 200
+
+        second = client.post(
+            "/auth/password-reset/confirm",
+            json={"token": token, "newPassword": "AnotherStrongPass123!"},
+        )
+        assert second.status_code == 400
+
+
+class TestPersistenceBootstrap:
+    """Test create_app 的持久化仓储引导。"""
+
+    def test_create_app_sqlite_db_path_persists_user_and_session(self, tmp_path):
+        db_path = tmp_path / "auth.sqlite3"
+
+        app1 = create_app(sqlite_db_path=str(db_path))
+        client1 = TestClient(app1)
+
+        client1.post(
+            "/auth/register",
+            json={"email": "persist@app.com", "password": "StrongPass123!"},
+        )
+        client1.post(
+            "/auth/verify-email",
+            json={"email": "persist@app.com"},
+        )
+        login = client1.post(
+            "/auth/login",
+            json={"email": "persist@app.com", "password": "StrongPass123!"},
+        )
+        token = login.json()["data"]["token"]
+
+        app2 = create_app(sqlite_db_path=str(db_path))
+        client2 = TestClient(app2)
+        me = client2.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+        assert me.status_code == 200
+        assert me.json()["data"]["email"] == "persist@app.com"
+
+    def test_create_app_sqlite_db_path_persists_email_uniqueness(self, tmp_path):
+        db_path = tmp_path / "auth.sqlite3"
+
+        app1 = create_app(sqlite_db_path=str(db_path))
+        client1 = TestClient(app1)
+        first = client1.post(
+            "/auth/register",
+            json={"email": "duplicate@app.com", "password": "StrongPass123!"},
+        )
+        assert first.status_code == 200
+
+        app2 = create_app(sqlite_db_path=str(db_path))
+        client2 = TestClient(app2)
+        second = client2.post(
+            "/auth/register",
+            json={"email": "duplicate@app.com", "password": "StrongPass123!"},
+        )
+
+        assert second.status_code == 409

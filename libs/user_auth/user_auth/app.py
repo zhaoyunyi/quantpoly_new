@@ -7,12 +7,15 @@
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from user_auth.deps import build_get_current_user
 from user_auth.domain import PasswordTooWeakError, User
+from user_auth.password_reset import InMemoryPasswordResetStore
 from user_auth.repository import UserRepository
+from user_auth.repository_sqlite import SQLiteUserRepository
 from user_auth.session import Session, SessionStore
+from user_auth.session_sqlite import SQLiteSessionStore
 from user_auth.token import extract_session_token
 
 
@@ -26,15 +29,36 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class VerifyEmailRequest(BaseModel):
+    email: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str
+    new_password: str = Field(alias="newPassword")
+
+    model_config = {"populate_by_name": True}
+
+
 def create_app(
     user_repo: UserRepository | None = None,
     session_store: SessionStore | None = None,
+    sqlite_db_path: str | None = None,
 ) -> FastAPI:
     """创建 FastAPI 应用实例。"""
 
-    repo = user_repo or UserRepository()
-    sessions = session_store or SessionStore()
+    if sqlite_db_path:
+        repo = user_repo or SQLiteUserRepository(db_path=sqlite_db_path)
+        sessions = session_store or SQLiteSessionStore(db_path=sqlite_db_path)
+    else:
+        repo = user_repo or UserRepository()
+        sessions = session_store or SessionStore()
     app = FastAPI(title="user-auth")
+    reset_store = InMemoryPasswordResetStore()
 
     get_current_user = build_get_current_user(
         user_repo=repo,
@@ -45,13 +69,14 @@ def create_app(
         app=app,
         repo=repo,
         sessions=sessions,
+        reset_store=reset_store,
         get_current_user=get_current_user,
     )
 
     return app
 
 
-def _register_routes(*, app: FastAPI, repo: UserRepository, sessions: SessionStore, get_current_user):
+def _register_routes(*, app: FastAPI, repo: UserRepository, sessions: SessionStore, reset_store: InMemoryPasswordResetStore, get_current_user):
     @app.post("/auth/register")
     def register(body: RegisterRequest):
         if repo.email_exists(body.email):
@@ -70,6 +95,8 @@ def _register_routes(*, app: FastAPI, repo: UserRepository, sessions: SessionSto
         user = repo.get_by_email(body.email)
         if user is None or not user.authenticate(body.password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
+        if not user.email_verified:
+            raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
 
         session = Session.create(user_id=user.id)
         sessions.save(session)
@@ -82,6 +109,46 @@ def _register_routes(*, app: FastAPI, repo: UserRepository, sessions: SessionSto
         )
 
         return {"success": True, "data": {"token": session.token}}
+
+    @app.post("/auth/verify-email")
+    def verify_email(body: VerifyEmailRequest):
+        user = repo.get_by_email(body.email)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.verify_email()
+        repo.save(user)
+        return {"success": True, "message": "Email verified"}
+
+    @app.post("/auth/password-reset/request")
+    def request_password_reset(body: PasswordResetRequest):
+        user = repo.get_by_email(body.email)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        issued = reset_store.issue(user_id=user.id)
+        return {
+            "success": True,
+            "data": {"resetToken": issued.token},
+            "message": "Password reset token issued",
+        }
+
+    @app.post("/auth/password-reset/confirm")
+    def confirm_password_reset(body: PasswordResetConfirmRequest):
+        consumed = reset_store.consume(body.token)
+        if consumed is None:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+        user = repo.get_by_id(consumed.user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        try:
+            replacement = User.register(email=user.email, password=body.new_password)
+        except PasswordTooWeakError as exc:
+            raise HTTPException(status_code=400, detail="Password too weak") from exc
+
+        user.credential = replacement.credential
+        repo.save(user)
+        return {"success": True, "message": "Password reset successful"}
 
     @app.get("/auth/me")
     def me(current_user: User = Depends(get_current_user)):

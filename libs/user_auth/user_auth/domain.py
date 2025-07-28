@@ -58,6 +58,7 @@ class User:
     email: str
     credential: Credential
     is_active: bool = True
+    email_verified: bool = False
 
     @classmethod
     def register(cls, email: str, password: str) -> "User":
@@ -71,3 +72,6 @@ class User:
 
     def authenticate(self, password: str) -> bool:
         return self.credential.verify(password)
+
+    def verify_email(self) -> None:
+        self.email_verified = True

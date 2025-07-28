@@ -40,6 +40,12 @@ def test_get_returns_default_and_persists():
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["version"] >= 1
+    assert "theme" in data
+    assert "account" in data
+    assert "notifications" in data
+    assert "data" in data
+    assert "lastUpdated" in data
+    assert "syncEnabled" in data
     assert "advanced" not in data
 
     persisted = store.get("u-1")
@@ -59,6 +65,29 @@ def test_patch_deep_merge_keeps_other_fields():
     patched = resp.json()["data"]
     assert patched["theme"]["primaryColor"] == "#FF0000"
     assert patched["theme"]["darkMode"] == base["theme"]["darkMode"]
+
+
+def test_patch_concurrent_like_update_keeps_unrelated_fields():
+    app, _ = _build_app(user_level=2)
+    client = TestClient(app)
+
+    # 客户端 A：更新 theme
+    first = client.patch(
+        "/users/me/preferences",
+        json={"theme": {"primaryColor": "#AABBCC"}},
+    )
+    assert first.status_code == 200
+
+    # 客户端 B：更新 notifications（模拟并发后到达）
+    second = client.patch(
+        "/users/me/preferences",
+        json={"notifications": {"browser": {"enabled": False}}},
+    )
+    assert second.status_code == 200
+
+    merged = second.json()["data"]
+    assert merged["theme"]["primaryColor"] == "#AABBCC"
+    assert merged["notifications"]["browser"]["enabled"] is False
 
 
 def test_patch_unknown_field_rejected():

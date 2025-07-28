@@ -8,6 +8,17 @@ from __future__ import annotations
 from typing import Mapping
 
 
+def _normalize_token(raw_token: str) -> str:
+    token = raw_token.strip()
+    if not token:
+        return ""
+
+    # 兼容 legacy better-auth: token.signature
+    if "." in token:
+        token = token.split(".", 1)[0].strip()
+    return token
+
+
 def extract_session_token(
     *,
     headers: Mapping[str, str] | None,
@@ -23,14 +34,21 @@ def extract_session_token(
         if raw:
             lower = raw.lower()
             if lower.startswith("bearer "):
-                token = raw[7:].strip()
+                token = _normalize_token(raw[7:])
                 if token:
                     return token
 
     if cookies:
-        token = cookies.get("session_token")
+        token = _normalize_token(cookies.get("session_token", ""))
+        if token:
+            return token
+
+        token = _normalize_token(cookies.get("__Secure-better-auth.session_token", ""))
+        if token:
+            return token
+
+        token = _normalize_token(cookies.get("better-auth.session_token", ""))
         if token:
             return token
 
     return None
-

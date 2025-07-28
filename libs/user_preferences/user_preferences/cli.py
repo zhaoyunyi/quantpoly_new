@@ -28,8 +28,7 @@ def _cmd_migrate(args: argparse.Namespace) -> dict:
     else:
         raw = sys.stdin.read()
     payload = json.loads(raw) if raw.strip() else {}
-    prefs = Preferences.model_validate(payload)
-    migrated = migrate_preferences(prefs)
+    migrated = migrate_preferences(payload)
     return {"success": True, "data": migrated.model_dump(by_alias=True, exclude_none=True)}
 
 

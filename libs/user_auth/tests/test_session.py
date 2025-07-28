@@ -8,8 +8,15 @@ BDD Scenarios:
 """
 import pytest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from user_auth.session import Session, SessionStore
+
+
+def _sqlite_store(db_path: Path):
+    from user_auth.session_sqlite import SQLiteSessionStore
+
+    return SQLiteSessionStore(db_path=str(db_path))
 
 
 class TestSession:
@@ -58,5 +65,42 @@ class TestSessionStore:
     def test_get_expired_returns_none(self):
         store = SessionStore()
         session = Session.create(user_id="user-1", ttl_seconds=0)
+        store.save(session)
+        assert store.get_by_token(session.token) is None
+
+
+class TestSQLiteSessionStore:
+    """Test持久化会话存储。"""
+
+    def test_save_and_get_across_restarts(self, tmp_path: Path):
+        db_path = tmp_path / "sessions.db"
+
+        store1 = _sqlite_store(db_path)
+        session = Session.create(user_id="persist-user")
+        store1.save(session)
+
+        store2 = _sqlite_store(db_path)
+        found = store2.get_by_token(session.token)
+
+        assert found is not None
+        assert found.user_id == "persist-user"
+
+    def test_revoke_persists_across_restarts(self, tmp_path: Path):
+        db_path = tmp_path / "sessions.db"
+
+        store1 = _sqlite_store(db_path)
+        session = Session.create(user_id="persist-user")
+        store1.save(session)
+
+        store2 = _sqlite_store(db_path)
+        store2.revoke(session.token)
+
+        store3 = _sqlite_store(db_path)
+        assert store3.get_by_token(session.token) is None
+
+    def test_expired_session_returns_none(self, tmp_path: Path):
+        db_path = tmp_path / "sessions.db"
+        store = _sqlite_store(db_path)
+        session = Session.create(user_id="persist-user", ttl_seconds=0)
         store.save(session)
         assert store.get_by_token(session.token) is None
