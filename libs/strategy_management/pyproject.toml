@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "strategy-management"
+version = "0.1.0"
+description = "QuantPoly 策略管理库"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.0",
+  "fastapi>=0.100",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "httpx>=0.24",
+]
+
+[project.scripts]
+strategy-management = "strategy_management.cli:main"

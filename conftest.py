@@ -21,3 +21,7 @@ def _add_lib_to_sys_path(lib_name: str) -> None:
 _add_lib_to_sys_path("platform_core")
 _add_lib_to_sys_path("user_auth")
 _add_lib_to_sys_path("monitoring_realtime")
+_add_lib_to_sys_path("strategy_management")
+_add_lib_to_sys_path("backtest_runner")
+
+_add_lib_to_sys_path("trading_account")
