@@ -27,3 +27,7 @@ _add_lib_to_sys_path("backtest_runner")
 _add_lib_to_sys_path("trading_account")
 
 _add_lib_to_sys_path("market_data")
+
+_add_lib_to_sys_path("risk_control")
+
+_add_lib_to_sys_path("signal_execution")
