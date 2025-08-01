@@ -1,23 +1,124 @@
 """FastAPI 应用工厂（实时监控）。
 
-当前仅提供 `/ws/monitor` WebSocket 端点，用于实时推送监控消息。
-鉴权逻辑复用 `user_auth` 的 session token（Bearer 优先，其次 Cookie）。
+提供 `/ws/monitor` WebSocket 端点，支持：
+- 标准消息 envelope：type / payload / data / timestamp
+- 鉴权（Bearer 优先，其次 Cookie）
+- 订阅协议（subscribe/unsubscribe）
+- ping/pong
+- signals / alerts 增量推送（按用户过滤）
 """
 
 from __future__ import annotations
 
+import logging
 import time
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import FastAPI, WebSocket
+from starlette.websockets import WebSocketDisconnect
 
+from platform_core.logging import mask_sensitive
 from user_auth.repository import UserRepository
 from user_auth.session import SessionStore
 from user_auth.token import extract_session_token
+
+SourceFn = Callable[[str], list[dict[str, Any]]]
+
+
+def _envelope(
+    *,
+    msg_type: str,
+    payload: dict[str, Any] | None = None,
+    data: Any = None,
+    timestamp: int | None = None,
+) -> dict[str, Any]:
+    ts = int(time.time()) if timestamp is None else int(timestamp)
+    return {
+        "type": msg_type,
+        "payload": payload or {},
+        "data": data,
+        "timestamp": ts,
+    }
+
+
+def _extract_channels(message: dict[str, Any]) -> list[str]:
+    payload = message.get("payload") or {}
+    channels = payload.get("channels")
+    if isinstance(channels, list):
+        return [str(item) for item in channels]
+    single = payload.get("channel")
+    if single is None:
+        return []
+    return [str(single)]
+
+
+def _item_user_id(item: dict[str, Any]) -> str | None:
+    if "userId" in item:
+        value = item.get("userId")
+        return str(value) if value is not None else None
+    if "user_id" in item:
+        value = item.get("user_id")
+        return str(value) if value is not None else None
+    return None
+
+
+def _item_id(item: dict[str, Any]) -> str:
+    if "id" in item and item["id"] is not None:
+        return str(item["id"])
+    return str(item)
+
+
+def _dedupe_and_truncate(
+    *,
+    items: list[dict[str, Any]],
+    seen_ids: set[str],
+    incremental: bool,
+    max_items: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    result: list[dict[str, Any]] = []
+    local_seen: set[str] = set()
+
+    for item in items:
+        item_id = _item_id(item)
+        if item_id in local_seen:
+            continue
+        local_seen.add(item_id)
+
+        if incremental and item_id in seen_ids:
+            continue
+
+        result.append(item)
+        seen_ids.add(item_id)
+
+    truncated = len(result) > max_items
+    if truncated:
+        result = result[:max_items]
+
+    return result, truncated
+
+
+def _mask_token(token: str) -> str:
+    if len(token) <= 4:
+        return "***"
+    return token[:4] + "***"
+
+
+def _mask_request_context(websocket: WebSocket, body: Any | None = None) -> str:
+    raw = {
+        "headers": dict(websocket.headers),
+        "cookies": dict(websocket.cookies),
+        "body": body,
+    }
+    return mask_sensitive(str(raw))
 
 
 def create_app(
     user_repo: UserRepository | None = None,
     session_store: SessionStore | None = None,
+    signal_source: SourceFn | None = None,
+    alert_source: SourceFn | None = None,
+    max_items_per_message: int = 100,
 ) -> FastAPI:
     """创建 FastAPI 应用实例。"""
 
@@ -25,32 +126,153 @@ def create_app(
     sessions = session_store or SessionStore()
     app = FastAPI(title="monitoring-realtime")
 
+    signals_source = signal_source or (lambda _user_id: [])
+    alerts_source = alert_source or (lambda _user_id: [])
+    auth_logger = logging.getLogger("monitoring_realtime.auth")
+
     @app.websocket("/ws/monitor")
     async def ws_monitor(websocket: WebSocket):
         # 为了让客户端能收到 4401 close code，这里先 accept 再根据鉴权结果关闭。
-        # （否则会变成 HTTP handshake 拒绝，无法携带业务 close code）
         await websocket.accept()
 
         token = extract_session_token(headers=websocket.headers, cookies=websocket.cookies)
         if not token:
+            auth_logger.warning(
+                "ws_auth_failed reason=missing_token context=%s",
+                _mask_request_context(websocket, body=None),
+            )
             await websocket.close(code=4401)
             return
 
         session = sessions.get_by_token(token)
         if session is None:
+            auth_logger.warning(
+                "ws_auth_failed reason=invalid_token token=%s context=%s",
+                _mask_token(token),
+                _mask_request_context(websocket, body=None),
+            )
             await websocket.close(code=4401)
             return
 
         user = repo.get_by_id(session.user_id)
         if user is None:
+            auth_logger.warning(
+                "ws_auth_failed reason=user_not_found token=%s context=%s",
+                _mask_token(token),
+                _mask_request_context(websocket, body=None),
+            )
             await websocket.close(code=4401)
             return
 
-        # 1 秒内发送至少一条结构合法的监控消息
-        payload = {"type": "monitor.heartbeat", "ts": int(time.time())}
-        await websocket.send_json(payload)
+        subscriptions = {"signals", "alerts"}
+        sent_ids: dict[str, set[str]] = {
+            "signals": set(),
+            "alerts": set(),
+        }
 
-        # 之后保持连接（不做持续推送，避免测试阻塞）。
-        await websocket.close(code=1000)
+        heartbeat = _envelope(msg_type="monitor.heartbeat", data={"userId": user.id})
+        heartbeat["ts"] = heartbeat["timestamp"]  # 兼容历史测试字段
+        await websocket.send_json(heartbeat)
+
+        async def _push_updates(*, incremental: bool) -> None:
+            if "signals" in subscriptions:
+                raw_signals = signals_source(user.id)
+                user_signals = [item for item in raw_signals if _item_user_id(item) == user.id]
+                signal_items, signal_truncated = _dedupe_and_truncate(
+                    items=user_signals,
+                    seen_ids=sent_ids["signals"],
+                    incremental=incremental,
+                    max_items=max_items_per_message,
+                )
+                if signal_items:
+                    await websocket.send_json(
+                        _envelope(
+                            msg_type="signals_update",
+                            payload={
+                                "snapshot": not incremental,
+                                "truncated": signal_truncated,
+                            },
+                            data={"items": signal_items},
+                        )
+                    )
+
+            if "alerts" in subscriptions:
+                raw_alerts = alerts_source(user.id)
+                user_alerts = [item for item in raw_alerts if _item_user_id(item) == user.id]
+                alert_items, alert_truncated = _dedupe_and_truncate(
+                    items=user_alerts,
+                    seen_ids=sent_ids["alerts"],
+                    incremental=incremental,
+                    max_items=max_items_per_message,
+                )
+                if alert_items:
+                    await websocket.send_json(
+                        _envelope(
+                            msg_type="risk_alert",
+                            payload={
+                                "snapshot": not incremental,
+                                "truncated": alert_truncated,
+                            },
+                            data={"items": alert_items},
+                        )
+                    )
+
+        while True:
+            try:
+                message = await websocket.receive_json()
+            except WebSocketDisconnect:
+                break
+
+            msg_type = message.get("type")
+
+            if msg_type == "ping":
+                await websocket.send_json(
+                    _envelope(
+                        msg_type="pong",
+                        payload={"echo": message.get("timestamp")},
+                    )
+                )
+                continue
+
+            if msg_type == "subscribe":
+                for channel in _extract_channels(message):
+                    if channel in {"signals", "alerts"}:
+                        subscriptions.add(channel)
+
+                await websocket.send_json(
+                    _envelope(
+                        msg_type="subscribed",
+                        payload={"channels": sorted(subscriptions)},
+                    )
+                )
+                continue
+
+            if msg_type == "unsubscribe":
+                for channel in _extract_channels(message):
+                    subscriptions.discard(channel)
+
+                await websocket.send_json(
+                    _envelope(
+                        msg_type="unsubscribed",
+                        payload={"channels": sorted(subscriptions)},
+                    )
+                )
+                continue
+
+            if msg_type == "resync":
+                sent_ids = {"signals": set(), "alerts": set()}
+                await _push_updates(incremental=False)
+                continue
+
+            if msg_type == "poll":
+                await _push_updates(incremental=True)
+                continue
+
+            await websocket.send_json(
+                _envelope(
+                    msg_type="unknown_command",
+                    payload={"received": msg_type},
+                )
+            )
 
     return app
