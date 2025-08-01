@@ -31,3 +31,5 @@ _add_lib_to_sys_path("market_data")
 _add_lib_to_sys_path("risk_control")
 
 _add_lib_to_sys_path("signal_execution")
+
+_add_lib_to_sys_path("data_topology_boundary")

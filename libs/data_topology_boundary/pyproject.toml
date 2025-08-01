@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "data-topology-boundary"
+version = "0.1.0"
+description = "QuantPoly 数据拓扑边界治理库"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+]
+
+[project.scripts]
+data-topology-boundary = "data_topology_boundary.cli:main"
