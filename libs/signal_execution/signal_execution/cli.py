@@ -28,7 +28,11 @@ def _cmd_trend(args: argparse.Namespace) -> None:
 
 def _cmd_cleanup_all(args: argparse.Namespace) -> None:
     try:
-        deleted = _service.cleanup_all_signals(user_id=args.user_id, is_admin=args.is_admin)
+        deleted = _service.cleanup_all_signals(
+            user_id=args.user_id,
+            is_admin=args.is_admin,
+            confirmation_token=getattr(args, "confirmation_token", None),
+        )
     except AdminRequiredError:
         _output({"success": False, "error": {"code": "ADMIN_REQUIRED", "message": "admin role required"}})
         return
@@ -64,6 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup_all = sub.add_parser("cleanup-all", help="全局清理（管理员）")
     cleanup_all.add_argument("--user-id", required=True)
     cleanup_all.add_argument("--is-admin", action="store_true")
+    cleanup_all.add_argument("--confirmation-token", default=None)
 
     execute = sub.add_parser("execute", help="执行信号")
     execute.add_argument("--user-id", required=True)

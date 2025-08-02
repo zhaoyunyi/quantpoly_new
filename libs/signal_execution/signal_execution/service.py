@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from signal_execution.domain import ExecutionRecord, TradingSignal
 from signal_execution.repository import InMemorySignalRepository
@@ -23,10 +24,12 @@ class SignalExecutionService:
         repository: InMemorySignalRepository,
         strategy_owner_acl: Callable[[str, str], bool],
         account_owner_acl: Callable[[str, str], bool],
+        governance_checker: Callable[..., Any] | None = None,
     ) -> None:
         self._repository = repository
         self._strategy_owner_acl = strategy_owner_acl
         self._account_owner_acl = account_owner_acl
+        self._governance_checker = governance_checker
 
     def _assert_signal_acl(self, *, user_id: str, strategy_id: str, account_id: str) -> None:
         if not self._strategy_owner_acl(user_id, strategy_id):
@@ -105,8 +108,29 @@ class SignalExecutionService:
     def cleanup_signals(self, *, user_id: str) -> int:
         return self._repository.delete_signals_by_user(user_id=user_id)
 
-    def cleanup_all_signals(self, *, user_id: str, is_admin: bool) -> int:
-        del user_id
-        if not is_admin:
+    def cleanup_all_signals(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        confirmation_token: str | None = None,
+    ) -> int:
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            try:
+                self._governance_checker(
+                    actor_id=user_id,
+                    role=role,
+                    level=level,
+                    action="signals.cleanup_all",
+                    target="signals",
+                    confirmation_token=confirmation_token,
+                    context={"actor": user_id},
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise AdminRequiredError(str(exc)) from exc
+        elif not is_admin:
             raise AdminRequiredError("admin role required")
+
         return self._repository.delete_all_signals()

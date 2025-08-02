@@ -22,6 +22,12 @@ class CreateSignalRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class CleanupAllRequest(BaseModel):
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
+
+    model_config = {"populate_by_name": True}
+
+
 def _dt(value: datetime) -> str:
     return value.isoformat()
 
@@ -112,11 +118,15 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
         return success_response(data={"deleted": deleted})
 
     @router.post("/signals/maintenance/cleanup-all")
-    def cleanup_all_signals(current_user=Depends(get_current_user)):
+    def cleanup_all_signals(
+        body: CleanupAllRequest | None = None,
+        current_user=Depends(get_current_user),
+    ):
         try:
             deleted = service.cleanup_all_signals(
                 user_id=current_user.id,
                 is_admin=bool(getattr(current_user, "is_admin", False)),
+                confirmation_token=body.confirmation_token if body is not None else None,
             )
         except AdminRequiredError:
             return JSONResponse(

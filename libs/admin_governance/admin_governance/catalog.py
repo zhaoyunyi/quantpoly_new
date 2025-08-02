@@ -1,0 +1,31 @@
+"""管理员动作目录。"""
+
+from __future__ import annotations
+
+from admin_governance.domain import ActionPolicy
+
+
+def default_action_catalog() -> dict[str, ActionPolicy]:
+    return {
+        "signals.cleanup_all": ActionPolicy(
+            action="signals.cleanup_all",
+            min_role="admin",
+            min_level=5,
+            requires_confirmation=True,
+            high_risk=True,
+        ),
+        "jobs.cleanup_all": ActionPolicy(
+            action="jobs.cleanup_all",
+            min_role="admin",
+            min_level=5,
+            requires_confirmation=True,
+            high_risk=True,
+        ),
+        "risk.batch_maintain": ActionPolicy(
+            action="risk.batch_maintain",
+            min_role="admin",
+            min_level=3,
+            requires_confirmation=False,
+            high_risk=False,
+        ),
+    }
