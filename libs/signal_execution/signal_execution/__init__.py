@@ -4,6 +4,7 @@ from signal_execution.domain import ExecutionRecord, TradingSignal
 from signal_execution.repository import InMemorySignalRepository
 from signal_execution.service import (
     AdminRequiredError,
+    BatchIdempotencyConflictError,
     SignalAccessDeniedError,
     SignalExecutionService,
 )
@@ -14,5 +15,6 @@ __all__ = [
     "InMemorySignalRepository",
     "SignalAccessDeniedError",
     "AdminRequiredError",
+    "BatchIdempotencyConflictError",
     "SignalExecutionService",
 ]

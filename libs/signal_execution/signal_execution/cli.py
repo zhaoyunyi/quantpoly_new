@@ -7,7 +7,12 @@ import json
 import sys
 
 from signal_execution.repository import InMemorySignalRepository
-from signal_execution.service import AdminRequiredError, SignalAccessDeniedError, SignalExecutionService
+from signal_execution.service import (
+    AdminRequiredError,
+    BatchIdempotencyConflictError,
+    SignalAccessDeniedError,
+    SignalExecutionService,
+)
 
 _repo = InMemorySignalRepository()
 _service = SignalExecutionService(
@@ -20,6 +25,10 @@ _service = SignalExecutionService(
 def _output(payload: dict) -> None:
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
+
+
+def _parse_csv(text: str) -> list[str]:
+    return [item.strip() for item in text.split(",") if item.strip()]
 
 
 def _cmd_trend(args: argparse.Namespace) -> None:
@@ -58,6 +67,59 @@ def _cmd_execute(args: argparse.Namespace) -> None:
     _output({"success": True, "data": {"id": signal.id, "status": signal.status}})
 
 
+def _cmd_batch_execute(args: argparse.Namespace) -> None:
+    try:
+        result = _service.batch_execute_signals(
+            user_id=args.user_id,
+            signal_ids=_parse_csv(args.signal_ids),
+            idempotency_key=args.idempotency_key,
+        )
+    except BatchIdempotencyConflictError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "idempotency key already exists",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": result})
+
+
+def _cmd_batch_cancel(args: argparse.Namespace) -> None:
+    try:
+        result = _service.batch_cancel_signals(
+            user_id=args.user_id,
+            signal_ids=_parse_csv(args.signal_ids),
+            idempotency_key=args.idempotency_key,
+        )
+    except BatchIdempotencyConflictError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "IDEMPOTENCY_CONFLICT",
+                    "message": "idempotency key already exists",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": result})
+
+
+def _cmd_performance(args: argparse.Namespace) -> None:
+    data = _service.performance_statistics(
+        user_id=args.user_id,
+        strategy_id=args.strategy_id,
+        symbol=args.symbol,
+    )
+    _output({"success": True, "data": data})
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="signal-execution", description="QuantPoly 信号执行 CLI")
     sub = parser.add_subparsers(dest="command")
@@ -74,6 +136,21 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument("--user-id", required=True)
     execute.add_argument("--signal-id", required=True)
 
+    batch_execute = sub.add_parser("batch-execute", help="批量执行信号")
+    batch_execute.add_argument("--user-id", required=True)
+    batch_execute.add_argument("--signal-ids", required=True)
+    batch_execute.add_argument("--idempotency-key", default=None)
+
+    batch_cancel = sub.add_parser("batch-cancel", help="批量取消信号")
+    batch_cancel.add_argument("--user-id", required=True)
+    batch_cancel.add_argument("--signal-ids", required=True)
+    batch_cancel.add_argument("--idempotency-key", default=None)
+
+    performance = sub.add_parser("performance", help="执行绩效统计")
+    performance.add_argument("--user-id", required=True)
+    performance.add_argument("--strategy-id", default=None)
+    performance.add_argument("--symbol", default=None)
+
     return parser
 
 
@@ -81,6 +158,9 @@ _COMMANDS = {
     "trend": _cmd_trend,
     "cleanup-all": _cmd_cleanup_all,
     "execute": _cmd_execute,
+    "batch-execute": _cmd_batch_execute,
+    "batch-cancel": _cmd_batch_cancel,
+    "performance": _cmd_performance,
 }
 
 
