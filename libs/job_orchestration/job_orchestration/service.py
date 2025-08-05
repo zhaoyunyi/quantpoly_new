@@ -54,7 +54,9 @@ class JobOrchestrationService:
             payload=payload,
             idempotency_key=idempotency_key,
         )
-        self._repository.save(job)
+        created = self._repository.save_if_absent(job)
+        if not created:
+            raise IdempotencyConflictError("idempotency key already exists")
         return job
 
     def get_job(self, *, user_id: str, job_id: str) -> Job | None:
