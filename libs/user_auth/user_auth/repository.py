@@ -1,4 +1,7 @@
 """用户仓储（内存实现）。"""
+
+from __future__ import annotations
+
 from user_auth.domain import User
 
 
@@ -24,3 +27,44 @@ class UserRepository:
 
     def email_exists(self, email: str) -> bool:
         return email in self._email_index
+
+    def list_users(
+        self,
+        *,
+        status: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        users = list(self._users.values())
+        if status is not None:
+            active = status == "active"
+            users = [item for item in users if item.is_active is active]
+
+        total = len(users)
+        start = max(0, page - 1) * page_size
+        end = start + page_size
+        return {
+            "items": users[start:end],
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+        }
+
+    def update_user_level(self, *, user_id: str, level: int) -> User | None:
+        user = self._users.get(user_id)
+        if user is None:
+            return None
+        user.set_level(level)
+        self.save(user)
+        return user
+
+    def update_user_status(self, *, user_id: str, is_active: bool) -> User | None:
+        user = self._users.get(user_id)
+        if user is None:
+            return None
+        if is_active:
+            user.enable()
+        else:
+            user.disable()
+        self.save(user)
+        return user

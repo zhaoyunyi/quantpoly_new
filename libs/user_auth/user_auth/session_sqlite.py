@@ -92,3 +92,12 @@ class SQLiteSessionStore:
             conn.execute("delete from auth_sessions where token = ?", (token,))
             conn.commit()
 
+    def revoke_by_user(self, *, user_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "select count(*) from auth_sessions where user_id = ?",
+                (user_id,),
+            ).fetchone()
+            conn.execute("delete from auth_sessions where user_id = ?", (user_id,))
+            conn.commit()
+        return int(row[0]) if row is not None else 0

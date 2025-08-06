@@ -2,8 +2,11 @@
 
 提供 opaque session token 的创建、查询、撤销与过期管理。
 """
+
+from __future__ import annotations
+
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 DEFAULT_TTL_SECONDS = 86400 * 7  # 7 天
@@ -57,3 +60,9 @@ class SessionStore:
 
     def revoke(self, token: str) -> None:
         self._sessions.pop(token, None)
+
+    def revoke_by_user(self, *, user_id: str) -> int:
+        tokens = [item.token for item in self._sessions.values() if item.user_id == user_id]
+        for token in tokens:
+            self._sessions.pop(token, None)
+        return len(tokens)
