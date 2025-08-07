@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 
 from market_data.alpaca_provider import AlpacaProvider
-from market_data.domain import MarketAsset, MarketCandle, MarketDataError, MarketQuote
+from market_data.domain import BatchQuoteItem, MarketAsset, MarketCandle, MarketDataError, MarketQuote
 from market_data.service import MarketDataService
 
 
@@ -59,6 +59,24 @@ def _quote_payload(item: MarketQuote) -> dict:
     }
 
 
+def _batch_item_payload(item: BatchQuoteItem) -> dict:
+    payload: dict = {
+        "symbol": item.symbol,
+        "status": item.status,
+        "metadata": {
+            "cacheHit": item.cache_hit,
+            "source": item.source,
+        },
+    }
+    if item.quote is not None:
+        payload["quote"] = _quote_payload(item.quote)
+    if item.error_code is not None:
+        payload["errorCode"] = item.error_code
+    if item.error_message is not None:
+        payload["errorMessage"] = item.error_message
+    return payload
+
+
 def _candle_payload(item: MarketCandle) -> dict:
     return {
         "timestamp": _dt(item.timestamp),
@@ -74,7 +92,7 @@ def _cmd_search(args: argparse.Namespace) -> None:
     try:
         items = _service.search_assets(user_id=args.user_id, keyword=args.keyword, limit=args.limit)
     except MarketDataError as exc:
-        _output({"success": False, "error": {"code": exc.code, "message": exc.message}})
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
         return
 
     _output(
@@ -88,11 +106,39 @@ def _cmd_search(args: argparse.Namespace) -> None:
     )
 
 
-def _cmd_quote(args: argparse.Namespace) -> None:
+def _cmd_catalog(args: argparse.Namespace) -> None:
     try:
-        result = _service.get_quote(user_id=args.user_id, symbol=args.symbol)
+        items = _service.list_catalog(user_id=args.user_id, limit=args.limit)
     except MarketDataError as exc:
-        _output({"success": False, "error": {"code": exc.code, "message": exc.message}})
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "items": [_asset_payload(item) for item in items],
+                "total": len(items),
+            },
+        }
+    )
+
+
+def _cmd_symbols(args: argparse.Namespace) -> None:
+    try:
+        items = _service.list_symbols(user_id=args.user_id, limit=args.limit)
+    except MarketDataError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
+        return
+
+    _output({"success": True, "data": {"items": items, "total": len(items)}})
+
+
+def _cmd_latest(args: argparse.Namespace) -> None:
+    try:
+        result = _service.get_latest_quote(user_id=args.user_id, symbol=args.symbol)
+    except MarketDataError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
         return
 
     _output(
@@ -100,10 +146,50 @@ def _cmd_quote(args: argparse.Namespace) -> None:
             "success": True,
             "data": {
                 "quote": _quote_payload(result.quote),
-                "metadata": {"cacheHit": result.cache_hit},
+                "metadata": {
+                    "cacheHit": result.cache_hit,
+                    "source": result.source,
+                },
             },
         }
     )
+
+
+def _cmd_quote(args: argparse.Namespace) -> None:
+    _cmd_latest(args)
+
+
+def _parse_symbols(text: str) -> list[str]:
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _cmd_quotes(args: argparse.Namespace) -> None:
+    symbols = _parse_symbols(args.symbols)
+    try:
+        result = _service.get_quotes(user_id=args.user_id, symbols=symbols)
+    except MarketDataError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "items": [_batch_item_payload(item) for item in result.items],
+                "timestamp": result.timestamp,
+            },
+        }
+    )
+
+
+def _cmd_provider_health(args: argparse.Namespace) -> None:
+    try:
+        payload = _service.provider_health(user_id=args.user_id)
+    except MarketDataError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
+        return
+
+    _output({"success": True, "data": payload})
 
 
 def _cmd_history(args: argparse.Namespace) -> None:
@@ -117,7 +203,7 @@ def _cmd_history(args: argparse.Namespace) -> None:
             limit=args.limit,
         )
     except MarketDataError as exc:
-        _output({"success": False, "error": {"code": exc.code, "message": exc.message}})
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
         return
 
     _output(
@@ -140,9 +226,28 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--keyword", required=True)
     search.add_argument("--limit", type=int, default=10)
 
+    catalog = sub.add_parser("catalog", help="查询标的目录")
+    catalog.add_argument("--user-id", required=True)
+    catalog.add_argument("--limit", type=int, default=100)
+
+    symbols = sub.add_parser("symbols", help="查询可用标的代码")
+    symbols.add_argument("--user-id", required=True)
+    symbols.add_argument("--limit", type=int, default=100)
+
     quote = sub.add_parser("quote", help="查询实时行情")
     quote.add_argument("--user-id", required=True)
     quote.add_argument("--symbol", required=True)
+
+    latest = sub.add_parser("latest", help="查询最新行情")
+    latest.add_argument("--user-id", required=True)
+    latest.add_argument("--symbol", required=True)
+
+    quotes = sub.add_parser("quotes", help="批量查询实时行情")
+    quotes.add_argument("--user-id", required=True)
+    quotes.add_argument("--symbols", required=True, help="逗号分隔的 symbol 列表")
+
+    provider_health = sub.add_parser("provider-health", help="查询 provider 健康状态")
+    provider_health.add_argument("--user-id", required=True)
 
     history = sub.add_parser("history", help="查询历史K线")
     history.add_argument("--user-id", required=True)
@@ -157,7 +262,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 _COMMANDS = {
     "search": _cmd_search,
+    "catalog": _cmd_catalog,
+    "symbols": _cmd_symbols,
     "quote": _cmd_quote,
+    "latest": _cmd_latest,
+    "quotes": _cmd_quotes,
+    "provider-health": _cmd_provider_health,
     "history": _cmd_history,
 }
 

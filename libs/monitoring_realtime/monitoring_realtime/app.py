@@ -6,6 +6,8 @@
 - 订阅协议（subscribe/unsubscribe）
 - ping/pong
 - signals / alerts 增量推送（按用户过滤）
+
+并提供 `/monitor/summary` REST 摘要端点，统一监控读模型语义。
 """
 
 from __future__ import annotations
@@ -13,17 +15,21 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
+from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
 from platform_core.logging import mask_sensitive
+from platform_core.response import error_response, success_response
 from user_auth.repository import UserRepository
 from user_auth.session import SessionStore
 from user_auth.token import extract_session_token
 
 SourceFn = Callable[[str], list[dict[str, Any]]]
+SummaryFn = Callable[[str], dict[str, Any]]
 
 
 def _envelope(
@@ -113,11 +119,54 @@ def _mask_request_context(websocket: WebSocket, body: Any | None = None) -> str:
     return mask_sensitive(str(raw))
 
 
+def _resolve_user(*, headers: Any, cookies: Any, repo: UserRepository, sessions: SessionStore):
+    token = extract_session_token(headers=headers, cookies=cookies)
+    if not token:
+        return None
+    session = sessions.get_by_token(token)
+    if session is None:
+        return None
+    return repo.get_by_id(session.user_id)
+
+
+def _default_summary(*, user_id: str, signal_source: SourceFn, alert_source: SourceFn) -> dict[str, Any]:
+    raw_signals = signal_source(user_id)
+    user_signals = [item for item in raw_signals if _item_user_id(item) == user_id]
+
+    raw_alerts = alert_source(user_id)
+    user_alerts = [item for item in raw_alerts if _item_user_id(item) == user_id]
+    open_alerts = [
+        item for item in user_alerts if str(item.get("status", "open")).strip().lower() != "resolved"
+    ]
+    critical_alerts = [
+        item
+        for item in user_alerts
+        if str(item.get("severity", "")).strip().lower() in {"critical", "high"}
+    ]
+
+    return {
+        "type": "monitor.summary",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "signals": {
+            "total": len(user_signals),
+            "pending": len(user_signals),
+        },
+        "alerts": {
+            "open": len(open_alerts),
+            "critical": len(critical_alerts),
+        },
+        "tasks": {
+            "running": 0,
+        },
+    }
+
+
 def create_app(
     user_repo: UserRepository | None = None,
     session_store: SessionStore | None = None,
     signal_source: SourceFn | None = None,
     alert_source: SourceFn | None = None,
+    summary_source: SummaryFn | None = None,
     max_items_per_message: int = 100,
 ) -> FastAPI:
     """创建 FastAPI 应用实例。"""
@@ -130,9 +179,24 @@ def create_app(
     alerts_source = alert_source or (lambda _user_id: [])
     auth_logger = logging.getLogger("monitoring_realtime.auth")
 
+    @app.get("/monitor/summary")
+    def monitor_summary(request: Request):
+        user = _resolve_user(headers=request.headers, cookies=request.cookies, repo=repo, sessions=sessions)
+        if user is None:
+            return JSONResponse(
+                status_code=401,
+                content=error_response(code="UNAUTHORIZED", message="unauthorized"),
+            )
+
+        if summary_source is not None:
+            payload = summary_source(user.id)
+        else:
+            payload = _default_summary(user_id=user.id, signal_source=signals_source, alert_source=alerts_source)
+
+        return success_response(data=payload)
+
     @app.websocket("/ws/monitor")
     async def ws_monitor(websocket: WebSocket):
-        # 为了让客户端能收到 4401 close code，这里先 accept 再根据鉴权结果关闭。
         await websocket.accept()
 
         token = extract_session_token(headers=websocket.headers, cookies=websocket.cookies)
@@ -171,7 +235,7 @@ def create_app(
         }
 
         heartbeat = _envelope(msg_type="monitor.heartbeat", data={"userId": user.id})
-        heartbeat["ts"] = heartbeat["timestamp"]  # 兼容历史测试字段
+        heartbeat["ts"] = heartbeat["timestamp"]
         await websocket.send_json(heartbeat)
 
         async def _push_updates(*, incremental: bool) -> None:
@@ -212,6 +276,9 @@ def create_app(
                             payload={
                                 "snapshot": not incremental,
                                 "truncated": alert_truncated,
+                                "counts": {
+                                    "openAlerts": len(alert_items),
+                                },
                             },
                             data={"items": alert_items},
                         )

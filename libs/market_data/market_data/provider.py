@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
 from market_data.domain import MarketAsset, MarketCandle, MarketQuote
 
@@ -23,4 +23,13 @@ class MarketDataProvider(Protocol):
         timeframe: str,
         limit: int | None,
     ) -> list[MarketCandle]:
+        ...
+
+    def list_assets(self, *, limit: int) -> list[MarketAsset]:
+        ...
+
+    def batch_quote(self, *, symbols: list[str]) -> dict[str, MarketQuote]:
+        ...
+
+    def health(self) -> dict[str, Any]:
         ...

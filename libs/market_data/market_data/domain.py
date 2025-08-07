@@ -56,6 +56,17 @@ class MarketQuote:
 
 
 @dataclass
+class BatchQuoteItem:
+    symbol: str
+    status: str
+    quote: MarketQuote | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    cache_hit: bool = False
+    source: str = "provider"
+
+
+@dataclass
 class MarketCandle:
     timestamp: datetime
     open_price: float

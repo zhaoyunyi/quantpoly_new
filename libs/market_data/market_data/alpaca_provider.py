@@ -76,6 +76,9 @@ class AlpacaProvider:
 
         return result[:limit]
 
+    def list_assets(self, *, limit: int) -> list[MarketAsset]:
+        return self.search(keyword="", limit=limit)
+
     def quote(self, *, symbol: str) -> MarketQuote:
         payload = self._call_with_retry("quote", symbol=symbol.upper())
         return MarketQuote(
@@ -91,6 +94,13 @@ class AlpacaProvider:
             ask_price=self._to_float(payload.get("askPrice")),
             timestamp=self._to_datetime(payload.get("timestamp")),
         )
+
+    def batch_quote(self, *, symbols: list[str]) -> dict[str, MarketQuote]:
+        result: dict[str, MarketQuote] = {}
+        for symbol in symbols:
+            normalized = symbol.upper()
+            result[normalized] = self.quote(symbol=normalized)
+        return result
 
     def history(
         self,
@@ -123,3 +133,11 @@ class AlpacaProvider:
                 )
             )
         return candles
+
+    def health(self) -> dict[str, Any]:
+        return {
+            "provider": "alpaca",
+            "healthy": True,
+            "status": "ok",
+            "message": "",
+        }
