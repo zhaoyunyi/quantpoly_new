@@ -1,0 +1,37 @@
+{
+  "wave": "wave-1",
+  "capabilities": [
+    {
+      "id": "auth_login",
+      "passed": true,
+      "critical": true,
+      "context": "user-auth",
+      "journey": "认证登录"
+    },
+    {
+      "id": "strategy_list",
+      "passed": true,
+      "critical": true,
+      "context": "strategy-management",
+      "journey": "策略管理"
+    },
+    {
+      "id": "monitor_summary",
+      "passed": true,
+      "critical": false,
+      "context": "monitoring-realtime",
+      "journey": "实时监控"
+    }
+  ],
+  "postCutoverMetrics": {
+    "errorRate": 0.02,
+    "p95LatencyMs": 260,
+    "queueBacklog": 8,
+    "dataLeakage": false
+  },
+  "thresholds": {
+    "maxErrorRate": 0.05,
+    "maxP95LatencyMs": 800,
+    "maxQueueBacklog": 200
+  }
+}

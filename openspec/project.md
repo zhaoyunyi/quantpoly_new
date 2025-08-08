@@ -56,3 +56,22 @@ QuantPoly 是一个量化交易平台，目标能力包括：
 ## External Dependencies
 - Alpaca（行情/交易 API）
 - Cloudflare D1（如保留）：生产环境通过 REST API 访问会带来一致性/延迟约束
+
+## Migration Proposal Review Gates（新增）
+
+所有迁移类 OpenSpec 提案（尤其 Wave 切换）在评审通过前必须附带以下证据：
+
+1. 能力等价矩阵（用户旅程 × 限界上下文）
+   - 参考：`docs/gates/2026-02-09-capability-equivalence-matrix.md`
+2. Given/When/Then 场景清单
+   - 参考：`docs/gates/2026-02-09-capability-gwt-scenarios.md`
+3. Wave 门禁与回滚规则
+   - 参考：`docs/gates/2026-02-09-wave-gate-rules.md`
+4. 能力门禁 CLI 校验输出（JSON）
+   - 命令：
+
+```bash
+cat docs/gates/examples/capability_gate_input.json | python3 -m platform_core.cli capability-gate
+```
+
+若门禁结果 `allowed=false`，则提案不得进入切换执行阶段。

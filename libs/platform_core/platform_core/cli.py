@@ -9,9 +9,10 @@ import argparse
 import json
 import sys
 
-from platform_core.config import Settings, EnvironmentType
+from platform_core.capability_gate import evaluate_gate
+from platform_core.config import Settings
 from platform_core.logging import mask_sensitive
-from platform_core.response import success_response, error_response
+from platform_core.response import error_response, success_response
 
 
 def _cmd_config(args: argparse.Namespace) -> dict:
@@ -48,6 +49,27 @@ def _cmd_mask(args: argparse.Namespace) -> dict:
     return success_response(data={"masked": masked})
 
 
+def _load_json_input(*, input_file: str | None) -> dict:
+    if input_file:
+        with open(input_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    raw = sys.stdin.read().strip()
+    if not raw:
+        raise ValueError("capability gate input is empty")
+    return json.loads(raw)
+
+
+def _cmd_capability_gate(args: argparse.Namespace) -> dict:
+    """执行能力门禁校验。"""
+    try:
+        payload = _load_json_input(input_file=args.input_file)
+        result = evaluate_gate(payload)
+        return success_response(data=result, message="capability gate evaluated")
+    except (ValueError, json.JSONDecodeError) as exc:
+        return error_response(code="CAPABILITY_GATE_INVALID_INPUT", message=str(exc))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="platform-core",
@@ -71,6 +93,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="待脱敏文本（省略则从 stdin 读取）",
     )
 
+    capability_gate = sub.add_parser("capability-gate", help="执行能力门禁校验")
+    capability_gate.add_argument(
+        "--input-file",
+        default=None,
+        help="能力门禁输入 JSON 文件路径（省略时读取 stdin）",
+    )
+
     return parser
 
 
@@ -78,6 +107,7 @@ _COMMANDS = {
     "config": _cmd_config,
     "validate": _cmd_validate,
     "mask": _cmd_mask,
+    "capability-gate": _cmd_capability_gate,
 }
 
 
