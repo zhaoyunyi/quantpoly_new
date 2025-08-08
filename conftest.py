@@ -1,7 +1,7 @@
 """pytest 全局配置。
 
 当前仓库采用 libs/ 下多包结构；为保证在未安装各子包的情况下
-也能在仓库根目录直接运行 `pytest`，这里将各库目录加入 sys.path。
+也能在仓库根目录直接运行 `pytest`，这里将仓库根目录与各库目录加入 sys.path。
 """
 
 from __future__ import annotations
@@ -10,9 +10,12 @@ import sys
 from pathlib import Path
 
 
+_REPO_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(_REPO_ROOT))
+
+
 def _add_lib_to_sys_path(lib_name: str) -> None:
-    repo_root = Path(__file__).resolve().parent
-    lib_root = repo_root / "libs" / lib_name
+    lib_root = _REPO_ROOT / "libs" / lib_name
     if not lib_root.exists():
         return
     sys.path.insert(0, str(lib_root))
@@ -23,17 +26,11 @@ _add_lib_to_sys_path("user_auth")
 _add_lib_to_sys_path("monitoring_realtime")
 _add_lib_to_sys_path("strategy_management")
 _add_lib_to_sys_path("backtest_runner")
-
 _add_lib_to_sys_path("trading_account")
-
 _add_lib_to_sys_path("market_data")
-
 _add_lib_to_sys_path("risk_control")
-
 _add_lib_to_sys_path("signal_execution")
-
 _add_lib_to_sys_path("data_topology_boundary")
-
 _add_lib_to_sys_path("job_orchestration")
-
 _add_lib_to_sys_path("admin_governance")
+_add_lib_to_sys_path("user_preferences")
