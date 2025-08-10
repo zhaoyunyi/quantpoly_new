@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
+from platform_core.uow import NoopUnitOfWork, SnapshotUnitOfWork, UnitOfWork
 from trading_account.domain import (
     CashFlow,
     InvalidTradeOrderTransitionError,
@@ -33,9 +37,24 @@ class LedgerTransactionError(RuntimeError):
     """账本事务失败。"""
 
 
+def _default_uow_factory(repository: Any) -> Callable[[], UnitOfWork]:
+    if hasattr(repository, "snapshot_state") and hasattr(repository, "restore_state"):
+        return lambda: SnapshotUnitOfWork(
+            snapshot=repository.snapshot_state,
+            restore=repository.restore_state,
+        )
+    return NoopUnitOfWork
+
+
 class TradingAccountService:
-    def __init__(self, *, repository: InMemoryTradingAccountRepository) -> None:
+    def __init__(
+        self,
+        *,
+        repository: InMemoryTradingAccountRepository,
+        uow_factory: Callable[[], UnitOfWork] | None = None,
+    ) -> None:
         self._repository = repository
+        self._uow_factory = uow_factory or _default_uow_factory(repository)
 
     def create_account(self, *, user_id: str, account_name: str) -> TradingAccount:
         account = TradingAccount.create(user_id=user_id, account_name=account_name)
@@ -138,50 +157,61 @@ class TradingAccountService:
     def fill_order(self, *, user_id: str, account_id: str, order_id: str) -> TradeOrder:
         self._assert_account_owner(user_id=user_id, account_id=account_id)
 
-        order = self._transition_order_or_raise(
-            user_id=user_id,
-            account_id=account_id,
-            order_id=order_id,
-            from_status="pending",
-            to_status="filled",
-        )
-
-        trade = TradeRecord.create(
-            user_id=order.user_id,
-            account_id=order.account_id,
-            symbol=order.symbol,
-            side=order.side,
-            quantity=order.quantity,
-            price=order.price,
-            order_id=order.id,
-        )
-
-        notional = order.quantity * order.price
-        signed_amount = -notional if order.side == "BUY" else notional
-        flow = CashFlow.create(
-            user_id=order.user_id,
-            account_id=order.account_id,
-            amount=signed_amount,
-            flow_type=f"trade_{order.side.lower()}",
-            related_trade_id=trade.id,
-        )
+        deferred_transition_error: InvalidTradeOrderTransitionError | None = None
+        filled_order: TradeOrder | None = None
 
         try:
-            self._repository.save_trade(trade)
-            self._repository.save_cash_flow(flow)
-        except Exception as exc:
-            self._repository.delete_trade(trade_id=trade.id)
-            self._repository.delete_cash_flow(cash_flow_id=flow.id)
-            self._repository.transition_order_status(
-                account_id=account_id,
-                user_id=user_id,
-                order_id=order_id,
-                from_status="filled",
-                to_status="pending",
-            )
+            with self._uow_factory() as uow:
+                try:
+                    filled_order = self._transition_order_or_raise(
+                        user_id=user_id,
+                        account_id=account_id,
+                        order_id=order_id,
+                        from_status="pending",
+                        to_status="filled",
+                    )
+                except InvalidTradeOrderTransitionError as exc:
+                    deferred_transition_error = exc
+                    uow.commit()
+                    filled_order = None
+
+                if deferred_transition_error is not None:
+                    return self._raise_transition_error(deferred_transition_error)
+
+                trade = TradeRecord.create(
+                    user_id=filled_order.user_id,
+                    account_id=filled_order.account_id,
+                    symbol=filled_order.symbol,
+                    side=filled_order.side,
+                    quantity=filled_order.quantity,
+                    price=filled_order.price,
+                    order_id=filled_order.id,
+                )
+
+                notional = filled_order.quantity * filled_order.price
+                signed_amount = -notional if filled_order.side == "BUY" else notional
+                flow = CashFlow.create(
+                    user_id=filled_order.user_id,
+                    account_id=filled_order.account_id,
+                    amount=signed_amount,
+                    flow_type=f"trade_{filled_order.side.lower()}",
+                    related_trade_id=trade.id,
+                )
+
+                self._repository.save_trade(trade)
+                self._repository.save_cash_flow(flow)
+
+            if filled_order is None:
+                raise RuntimeError("filled order missing")
+            return filled_order
+        except (AccountAccessDeniedError, OrderNotFoundError, InvalidTradeOrderTransitionError):
+            raise
+        except Exception as exc:  # noqa: BLE001
             raise LedgerTransactionError("ledger transaction failed") from exc
 
-        return order
+    @staticmethod
+    def _raise_transition_error(exc: InvalidTradeOrderTransitionError) -> None:
+        raise exc
 
     def cancel_order(self, *, user_id: str, account_id: str, order_id: str) -> TradeOrder:
         self._assert_account_owner(user_id=user_id, account_id=account_id)

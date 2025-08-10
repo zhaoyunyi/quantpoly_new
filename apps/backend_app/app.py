@@ -17,7 +17,11 @@ from apps.backend_app.router_registry import (
     permission_error_to_response,
     register_all_routes,
 )
-from apps.backend_app.settings import CompositionSettings, normalize_enabled_contexts
+from apps.backend_app.settings import (
+    CompositionSettings,
+    normalize_enabled_contexts,
+    normalize_storage_backend,
+)
 from platform_core.logging import mask_sensitive
 from platform_core.response import error_response
 from user_auth.app import create_app as create_user_auth_app
@@ -39,9 +43,22 @@ def _http_error_code(status_code: int) -> str:
     return "HTTP_ERROR"
 
 
-def create_app(*, enabled_contexts: set[str] | None = None) -> FastAPI:
-    settings = CompositionSettings(enabled_contexts=normalize_enabled_contexts(enabled_contexts))
-    context = build_context()
+def create_app(
+    *,
+    enabled_contexts: set[str] | None = None,
+    storage_backend: str | None = None,
+    sqlite_db_path: str | None = None,
+) -> FastAPI:
+    env_settings = CompositionSettings.from_env()
+    settings = CompositionSettings(
+        enabled_contexts=normalize_enabled_contexts(enabled_contexts),
+        storage_backend=normalize_storage_backend(storage_backend or env_settings.storage_backend),
+        sqlite_db_path=sqlite_db_path or env_settings.sqlite_db_path,
+    )
+    context = build_context(
+        storage_backend=settings.storage_backend,
+        sqlite_db_path=settings.sqlite_db_path,
+    )
 
     app = create_user_auth_app(user_repo=context.user_repo, session_store=context.session_store)
     app.title = "quantpoly-backend-app"

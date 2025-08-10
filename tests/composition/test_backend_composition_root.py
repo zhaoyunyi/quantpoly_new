@@ -31,7 +31,7 @@ def _register_and_login(client: TestClient) -> str:
 
 
 def test_composition_root_registers_rest_and_ws_contexts():
-    app = create_app()
+    app = create_app(storage_backend="memory")
 
     paths = {route.path for route in app.routes}
 
@@ -48,7 +48,7 @@ def test_composition_root_registers_rest_and_ws_contexts():
 
 
 def test_composition_root_module_switch_disables_selected_contexts():
-    app = create_app(enabled_contexts={"user-auth", "strategy-management"})
+    app = create_app(enabled_contexts={"user-auth", "strategy-management"}, storage_backend="memory")
 
     paths = {route.path for route in app.routes}
 
@@ -60,7 +60,7 @@ def test_composition_root_module_switch_disables_selected_contexts():
 
 
 def test_single_current_user_dependency_and_error_envelope_are_consistent():
-    app = create_app()
+    app = create_app(storage_backend="memory")
     client = TestClient(app)
 
     unauthorized_strategy = client.get("/strategies")
@@ -86,7 +86,7 @@ def test_single_current_user_dependency_and_error_envelope_are_consistent():
 
 
 def test_composition_auth_log_masks_sensitive_values(caplog):
-    app = create_app()
+    app = create_app(storage_backend="memory")
     client = TestClient(app)
 
     raw_header_token = "super-secret-header-token-123456"
@@ -106,7 +106,7 @@ def test_composition_auth_log_masks_sensitive_values(caplog):
 
 
 def test_monitoring_ws_is_available_from_composition_root():
-    app = create_app()
+    app = create_app(storage_backend="memory")
     client = TestClient(app)
     token = _register_and_login(client)
 
@@ -117,7 +117,7 @@ def test_monitoring_ws_is_available_from_composition_root():
 
 
 def test_composition_metrics_endpoint_collects_http_totals():
-    app = create_app(enabled_contexts={"user-auth", "strategy-management"})
+    app = create_app(enabled_contexts={"user-auth", "strategy-management"}, storage_backend="memory")
     client = TestClient(app)
 
     client.get("/health")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -12,7 +13,10 @@ from fastapi.responses import JSONResponse
 
 from backtest_runner.api import create_router as create_backtest_router
 from backtest_runner.repository import InMemoryBacktestRepository
+from backtest_runner.repository_sqlite import SQLiteBacktestRepository
 from backtest_runner.service import BacktestService
+from job_orchestration.repository import InMemoryJobRepository
+from job_orchestration.repository_sqlite import SQLiteJobRepository
 from market_data.api import create_router as create_market_router
 from market_data.domain import MarketAsset, MarketCandle, MarketQuote
 from market_data.service import MarketDataService
@@ -27,14 +31,18 @@ from signal_execution.repository import InMemorySignalRepository
 from signal_execution.service import SignalExecutionService
 from strategy_management.api import create_router as create_strategy_router
 from strategy_management.repository import InMemoryStrategyRepository
+from strategy_management.repository_sqlite import SQLiteStrategyRepository
 from strategy_management.service import StrategyService
 from trading_account.api import create_router as create_trading_router
 from trading_account.domain import TradingAccount
 from trading_account.repository import InMemoryTradingAccountRepository
+from trading_account.repository_sqlite import SQLiteTradingAccountRepository
 from trading_account.service import TradingAccountService
 from user_auth.domain import User
 from user_auth.repository import UserRepository
+from user_auth.repository_sqlite import SQLiteUserRepository
 from user_auth.session import SessionStore
+from user_auth.session_sqlite import SQLiteSessionStore
 from user_auth.token import extract_session_token
 from user_preferences.api import create_router as create_preferences_router
 from user_preferences.store import InMemoryPreferencesStore
@@ -87,6 +95,7 @@ class CompositionContext:
     strategy_repo: InMemoryStrategyRepository
     backtest_repo: InMemoryBacktestRepository
     trading_repo: InMemoryTradingAccountRepository
+    job_repo: InMemoryJobRepository
     risk_repo: InMemoryRiskRepository
     signal_repo: InMemorySignalRepository
     preferences_store: InMemoryPreferencesStore
@@ -116,12 +125,36 @@ class MetricsCollector:
         }
 
 
-def build_context() -> CompositionContext:
-    user_repo = UserRepository()
-    session_store = SessionStore()
-    strategy_repo = InMemoryStrategyRepository()
-    backtest_repo = InMemoryBacktestRepository()
-    trading_repo = InMemoryTradingAccountRepository()
+def build_context(
+    *,
+    storage_backend: str = "sqlite",
+    sqlite_db_path: str | None = None,
+) -> CompositionContext:
+    normalized_backend = storage_backend.strip().lower()
+    if normalized_backend not in {"sqlite", "memory"}:
+        raise ValueError("storage_backend must be one of: sqlite, memory")
+
+    if normalized_backend == "sqlite":
+        if not sqlite_db_path:
+            sqlite_db_path = "data/backend.sqlite3"
+        if sqlite_db_path != ":memory:":
+            db_path = Path(sqlite_db_path)
+            if db_path.parent != Path("."):
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+        user_repo = SQLiteUserRepository(db_path=sqlite_db_path)
+        session_store = SQLiteSessionStore(db_path=sqlite_db_path)
+        strategy_repo = SQLiteStrategyRepository(db_path=sqlite_db_path)
+        backtest_repo = SQLiteBacktestRepository(db_path=sqlite_db_path)
+        trading_repo = SQLiteTradingAccountRepository(db_path=sqlite_db_path)
+        job_repo = SQLiteJobRepository(db_path=sqlite_db_path)
+    else:
+        user_repo = UserRepository()
+        session_store = SessionStore()
+        strategy_repo = InMemoryStrategyRepository()
+        backtest_repo = InMemoryBacktestRepository()
+        trading_repo = InMemoryTradingAccountRepository()
+        job_repo = InMemoryJobRepository()
+
     risk_repo = InMemoryRiskRepository()
     signal_repo = InMemorySignalRepository()
     preferences_store = InMemoryPreferencesStore()
@@ -134,6 +167,7 @@ def build_context() -> CompositionContext:
         strategy_repo=strategy_repo,
         backtest_repo=backtest_repo,
         trading_repo=trading_repo,
+        job_repo=job_repo,
         risk_repo=risk_repo,
         signal_repo=signal_repo,
         preferences_store=preferences_store,

@@ -79,6 +79,30 @@ class InMemoryTradingAccountRepository:
             created_at=cash_flow.created_at,
         )
 
+    def snapshot_state(self) -> dict:
+        with self._lock:
+            return {
+                "accounts": {key: self._clone_account(value) for key, value in self._accounts.items()},
+                "positions": {key: self._clone_position(value) for key, value in self._positions.items()},
+                "orders": {key: self._clone_order(value) for key, value in self._orders.items()},
+                "trades": {key: self._clone_trade(value) for key, value in self._trades.items()},
+                "cash_flows": {key: self._clone_cash_flow(value) for key, value in self._cash_flows.items()},
+            }
+
+    def restore_state(self, snapshot: dict) -> None:
+        with self._lock:
+            self._accounts = {key: self._clone_account(value) for key, value in snapshot["accounts"].items()}
+            self._positions = {
+                key: self._clone_position(value)
+                for key, value in snapshot["positions"].items()
+            }
+            self._orders = {key: self._clone_order(value) for key, value in snapshot["orders"].items()}
+            self._trades = {key: self._clone_trade(value) for key, value in snapshot["trades"].items()}
+            self._cash_flows = {
+                key: self._clone_cash_flow(value)
+                for key, value in snapshot["cash_flows"].items()
+            }
+
     def save_account(self, account: TradingAccount) -> None:
         with self._lock:
             self._accounts[account.id] = self._clone_account(account)
