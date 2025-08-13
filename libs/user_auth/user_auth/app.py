@@ -302,6 +302,25 @@ def _register_routes(
             "message": "Password updated",
         }
 
+    @app.delete("/users/me")
+    def delete_me(request: Request, current_user: User = Depends(get_current_user)):
+        token = extract_session_token(headers=request.headers, cookies=request.cookies)
+        deleted = repo.delete(current_user.id)
+        revoked = sessions.revoke_by_user(user_id=current_user.id)
+        if token:
+            sessions.revoke(token)
+
+        if not deleted:
+            return _error(404, code="USER_NOT_FOUND", message="user not found")
+
+        return {
+            "success": True,
+            "data": {
+                "revokedSessions": revoked,
+            },
+            "message": "User deleted",
+        }
+
     @app.get("/admin/users")
     def admin_list_users(
         request: Request,
@@ -376,3 +395,55 @@ def _register_routes(
             sessions.revoke_by_user(user_id=target.id)
 
         return {"success": True, "data": _user_payload(target)}
+
+    @app.get("/admin/users/{user_id}")
+    def admin_get_user(
+        user_id: str,
+        request: Request,
+        current_user: User = Depends(get_current_user),
+    ):
+        denied = _authorize_admin_action(
+            request=request,
+            current_user=current_user,
+            action="users.read_all",
+            target=user_id,
+        )
+        if denied is not None:
+            return denied
+
+        target = repo.get_by_id(user_id)
+        if target is None:
+            return _error(404, code="USER_NOT_FOUND", message="user not found")
+
+        return {"success": True, "data": _user_payload(target)}
+
+    @app.delete("/admin/users/{user_id}")
+    def admin_delete_user(
+        user_id: str,
+        request: Request,
+        current_user: User = Depends(get_current_user),
+    ):
+        denied = _authorize_admin_action(
+            request=request,
+            current_user=current_user,
+            action="users.delete",
+            target=user_id,
+        )
+        if denied is not None:
+            return denied
+
+        target = repo.get_by_id(user_id)
+        if target is None:
+            return _error(404, code="USER_NOT_FOUND", message="user not found")
+
+        repo.delete(user_id)
+        revoked = sessions.revoke_by_user(user_id=user_id)
+
+        return {
+            "success": True,
+            "data": {
+                "userId": user_id,
+                "revokedSessions": revoked,
+            },
+            "message": "User deleted",
+        }

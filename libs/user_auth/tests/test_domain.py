@@ -73,3 +73,15 @@ class TestUser:
             password="StrongPass123!",
         )
         assert user.authenticate("WrongPassword") is False
+
+    def test_disable_then_enable_updates_status(self):
+        user = User.register(
+            email="status@example.com",
+            password="StrongPass123!",
+        )
+
+        user.disable()
+        assert user.is_active is False
+
+        user.enable()
+        assert user.is_active is True

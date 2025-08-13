@@ -13,6 +13,11 @@ class UserRepository:
         self._email_index: dict[str, str] = {}
 
     def save(self, user: User) -> None:
+        existing = self._users.get(user.id)
+        if existing is not None and existing.email != user.email:
+            stale_owner = self._email_index.get(existing.email)
+            if stale_owner == user.id:
+                self._email_index.pop(existing.email, None)
         self._users[user.id] = user
         self._email_index[user.email] = user.id
 
@@ -68,3 +73,13 @@ class UserRepository:
             user.disable()
         self.save(user)
         return user
+
+    def delete(self, user_id: str) -> bool:
+        user = self._users.pop(user_id, None)
+        if user is None:
+            return False
+
+        owner = self._email_index.get(user.email)
+        if owner == user_id:
+            self._email_index.pop(user.email, None)
+        return True

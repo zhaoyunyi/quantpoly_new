@@ -132,3 +132,13 @@ def test_audit_log_masks_sensitive_fields():
     assert "session_cookie_secret" not in text
     assert "StrongPass123!" not in text
 
+
+def test_catalog_contains_users_delete_action():
+    from admin_governance.catalog import default_action_catalog
+
+    catalog = default_action_catalog()
+
+    assert "users.delete" in catalog
+    policy = catalog["users.delete"]
+    assert policy.min_role == "admin"
+    assert policy.min_level == 2

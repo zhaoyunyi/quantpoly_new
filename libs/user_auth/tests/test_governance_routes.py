@@ -74,6 +74,24 @@ def test_non_admin_access_admin_users_returns_403(client: TestClient):
     assert payload["error"]["code"] == "ADMIN_REQUIRED"
 
 
+def test_delete_users_me_revokes_sessions_and_removes_user(client: TestClient):
+    token = _register_verify_login(client, email="self-delete@example.com", password="StrongPass123!")
+
+    deleted = client.delete("/users/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert deleted.status_code == 200
+    assert deleted.json()["success"] is True
+
+    me_after_delete = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_after_delete.status_code == 401
+
+    re_register = client.post(
+        "/auth/register",
+        json={"email": "self-delete@example.com", "password": "StrongPass123!"},
+    )
+    assert re_register.status_code == 200
+
+
 def test_admin_can_list_and_update_user():
     repo = UserRepository()
     sessions = SessionStore()
@@ -112,3 +130,59 @@ def test_admin_can_list_and_update_user():
     result = disable.json()["data"]
     assert result["isActive"] is False
     assert result["level"] == 2
+
+
+def test_admin_can_get_and_delete_target_user():
+    repo = UserRepository()
+    sessions = SessionStore()
+    client = TestClient(create_app(user_repo=repo, session_store=sessions))
+
+    _register_verify_login(client, email="admin-delete@example.com", password="StrongPass123!")
+    admin = repo.get_by_email("admin-delete@example.com")
+    assert admin is not None
+    admin.set_role("admin")
+    admin.set_level(2)
+    repo.save(admin)
+
+    admin_login = client.post(
+        "/auth/login",
+        json={"email": "admin-delete@example.com", "password": "StrongPass123!"},
+    )
+    admin_token = admin_login.json()["data"]["token"]
+
+    _register_verify_login(client, email="target-delete@example.com", password="StrongPass123!")
+    target = repo.get_by_email("target-delete@example.com")
+    assert target is not None
+
+    got = client.get(
+        f"/admin/users/{target.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert got.status_code == 200
+    assert got.json()["data"]["email"] == "target-delete@example.com"
+
+    deleted = client.delete(
+        f"/admin/users/{target.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert deleted.status_code == 200
+
+    not_found = client.get(
+        f"/admin/users/{target.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert not_found.status_code == 404
+
+
+def test_non_admin_cannot_delete_admin_target(client: TestClient):
+    token = _register_verify_login(client, email="normal-delete@example.com", password="StrongPass123!")
+
+    denied = client.delete(
+        "/admin/users/any-user-id",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert denied.status_code == 403
+    payload = denied.json()
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "ADMIN_REQUIRED"

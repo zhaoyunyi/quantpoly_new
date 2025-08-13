@@ -334,3 +334,35 @@ class TestPersistenceBootstrap:
         )
 
         assert second.status_code == 409
+
+    def test_delete_users_me_with_sqlite_revokes_token(self, tmp_path):
+        db_path = tmp_path / "auth.sqlite3"
+
+        app = create_app(sqlite_db_path=str(db_path))
+        client = TestClient(app)
+
+        client.post(
+            "/auth/register",
+            json={"email": "sqlite-delete@app.com", "password": "StrongPass123!"},
+        )
+        client.post(
+            "/auth/verify-email",
+            json={"email": "sqlite-delete@app.com"},
+        )
+        login = client.post(
+            "/auth/login",
+            json={"email": "sqlite-delete@app.com", "password": "StrongPass123!"},
+        )
+        token = login.json()["data"]["token"]
+
+        deleted = client.delete(
+            "/users/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert deleted.status_code == 200
+
+        me = client.get(
+            "/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert me.status_code == 401

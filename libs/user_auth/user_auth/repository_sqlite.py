@@ -191,3 +191,12 @@ class SQLiteUserRepository:
             user.disable()
         self.save(user)
         return user
+
+    def delete(self, user_id: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "delete from auth_users where id = ?",
+                (user_id,),
+            )
+            conn.commit()
+            return cursor.rowcount > 0

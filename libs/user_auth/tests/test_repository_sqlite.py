@@ -41,3 +41,16 @@ class TestSQLiteUserRepository:
         assert repo.email_exists("persist2@example.com") is True
         assert repo.email_exists("missing@example.com") is False
 
+    def test_delete_user_removes_email_index(self, tmp_path: Path):
+        db_path = tmp_path / "users.db"
+        repo = _sqlite_repo(db_path)
+
+        user = User.register(email="delete-me@example.com", password="StrongPass123!")
+        repo.save(user)
+
+        deleted = repo.delete(user.id)
+
+        assert deleted is True
+        assert repo.get_by_id(user.id) is None
+        assert repo.get_by_email("delete-me@example.com") is None
+        assert repo.email_exists("delete-me@example.com") is False

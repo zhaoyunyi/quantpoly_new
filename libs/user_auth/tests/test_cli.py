@@ -144,3 +144,31 @@ def test_cli_verify_invalid_token_has_unified_error_code(capsys):
     result = _run(cli._cmd_verify, capsys=capsys, token="invalid-token")
     assert result["success"] is False
     assert result["error"]["code"] == "INVALID_TOKEN"
+
+
+def test_cli_delete_me_removes_current_user(capsys):
+    _run(
+        cli._cmd_register,
+        capsys=capsys,
+        email="delete-cli@example.com",
+        password="StrongPass123!",
+    )
+    _run(
+        cli._cmd_verify_email,
+        capsys=capsys,
+        email="delete-cli@example.com",
+    )
+    login = _run(
+        cli._cmd_login,
+        capsys=capsys,
+        email="delete-cli@example.com",
+        password="StrongPass123!",
+    )
+    token = login["data"]["token"]
+
+    deleted = _run(cli._cmd_delete_me, capsys=capsys, token=token)
+    assert deleted["success"] is True
+
+    verify_after_delete = _run(cli._cmd_verify, capsys=capsys, token=token)
+    assert verify_after_delete["success"] is False
+    assert verify_after_delete["error"]["code"] == "INVALID_TOKEN"

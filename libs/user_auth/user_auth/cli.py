@@ -228,6 +228,60 @@ def _cmd_admin_update_user(args: argparse.Namespace) -> None:
     _output({"success": True, "data": _user_payload(target)})
 
 
+def _cmd_delete_me(args: argparse.Namespace) -> None:
+    user, _ = _get_current_user_by_token(args.token)
+    if user is None:
+        _output({"success": False, "error": {"code": "INVALID_TOKEN", "message": "Token is invalid or expired"}})
+        return
+
+    deleted = _repo.delete(user.id)
+    revoked = _sessions.revoke_by_user(user_id=user.id)
+    if not deleted:
+        _output({"success": False, "error": {"code": "USER_NOT_FOUND", "message": "user not found"}})
+        return
+
+    _output({"success": True, "data": {"userId": user.id, "revokedSessions": revoked}, "message": "User deleted"})
+
+
+def _cmd_admin_get_user(args: argparse.Namespace) -> None:
+    _admin, _ = _require_admin(args.token)
+    if _admin is None:
+        return
+
+    target = _repo.get_by_id(args.user_id)
+    if target is None:
+        _output({"success": False, "error": {"code": "USER_NOT_FOUND", "message": "user not found"}})
+        return
+
+    _output({"success": True, "data": _user_payload(target)})
+
+
+def _cmd_admin_delete_user(args: argparse.Namespace) -> None:
+    _admin, _ = _require_admin(args.token)
+    if _admin is None:
+        return
+
+    target = _repo.get_by_id(args.user_id)
+    if target is None:
+        _output({"success": False, "error": {"code": "USER_NOT_FOUND", "message": "user not found"}})
+        return
+
+    deleted = _repo.delete(args.user_id)
+    revoked = _sessions.revoke_by_user(user_id=args.user_id)
+    if not deleted:
+        _output({"success": False, "error": {"code": "USER_NOT_FOUND", "message": "user not found"}})
+        return
+
+    _output({
+        "success": True,
+        "data": {
+            "userId": args.user_id,
+            "revokedSessions": revoked,
+        },
+        "message": "User deleted",
+    })
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="user-auth",
@@ -279,6 +333,17 @@ def build_parser() -> argparse.ArgumentParser:
     admin_update.add_argument("--level", type=int, default=None)
     admin_update.add_argument("--is-active", choices=["true", "false"], default=None)
 
+    delete_me = sub.add_parser("delete-me", help="当前用户自助注销")
+    delete_me.add_argument("--token", required=True)
+
+    admin_get = sub.add_parser("admin-get-user", help="管理员查询单个用户")
+    admin_get.add_argument("--token", required=True)
+    admin_get.add_argument("--user-id", required=True)
+
+    admin_delete = sub.add_parser("admin-delete-user", help="管理员删除用户")
+    admin_delete.add_argument("--token", required=True)
+    admin_delete.add_argument("--user-id", required=True)
+
     return parser
 
 
@@ -292,6 +357,9 @@ _COMMANDS = {
     "change-password": _cmd_change_password,
     "admin-list-users": _cmd_admin_list_users,
     "admin-update-user": _cmd_admin_update_user,
+    "delete-me": _cmd_delete_me,
+    "admin-get-user": _cmd_admin_get_user,
+    "admin-delete-user": _cmd_admin_delete_user,
 }
 
 

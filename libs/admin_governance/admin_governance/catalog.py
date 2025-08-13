@@ -42,4 +42,11 @@ def default_action_catalog() -> dict[str, ActionPolicy]:
             requires_confirmation=False,
             high_risk=False,
         ),
+        "users.delete": ActionPolicy(
+            action="users.delete",
+            min_role="admin",
+            min_level=2,
+            requires_confirmation=False,
+            high_risk=False,
+        ),
     }
