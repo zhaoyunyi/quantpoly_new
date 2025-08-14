@@ -52,6 +52,12 @@ class InMemorySignalRepository:
     def save_execution(self, execution: ExecutionRecord) -> None:
         self._executions[execution.id] = execution
 
+    def get_execution(self, *, execution_id: str, user_id: str) -> ExecutionRecord | None:
+        item = self._executions.get(execution_id)
+        if item is None or item.user_id != user_id:
+            return None
+        return item
+
     def list_executions(
         self,
         *,

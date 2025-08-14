@@ -11,7 +11,11 @@ from pydantic import BaseModel, Field
 
 from platform_core.response import error_response, success_response
 from strategy_management.domain import InvalidStrategyTransitionError, StrategyInUseError
-from strategy_management.service import InvalidStrategyParametersError, StrategyService
+from strategy_management.service import (
+    InvalidStrategyParametersError,
+    StrategyAccessDeniedError,
+    StrategyService,
+)
 
 
 class CreateStrategyRequest(BaseModel):
@@ -26,6 +30,10 @@ class CreateStrategyFromTemplateRequest(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
+
+
+class ValidateExecutionRequest(BaseModel):
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 def _dt(value: datetime) -> str:
@@ -107,6 +115,37 @@ def create_router(*, service: StrategyService, get_current_user: Any) -> APIRout
             )
 
         return success_response(data=_serialize_strategy(created))
+
+    @router.post("/strategies/{strategy_id}/validate-execution")
+    def validate_execution(
+        strategy_id: str,
+        body: ValidateExecutionRequest,
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            strategy = service.validate_execution_parameters(
+                user_id=current_user.id,
+                strategy_id=strategy_id,
+                parameters=body.parameters,
+            )
+        except StrategyAccessDeniedError:
+            return _access_denied_response()
+        except InvalidStrategyParametersError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="STRATEGY_INVALID_PARAMETERS",
+                    message=str(exc),
+                ),
+            )
+
+        return success_response(
+            data={
+                "valid": True,
+                "strategyId": strategy.id,
+                "template": strategy.template,
+            }
+        )
 
     @router.post("/strategies/{strategy_id}/activate")
     def activate_strategy(strategy_id: str, current_user=Depends(get_current_user)):

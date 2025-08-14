@@ -29,6 +29,10 @@ class InvalidStrategyParametersError(ValueError):
     """策略参数非法。"""
 
 
+class StrategyAccessDeniedError(PermissionError):
+    """策略不属于当前用户或无权访问。"""
+
+
 class StrategyService:
     def __init__(
         self,
@@ -67,6 +71,19 @@ class StrategyService:
         exit_z = float(parameters["exitZ"])
         if entry_z <= exit_z:
             raise InvalidStrategyParametersError("entryZ must be greater than exitZ")
+
+    def validate_execution_parameters(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        parameters: dict[str, Any],
+    ) -> Strategy:
+        strategy = self._repository.get_by_id(strategy_id, user_id=user_id)
+        if strategy is None:
+            raise StrategyAccessDeniedError("strategy does not belong to current user")
+        self._validate_parameters(template_id=strategy.template, parameters=parameters)
+        return strategy
 
     def create_strategy_from_template(
         self,
@@ -150,5 +167,6 @@ class StrategyService:
 __all__ = [
     "StrategyService",
     "InvalidStrategyParametersError",
+    "StrategyAccessDeniedError",
     "InvalidStrategyTransitionError",
 ]

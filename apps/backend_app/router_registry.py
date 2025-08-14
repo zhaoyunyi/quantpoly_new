@@ -266,6 +266,11 @@ def register_all_routes(
             user_id=user_id,
         )
         is not None,
+        strategy_parameter_validator=lambda user_id, strategy_id, parameters: strategy_service.validate_execution_parameters(
+            user_id=user_id,
+            strategy_id=strategy_id,
+            parameters=parameters,
+        ),
     )
 
     if "user-preferences" in enabled_contexts:

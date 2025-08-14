@@ -7,7 +7,11 @@ from strategy_management.domain import (
 )
 from strategy_management.repository import InMemoryStrategyRepository
 from strategy_management.repository_sqlite import SQLiteStrategyRepository
-from strategy_management.service import InvalidStrategyParametersError, StrategyService
+from strategy_management.service import (
+    InvalidStrategyParametersError,
+    StrategyAccessDeniedError,
+    StrategyService,
+)
 
 __all__ = [
     "Strategy",
@@ -16,5 +20,6 @@ __all__ = [
     "InMemoryStrategyRepository",
     "SQLiteStrategyRepository",
     "InvalidStrategyParametersError",
+    "StrategyAccessDeniedError",
     "StrategyService",
 ]

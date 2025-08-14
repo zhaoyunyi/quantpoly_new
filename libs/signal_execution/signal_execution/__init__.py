@@ -5,6 +5,7 @@ from signal_execution.repository import InMemorySignalRepository
 from signal_execution.service import (
     AdminRequiredError,
     BatchIdempotencyConflictError,
+    InvalidSignalParametersError,
     SignalAccessDeniedError,
     SignalExecutionService,
 )
@@ -16,5 +17,6 @@ __all__ = [
     "SignalAccessDeniedError",
     "AdminRequiredError",
     "BatchIdempotencyConflictError",
+    "InvalidSignalParametersError",
     "SignalExecutionService",
 ]

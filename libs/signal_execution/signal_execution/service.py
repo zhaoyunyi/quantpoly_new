@@ -22,6 +22,10 @@ class BatchIdempotencyConflictError(RuntimeError):
     """批处理幂等键冲突。"""
 
 
+class InvalidSignalParametersError(ValueError):
+    """信号参数校验失败。"""
+
+
 class SignalExecutionService:
     def __init__(
         self,
@@ -29,11 +33,13 @@ class SignalExecutionService:
         repository: InMemorySignalRepository,
         strategy_owner_acl: Callable[[str, str], bool],
         account_owner_acl: Callable[[str, str], bool],
+        strategy_parameter_validator: Callable[[str, str, dict[str, Any]], None] | None = None,
         governance_checker: Callable[..., Any] | None = None,
     ) -> None:
         self._repository = repository
         self._strategy_owner_acl = strategy_owner_acl
         self._account_owner_acl = account_owner_acl
+        self._strategy_parameter_validator = strategy_parameter_validator
         self._governance_checker = governance_checker
 
     def _assert_signal_acl(self, *, user_id: str, strategy_id: str, account_id: str) -> None:
@@ -45,6 +51,25 @@ class SignalExecutionService:
     def _idempotency_fingerprint(self, *, signal_ids: list[str]) -> str:
         return "|".join(sorted(signal_ids))
 
+    def validate_parameters(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        account_id: str,
+        parameters: dict[str, Any],
+    ) -> None:
+        self._assert_signal_acl(user_id=user_id, strategy_id=strategy_id, account_id=account_id)
+        if self._strategy_parameter_validator is None:
+            return
+
+        try:
+            self._strategy_parameter_validator(user_id, strategy_id, parameters)
+        except PermissionError as exc:
+            raise SignalAccessDeniedError(str(exc)) from exc
+        except ValueError as exc:
+            raise InvalidSignalParametersError(str(exc)) from exc
+
     def create_signal(
         self,
         *,
@@ -53,9 +78,19 @@ class SignalExecutionService:
         account_id: str,
         symbol: str,
         side: str,
+        parameters: dict[str, Any] | None = None,
         expires_at: datetime | None = None,
     ) -> TradingSignal:
-        self._assert_signal_acl(user_id=user_id, strategy_id=strategy_id, account_id=account_id)
+        if parameters is not None:
+            self.validate_parameters(
+                user_id=user_id,
+                strategy_id=strategy_id,
+                account_id=account_id,
+                parameters=parameters,
+            )
+        else:
+            self._assert_signal_acl(user_id=user_id, strategy_id=strategy_id, account_id=account_id)
+
         signal = TradingSignal.create(
             user_id=user_id,
             strategy_id=strategy_id,
@@ -276,6 +311,16 @@ class SignalExecutionService:
         status: str | None = None,
     ) -> list[ExecutionRecord]:
         return self._repository.list_executions(user_id=user_id, signal_id=signal_id, status=status)
+
+    def get_execution(self, *, user_id: str, execution_id: str) -> ExecutionRecord:
+        execution = self._repository.get_execution(execution_id=execution_id, user_id=user_id)
+        if execution is None:
+            raise SignalAccessDeniedError("signal does not belong to current user")
+        return execution
+
+    def list_running_executions(self, *, user_id: str) -> list[TradingSignal]:
+        signals = self._repository.list_signals(user_id=user_id)
+        return [item for item in signals if item.status in {"pending", "running"}]
 
     def execution_trend(self, *, user_id: str) -> dict:
         executions = self._repository.list_executions(user_id=user_id)

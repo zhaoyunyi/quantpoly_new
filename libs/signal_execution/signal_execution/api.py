@@ -14,6 +14,7 @@ from signal_execution.domain import ExecutionRecord, TradingSignal
 from signal_execution.service import (
     AdminRequiredError,
     BatchIdempotencyConflictError,
+    InvalidSignalParametersError,
     SignalAccessDeniedError,
     SignalExecutionService,
 )
@@ -24,7 +25,16 @@ class CreateSignalRequest(BaseModel):
     account_id: str = Field(alias="accountId")
     symbol: str
     side: str
+    parameters: dict[str, Any] | None = Field(default=None)
     expires_at: datetime | None = Field(default=None, alias="expiresAt")
+
+    model_config = {"populate_by_name": True}
+
+
+class ValidateSignalParametersRequest(BaseModel):
+    strategy_id: str = Field(alias="strategyId")
+    account_id: str = Field(alias="accountId")
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
@@ -75,8 +85,47 @@ def _execution_payload(record: ExecutionRecord) -> dict:
     }
 
 
+def _running_signal_payload(signal: TradingSignal) -> dict:
+    return {
+        "signalId": signal.id,
+        "strategyId": signal.strategy_id,
+        "accountId": signal.account_id,
+        "symbol": signal.symbol,
+        "status": signal.status,
+        "updatedAt": _dt(signal.updated_at),
+    }
+
+
 def create_router(*, service: SignalExecutionService, get_current_user: Any) -> APIRouter:
     router = APIRouter()
+
+    @router.post("/signals/validate-parameters")
+    def validate_parameters(body: ValidateSignalParametersRequest, current_user=Depends(get_current_user)):
+        try:
+            service.validate_parameters(
+                user_id=current_user.id,
+                strategy_id=body.strategy_id,
+                account_id=body.account_id,
+                parameters=body.parameters,
+            )
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+        except InvalidSignalParametersError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="SIGNAL_INVALID_PARAMETERS",
+                    message=str(exc),
+                ),
+            )
+
+        return success_response(data={"valid": True})
 
     @router.post("/signals")
     def create_signal(body: CreateSignalRequest, current_user=Depends(get_current_user)):
@@ -87,6 +136,7 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
                 account_id=body.account_id,
                 symbol=body.symbol,
                 side=body.side,
+                parameters=body.parameters,
                 expires_at=body.expires_at,
             )
         except SignalAccessDeniedError:
@@ -95,6 +145,14 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
                 content=error_response(
                     code="SIGNAL_ACCESS_DENIED",
                     message="signal does not belong to current user",
+                ),
+            )
+        except InvalidSignalParametersError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="SIGNAL_INVALID_PARAMETERS",
+                    message=str(exc),
                 ),
             )
 
@@ -208,6 +266,11 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
         )
         return success_response(data=[_execution_payload(item) for item in executions])
 
+    @router.get("/signals/executions/running")
+    def list_running_executions(current_user=Depends(get_current_user)):
+        items = service.list_running_executions(user_id=current_user.id)
+        return success_response(data=[_running_signal_payload(item) for item in items])
+
     @router.get("/signals/executions/trend")
     def execution_trend(current_user=Depends(get_current_user)):
         return success_response(data=service.execution_trend(user_id=current_user.id))
@@ -225,6 +288,21 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
                 symbol=symbol,
             )
         )
+
+    @router.get("/signals/executions/{execution_id}")
+    def get_execution(execution_id: str, current_user=Depends(get_current_user)):
+        try:
+            execution = service.get_execution(user_id=current_user.id, execution_id=execution_id)
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        return success_response(data=_execution_payload(execution))
 
     @router.post("/signals/maintenance/update-expired")
     def update_expired(current_user=Depends(get_current_user)):
