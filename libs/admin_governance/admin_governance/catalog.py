@@ -28,6 +28,13 @@ def default_action_catalog() -> dict[str, ActionPolicy]:
             requires_confirmation=False,
             high_risk=False,
         ),
+        "trading.refresh_prices": ActionPolicy(
+            action="trading.refresh_prices",
+            min_role="admin",
+            min_level=5,
+            requires_confirmation=True,
+            high_risk=True,
+        ),
         "users.read_all": ActionPolicy(
             action="users.read_all",
             min_role="admin",

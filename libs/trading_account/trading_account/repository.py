@@ -135,6 +135,30 @@ class InMemoryTradingAccountRepository:
                 if pos.account_id == account_id and pos.user_id == user_id
             ]
 
+    def refresh_position_prices(
+        self,
+        *,
+        price_updates: dict[str, float],
+        account_id: str | None = None,
+        user_id: str | None = None,
+    ) -> int:
+        with self._lock:
+            updated = 0
+            for key, position in list(self._positions.items()):
+                if account_id is not None and position.account_id != account_id:
+                    continue
+                if user_id is not None and position.user_id != user_id:
+                    continue
+                new_price = price_updates.get(position.symbol)
+                if new_price is None:
+                    continue
+
+                cloned = self._clone_position(position)
+                cloned.last_price = float(new_price)
+                self._positions[key] = cloned
+                updated += 1
+            return updated
+
     def save_order(self, order: TradeOrder) -> None:
         with self._lock:
             self._orders[order.id] = self._clone_order(order)
@@ -154,6 +178,22 @@ class InMemoryTradingAccountRepository:
                 self._clone_order(order)
                 for order in self._orders.values()
                 if order.account_id == account_id and order.user_id == user_id
+            ]
+
+    def list_orders_by_status(
+        self,
+        *,
+        status: str,
+        account_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[TradeOrder]:
+        with self._lock:
+            return [
+                self._clone_order(order)
+                for order in self._orders.values()
+                if order.status == status
+                and (account_id is None or order.account_id == account_id)
+                and (user_id is None or order.user_id == user_id)
             ]
 
     def transition_order_status(

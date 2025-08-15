@@ -483,3 +483,70 @@ class SQLiteTradingAccountRepository:
             )
             for row in rows
         ]
+
+    def list_orders_by_status(
+        self,
+        *,
+        status: str,
+        account_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[TradeOrder]:
+        sql = """
+                SELECT id, user_id, account_id, symbol, side, quantity, price, status, created_at, updated_at
+                FROM trading_account_order
+                WHERE status = ?
+            """
+        params: list[object] = [status]
+
+        if account_id is not None:
+            sql += " AND account_id = ?"
+            params.append(account_id)
+        if user_id is not None:
+            sql += " AND user_id = ?"
+            params.append(user_id)
+
+        sql += " ORDER BY created_at ASC"
+
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+
+        return [
+            TradeOrder(
+                id=row[0],
+                user_id=row[1],
+                account_id=row[2],
+                symbol=row[3],
+                side=row[4],
+                quantity=row[5],
+                price=row[6],
+                status=row[7],
+                created_at=self._to_dt(row[8]),
+                updated_at=self._to_dt(row[9]),
+            )
+            for row in rows
+        ]
+
+    def refresh_position_prices(
+        self,
+        *,
+        price_updates: dict[str, float],
+        account_id: str | None = None,
+        user_id: str | None = None,
+    ) -> int:
+        updated = 0
+        with self._connect() as conn:
+            for symbol, price in price_updates.items():
+                sql = "UPDATE trading_account_position SET last_price = ? WHERE symbol = ?"
+                params: list[object] = [float(price), symbol]
+
+                if account_id is not None:
+                    sql += " AND account_id = ?"
+                    params.append(account_id)
+                if user_id is not None:
+                    sql += " AND user_id = ?"
+                    params.append(user_id)
+
+                cursor = conn.execute(sql, tuple(params))
+                updated += cursor.rowcount
+
+        return updated

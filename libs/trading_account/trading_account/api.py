@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from platform_core.response import error_response, success_response
 from trading_account.domain import InvalidTradeOrderTransitionError
@@ -16,8 +16,10 @@ from trading_account.service import (
     InsufficientFundsError,
     LedgerTransactionError,
     OrderNotFoundError,
+    PriceRefreshConflictError,
     TradeNotFoundError,
     TradingAccountService,
+    TradingAdminRequiredError,
 )
 
 
@@ -106,6 +108,15 @@ class AmountRequest(BaseModel):
     amount: float
 
 
+class RefreshPricesRequest(BaseModel):
+    price_updates: dict[str, float] = Field(alias="priceUpdates")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
+    account_id: str | None = Field(default=None, alias="accountId")
+
+    model_config = {"populate_by_name": True}
+
+
 def create_router(*, service: TradingAccountService, get_current_user: Any) -> APIRouter:
     router = APIRouter()
 
@@ -113,6 +124,11 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
     def list_accounts(current_user=Depends(get_current_user)):
         accounts = service.list_accounts(user_id=current_user.id)
         return success_response(data=[_account_to_payload(item) for item in accounts])
+
+    @router.get("/trading/accounts/aggregate")
+    def account_aggregate(current_user=Depends(get_current_user)):
+        data = service.user_account_aggregate(user_id=current_user.id)
+        return success_response(data=data)
 
     @router.get("/trading/accounts/{account_id}/positions")
     def list_positions(account_id: str, current_user=Depends(get_current_user)):
@@ -152,6 +168,45 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
             )
 
         return success_response(data=stats)
+
+    @router.get("/trading/accounts/{account_id}/risk-metrics")
+    def risk_metrics(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            metrics = service.account_risk_metrics(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+
+        return success_response(data=metrics)
+
+    @router.get("/trading/accounts/{account_id}/equity-curve")
+    def equity_curve(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            curve = service.account_equity_curve(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+
+        return success_response(data=curve)
+
+    @router.get("/trading/accounts/{account_id}/position-analysis")
+    def position_analysis(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            analysis = service.account_position_analysis(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+
+        return success_response(data=analysis)
 
     @router.post("/trading/accounts/{account_id}/orders")
     def create_order(account_id: str, body: OrderCreateRequest, current_user=Depends(get_current_user)):
@@ -338,6 +393,58 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
             return _error(status_code=400, code="INVALID_ARGUMENT", message="amount must be positive")
 
         return success_response(data=_cash_flow_to_payload(flow))
+
+    @router.get("/trading/ops/pending-orders")
+    def pending_orders(
+        account_id: str | None = Query(default=None, alias="accountId"),
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            orders = service.list_pending_orders(
+                user_id=current_user.id,
+                is_admin=bool(getattr(current_user, "is_admin", False)),
+                account_id=account_id,
+            )
+        except TradingAdminRequiredError:
+            return _error(
+                status_code=403,
+                code="ADMIN_REQUIRED",
+                message="admin role required",
+            )
+
+        return success_response(data=[_order_to_payload(item) for item in orders])
+
+    @router.post("/trading/ops/refresh-prices")
+    def refresh_prices(body: RefreshPricesRequest, current_user=Depends(get_current_user)):
+        try:
+            result = service.refresh_market_prices(
+                user_id=current_user.id,
+                is_admin=bool(getattr(current_user, "is_admin", False)),
+                price_updates=body.price_updates,
+                idempotency_key=body.idempotency_key,
+                confirmation_token=body.confirmation_token,
+                account_id=body.account_id,
+            )
+        except TradingAdminRequiredError:
+            return _error(
+                status_code=403,
+                code="ADMIN_REQUIRED",
+                message="admin role required",
+            )
+        except PriceRefreshConflictError:
+            return _error(
+                status_code=409,
+                code="IDEMPOTENCY_CONFLICT",
+                message="idempotency key already exists",
+            )
+        except ValueError as exc:
+            return _error(
+                status_code=400,
+                code="INVALID_ARGUMENT",
+                message=str(exc),
+            )
+
+        return success_response(data=result)
 
     @router.get("/trading/accounts/{account_id}/overview")
     def account_overview(account_id: str, current_user=Depends(get_current_user)):

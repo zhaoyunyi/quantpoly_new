@@ -14,7 +14,9 @@ from trading_account.service import (
     InsufficientFundsError,
     LedgerTransactionError,
     OrderNotFoundError,
+    PriceRefreshConflictError,
     TradingAccountService,
+    TradingAdminRequiredError,
 )
 
 _repo = InMemoryTradingAccountRepository()
@@ -40,6 +42,12 @@ def _error(*, code: str, message: str) -> None:
 
 def _dt(value: datetime) -> str:
     return value.isoformat()
+
+
+def _parse_json_dict(text: str | None) -> dict:
+    if not text:
+        return {}
+    return json.loads(text)
 
 
 def _serialize_account(account) -> dict:
@@ -98,6 +106,11 @@ def _cmd_account_list(args: argparse.Namespace) -> None:
     _output({"success": True, "data": [_serialize_account(item) for item in accounts]})
 
 
+def _cmd_account_aggregate(args: argparse.Namespace) -> None:
+    aggregate = _service.user_account_aggregate(user_id=args.user_id)
+    _output({"success": True, "data": aggregate})
+
+
 def _cmd_position_summary(args: argparse.Namespace) -> None:
     try:
         summary = _service.position_summary(user_id=args.user_id, account_id=args.account_id)
@@ -116,6 +129,79 @@ def _cmd_trade_stats(args: argparse.Namespace) -> None:
         return
 
     _output({"success": True, "data": stats})
+
+
+def _cmd_risk_metrics(args: argparse.Namespace) -> None:
+    try:
+        metrics = _service.account_risk_metrics(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    _output({"success": True, "data": metrics})
+
+
+def _cmd_equity_curve(args: argparse.Namespace) -> None:
+    try:
+        curve = _service.account_equity_curve(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    _output({"success": True, "data": curve})
+
+
+def _cmd_position_analysis(args: argparse.Namespace) -> None:
+    try:
+        analysis = _service.account_position_analysis(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    _output({"success": True, "data": analysis})
+
+
+def _cmd_pending_orders(args: argparse.Namespace) -> None:
+    try:
+        orders = _service.list_pending_orders(
+            user_id=args.user_id,
+            is_admin=args.is_admin,
+            account_id=args.account_id,
+        )
+    except TradingAdminRequiredError:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+
+    _output({"success": True, "data": [_serialize_order(item) for item in orders]})
+
+
+def _cmd_refresh_prices(args: argparse.Namespace) -> None:
+    try:
+        price_updates = _parse_json_dict(args.price_updates)
+    except json.JSONDecodeError:
+        _error(code="INVALID_ARGUMENT", message="invalid price updates json")
+        return
+
+    try:
+        result = _service.refresh_market_prices(
+            user_id=args.user_id,
+            is_admin=args.is_admin,
+            price_updates=price_updates,
+            idempotency_key=args.idempotency_key,
+            confirmation_token=args.confirmation_token,
+            account_id=getattr(args, "account_id", None),
+        )
+    except TradingAdminRequiredError:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+    except PriceRefreshConflictError:
+        _error(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        return
+    except ValueError as exc:
+        _error(code="INVALID_ARGUMENT", message=str(exc))
+        return
+
+    _output({"success": True, "data": result})
 
 
 def _cmd_order_create(args: argparse.Namespace) -> None:
@@ -254,6 +340,9 @@ def build_parser() -> argparse.ArgumentParser:
     account_list = sub.add_parser("account-list", help="查询用户账户列表")
     account_list.add_argument("--user-id", required=True)
 
+    account_aggregate = sub.add_parser("account-aggregate", help="查询用户账户聚合统计")
+    account_aggregate.add_argument("--user-id", required=True)
+
     position_summary = sub.add_parser("position-summary", help="查询账户持仓分析")
     position_summary.add_argument("--user-id", required=True)
     position_summary.add_argument("--account-id", required=True)
@@ -261,6 +350,31 @@ def build_parser() -> argparse.ArgumentParser:
     trade_stats = sub.add_parser("trade-stats", help="查询账户交易统计")
     trade_stats.add_argument("--user-id", required=True)
     trade_stats.add_argument("--account-id", required=True)
+
+    risk_metrics = sub.add_parser("risk-metrics", help="查询账户风险指标")
+    risk_metrics.add_argument("--user-id", required=True)
+    risk_metrics.add_argument("--account-id", required=True)
+
+    equity_curve = sub.add_parser("equity-curve", help="查询账户权益曲线")
+    equity_curve.add_argument("--user-id", required=True)
+    equity_curve.add_argument("--account-id", required=True)
+
+    position_analysis = sub.add_parser("position-analysis", help="查询账户仓位分析")
+    position_analysis.add_argument("--user-id", required=True)
+    position_analysis.add_argument("--account-id", required=True)
+
+    pending_orders = sub.add_parser("pending-orders", help="查询待处理交易（管理员）")
+    pending_orders.add_argument("--user-id", required=True)
+    pending_orders.add_argument("--is-admin", action="store_true")
+    pending_orders.add_argument("--account-id", default=None)
+
+    refresh_prices = sub.add_parser("refresh-prices", help="批量刷新价格（管理员）")
+    refresh_prices.add_argument("--user-id", required=True)
+    refresh_prices.add_argument("--is-admin", action="store_true")
+    refresh_prices.add_argument("--price-updates", required=True)
+    refresh_prices.add_argument("--idempotency-key", default=None)
+    refresh_prices.add_argument("--confirmation-token", default=None)
+    refresh_prices.add_argument("--account-id", default=None)
 
     order_create = sub.add_parser("order-create", help="创建订单")
     order_create.add_argument("--user-id", required=True)
@@ -311,8 +425,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 _COMMANDS = {
     "account-list": _cmd_account_list,
+    "account-aggregate": _cmd_account_aggregate,
     "position-summary": _cmd_position_summary,
     "trade-stats": _cmd_trade_stats,
+    "risk-metrics": _cmd_risk_metrics,
+    "equity-curve": _cmd_equity_curve,
+    "position-analysis": _cmd_position_analysis,
+    "pending-orders": _cmd_pending_orders,
+    "refresh-prices": _cmd_refresh_prices,
     "order-create": _cmd_order_create,
     "order-list": _cmd_order_list,
     "order-fill": _cmd_order_fill,

@@ -15,8 +15,10 @@ from trading_account.service import (
     InsufficientFundsError,
     LedgerTransactionError,
     OrderNotFoundError,
+    PriceRefreshConflictError,
     TradeNotFoundError,
     TradingAccountService,
+    TradingAdminRequiredError,
 )
 
 __all__ = [
@@ -33,5 +35,7 @@ __all__ = [
     "LedgerTransactionError",
     "OrderNotFoundError",
     "TradeNotFoundError",
+    "TradingAdminRequiredError",
+    "PriceRefreshConflictError",
     "TradingAccountService",
 ]

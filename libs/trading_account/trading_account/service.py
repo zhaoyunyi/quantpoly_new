@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 from platform_core.uow import NoopUnitOfWork, SnapshotUnitOfWork, UnitOfWork
@@ -37,6 +38,14 @@ class LedgerTransactionError(RuntimeError):
     """账本事务失败。"""
 
 
+class TradingAdminRequiredError(PermissionError):
+    """交易运维接口需要管理员权限。"""
+
+
+class PriceRefreshConflictError(RuntimeError):
+    """价格刷新幂等键冲突。"""
+
+
 def _default_uow_factory(repository: Any) -> Callable[[], UnitOfWork]:
     if hasattr(repository, "snapshot_state") and hasattr(repository, "restore_state"):
         return lambda: SnapshotUnitOfWork(
@@ -52,9 +61,12 @@ class TradingAccountService:
         *,
         repository: InMemoryTradingAccountRepository,
         uow_factory: Callable[[], UnitOfWork] | None = None,
+        governance_checker: Callable[..., Any] | None = None,
     ) -> None:
         self._repository = repository
         self._uow_factory = uow_factory or _default_uow_factory(repository)
+        self._governance_checker = governance_checker
+        self._refresh_records: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
 
     def create_account(self, *, user_id: str, account_name: str) -> TradingAccount:
         account = TradingAccount.create(user_id=user_id, account_name=account_name)
@@ -71,6 +83,20 @@ class TradingAccountService:
         account = self._repository.get_account(account_id=account_id, user_id=user_id)
         if account is None:
             raise AccountAccessDeniedError("无权访问该账户")
+
+    @staticmethod
+    def _to_risk_level(*, score: float) -> str:
+        if score >= 70:
+            return "high"
+        if score >= 30:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _refresh_fingerprint(*, price_updates: dict[str, float], account_id: str | None) -> str:
+        account_text = account_id or "*"
+        pairs = [f"{symbol}:{price}" for symbol, price in sorted(price_updates.items())]
+        return f"{account_text}|{'|'.join(pairs)}"
 
     def upsert_position(
         self,
@@ -317,6 +343,212 @@ class TradingAccountService:
             "tradeCount": len(trades),
             "turnover": turnover,
         }
+
+    def account_risk_metrics(self, *, user_id: str, account_id: str) -> dict[str, Any]:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        position_metrics = self.position_summary(user_id=user_id, account_id=account_id)
+        cash_balance = self.cash_balance(user_id=user_id, account_id=account_id)
+        orders = self._repository.list_orders(account_id=account_id, user_id=user_id)
+
+        total_market_value = float(position_metrics["totalMarketValue"])
+        unrealized_pnl = float(position_metrics["unrealizedPnl"])
+        total_equity = cash_balance + total_market_value
+
+        exposure_ratio = total_market_value / total_equity if total_equity > 0 else 0.0
+        leverage = total_market_value / total_equity if total_equity > 0 else 0.0
+        pending_order_count = sum(1 for item in orders if item.status == "pending")
+        pending_order_ratio = pending_order_count / len(orders) if orders else 0.0
+
+        pnl_penalty = 0.0
+        if total_market_value > 0 and unrealized_pnl < 0:
+            pnl_penalty = abs(unrealized_pnl) / total_market_value
+
+        risk_score = round(min(100.0, exposure_ratio * 60 + pnl_penalty * 30 + pending_order_ratio * 10), 2)
+
+        return {
+            "accountId": account_id,
+            "riskScore": risk_score,
+            "riskLevel": self._to_risk_level(score=risk_score),
+            "exposureRatio": round(exposure_ratio, 6),
+            "leverage": round(leverage, 6),
+            "unrealizedPnl": unrealized_pnl,
+            "pendingOrderCount": pending_order_count,
+            "evaluatedAt": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def account_equity_curve(self, *, user_id: str, account_id: str) -> list[dict[str, Any]]:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        flows = sorted(
+            self._repository.list_cash_flows(account_id=account_id, user_id=user_id),
+            key=lambda item: item.created_at,
+        )
+
+        positions = self._repository.list_positions(account_id=account_id, user_id=user_id)
+        market_value = sum(item.quantity * item.last_price for item in positions)
+
+        if not flows:
+            now = datetime.now(timezone.utc).isoformat()
+            return [
+                {
+                    "timestamp": now,
+                    "cashBalance": 0.0,
+                    "marketValue": market_value,
+                    "equity": market_value,
+                }
+            ]
+
+        curve: list[dict[str, Any]] = []
+        cash_balance = 0.0
+        for flow in flows:
+            cash_balance += flow.amount
+            curve.append(
+                {
+                    "timestamp": flow.created_at.isoformat(),
+                    "cashBalance": round(cash_balance, 6),
+                    "marketValue": round(market_value, 6),
+                    "equity": round(cash_balance + market_value, 6),
+                }
+            )
+
+        return curve
+
+    def account_position_analysis(self, *, user_id: str, account_id: str) -> list[dict[str, Any]]:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        positions = self._repository.list_positions(account_id=account_id, user_id=user_id)
+
+        total_market_value = sum(item.quantity * item.last_price for item in positions)
+        items: list[dict[str, Any]] = []
+        for position in positions:
+            market_value = position.quantity * position.last_price
+            cost_value = position.quantity * position.avg_price
+            unrealized_pnl = market_value - cost_value
+            weight = market_value / total_market_value if total_market_value > 0 else 0.0
+            pnl_ratio = unrealized_pnl / cost_value if cost_value > 0 else 0.0
+
+            items.append(
+                {
+                    "symbol": position.symbol,
+                    "quantity": position.quantity,
+                    "avgPrice": position.avg_price,
+                    "lastPrice": position.last_price,
+                    "marketValue": round(market_value, 6),
+                    "costValue": round(cost_value, 6),
+                    "unrealizedPnl": round(unrealized_pnl, 6),
+                    "unrealizedPnlRatio": round(pnl_ratio, 6),
+                    "weight": round(weight, 6),
+                }
+            )
+
+        items.sort(key=lambda item: item["marketValue"], reverse=True)
+        return items
+
+    def user_account_aggregate(self, *, user_id: str) -> dict[str, Any]:
+        accounts = self.list_accounts(user_id=user_id)
+
+        total_cash_balance = 0.0
+        total_market_value = 0.0
+        total_unrealized_pnl = 0.0
+        total_trade_count = 0
+        total_turnover = 0.0
+        total_pending_orders = 0
+
+        for account in accounts:
+            cash_balance = self.cash_balance(user_id=user_id, account_id=account.id)
+            position_metrics = self.position_summary(user_id=user_id, account_id=account.id)
+            trade_metrics = self.trade_stats(user_id=user_id, account_id=account.id)
+            orders = self._repository.list_orders(account_id=account.id, user_id=user_id)
+
+            total_cash_balance += cash_balance
+            total_market_value += float(position_metrics["totalMarketValue"])
+            total_unrealized_pnl += float(position_metrics["unrealizedPnl"])
+            total_trade_count += int(trade_metrics["tradeCount"])
+            total_turnover += float(trade_metrics["turnover"])
+            total_pending_orders += sum(1 for item in orders if item.status == "pending")
+
+        total_equity = total_cash_balance + total_market_value
+
+        return {
+            "userId": user_id,
+            "accountCount": len(accounts),
+            "totalCashBalance": round(total_cash_balance, 6),
+            "totalMarketValue": round(total_market_value, 6),
+            "totalUnrealizedPnl": round(total_unrealized_pnl, 6),
+            "totalEquity": round(total_equity, 6),
+            "totalTradeCount": total_trade_count,
+            "totalTurnover": round(total_turnover, 6),
+            "pendingOrderCount": total_pending_orders,
+        }
+
+    def list_pending_orders(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        account_id: str | None = None,
+    ) -> list[TradeOrder]:
+        if not is_admin:
+            raise TradingAdminRequiredError("admin role required")
+        if account_id is not None:
+            return self._repository.list_orders_by_status(status="pending", account_id=account_id)
+        return self._repository.list_orders_by_status(status="pending")
+
+    def refresh_market_prices(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        price_updates: dict[str, float],
+        idempotency_key: str | None = None,
+        confirmation_token: str | None = None,
+        account_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not price_updates:
+            raise ValueError("price updates must not be empty")
+
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            try:
+                self._governance_checker(
+                    actor_id=user_id,
+                    role=role,
+                    level=level,
+                    action="trading.refresh_prices",
+                    target="trading",
+                    confirmation_token=confirmation_token,
+                    context={"actor": user_id, "token": confirmation_token or ""},
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise TradingAdminRequiredError(str(exc)) from exc
+        elif not is_admin:
+            raise TradingAdminRequiredError("admin role required")
+
+        fingerprint = self._refresh_fingerprint(price_updates=price_updates, account_id=account_id)
+        if idempotency_key:
+            existed = self._refresh_records.get((user_id, idempotency_key))
+            if existed is not None:
+                stored_fingerprint, stored_result = existed
+                if stored_fingerprint != fingerprint:
+                    raise PriceRefreshConflictError("idempotency key already exists")
+                replay = dict(stored_result)
+                replay["idempotent"] = True
+                return replay
+
+        updated = self._repository.refresh_position_prices(
+            price_updates=price_updates,
+            account_id=account_id,
+            user_id=None,
+        )
+        result = {
+            "updatedPositions": updated,
+            "symbols": sorted(price_updates.keys()),
+            "idempotent": False,
+        }
+
+        if idempotency_key:
+            self._refresh_records[(user_id, idempotency_key)] = (fingerprint, dict(result))
+
+        return result
 
     def account_overview(self, *, user_id: str, account_id: str) -> dict:
         self._assert_account_owner(user_id=user_id, account_id=account_id)
