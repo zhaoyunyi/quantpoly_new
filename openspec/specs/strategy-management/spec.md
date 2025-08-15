@@ -45,3 +45,12 @@ TBD - created by archiving change add-strategy-backtest-migration. Update Purpos
 - **THEN** 后端返回 409
 - **AND** 错误码可用于前端识别状态冲突
 
+### Requirement: 策略执行前必须通过模板参数校验
+策略进入执行链路前 MUST 完成模板参数校验，避免无效策略进入下游执行系统。
+
+#### Scenario: 未通过校验的策略禁止进入执行链路
+- **GIVEN** 策略参数缺失关键字段
+- **WHEN** 用户发起执行请求
+- **THEN** 后端拒绝请求并返回参数校验错误
+- **AND** 策略状态与执行记录保持不变
+

@@ -39,3 +39,21 @@ TBD - created by archiving change add-risk-signal-context-migration. Update Purp
 - **THEN** 返回 403
 - **AND** 不执行任何删除或更新副作用
 
+### Requirement: 策略执行控制面必须覆盖生成到处理闭环
+信号执行系统 MUST 提供参数校验、信号生成、单条处理与执行详情查询能力。
+
+#### Scenario: 参数校验失败阻断信号生成
+- **GIVEN** 用户提交不满足模板约束的策略参数
+- **WHEN** 调用信号生成前校验接口
+- **THEN** 返回 400/422 与稳定错误码
+- **AND** 不创建任何执行记录
+
+### Requirement: 执行读模型必须支持运行中与趋势分析
+执行系统 MUST 提供运行中执行列表、策略维度统计与趋势视图。
+
+#### Scenario: 查询运行中执行列表
+- **GIVEN** 用户存在 `pending/running` 执行记录
+- **WHEN** 调用运行中执行查询接口
+- **THEN** 返回仅属于当前用户的执行记录
+- **AND** 每条记录包含状态与最近更新时间
+
