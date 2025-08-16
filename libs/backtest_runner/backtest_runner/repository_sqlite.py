@@ -157,27 +157,31 @@ class SQLiteBacktestRepository:
             return None
         return self._from_row(row)
 
-    def list_by_user(self, *, user_id: str, status: str | None = None) -> list[BacktestTask]:
+    def list_by_user(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str | None = None,
+        status: str | None = None,
+    ) -> list[BacktestTask]:
+        query = """
+            SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at
+            FROM backtest_runner_task
+            WHERE user_id = ?
+        """
+        params: list[object] = [user_id]
+
+        if strategy_id is not None:
+            query += " AND strategy_id = ?"
+            params.append(strategy_id)
+
+        if status is not None:
+            query += " AND status = ?"
+            params.append(status)
+
+        query += " ORDER BY created_at ASC"
+
         with self._connect() as conn:
-            if status is None:
-                rows = conn.execute(
-                    """
-                    SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at
-                    FROM backtest_runner_task
-                    WHERE user_id = ?
-                    ORDER BY created_at ASC
-                    """,
-                    (user_id,),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """
-                    SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at
-                    FROM backtest_runner_task
-                    WHERE user_id = ? AND status = ?
-                    ORDER BY created_at ASC
-                    """,
-                    (user_id, status),
-                ).fetchall()
+            rows = conn.execute(query, tuple(params)).fetchall()
 
         return [self._from_row(row) for row in rows]

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from backtest_runner.domain import InvalidBacktestTransitionError
 from backtest_runner.service import (
     BacktestAccessDeniedError,
+    BacktestDeleteInvalidStateError,
     BacktestIdempotencyConflictError,
     BacktestService,
 )
@@ -78,6 +79,8 @@ def create_router(*, service: BacktestService, get_current_user: Any) -> APIRout
                 config=body.config,
                 idempotency_key=body.idempotency_key,
             )
+        except BacktestAccessDeniedError:
+            return _access_denied_response()
         except BacktestIdempotencyConflictError as exc:
             return JSONResponse(
                 status_code=409,
@@ -91,12 +94,14 @@ def create_router(*, service: BacktestService, get_current_user: Any) -> APIRout
     @router.get("/backtests")
     def list_backtests(
         current_user=Depends(get_current_user),
+        strategy_id: str | None = Query(default=None, alias="strategyId"),
         status: str | None = Query(default=None),
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=20, alias="pageSize", ge=1, le=200),
     ):
         listing = service.list_tasks(
             user_id=current_user.id,
+            strategy_id=strategy_id,
             status=status,
             page=page,
             page_size=page_size,
@@ -109,8 +114,11 @@ def create_router(*, service: BacktestService, get_current_user: Any) -> APIRout
         )
 
     @router.get("/backtests/statistics")
-    def backtest_statistics(current_user=Depends(get_current_user)):
-        return success_response(data=service.statistics(user_id=current_user.id))
+    def backtest_statistics(
+        current_user=Depends(get_current_user),
+        strategy_id: str | None = Query(default=None, alias="strategyId"),
+    ):
+        return success_response(data=service.statistics(user_id=current_user.id, strategy_id=strategy_id))
 
     @router.post("/backtests/compare")
     def compare_backtests(body: CompareRequest, current_user=Depends(get_current_user)):
@@ -180,5 +188,23 @@ def create_router(*, service: BacktestService, get_current_user: Any) -> APIRout
         if task is None:
             return _access_denied_response()
         return success_response(data=_serialize_task(task))
+
+    @router.delete("/backtests/{task_id}")
+    def delete_backtest(task_id: str, current_user=Depends(get_current_user)):
+        try:
+            deleted = service.delete_task(user_id=current_user.id, task_id=task_id)
+        except BacktestDeleteInvalidStateError as exc:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(
+                    code="BACKTEST_DELETE_INVALID_STATE",
+                    message=str(exc),
+                ),
+            )
+
+        if not deleted:
+            return _access_denied_response()
+
+        return success_response(data={"deleted": True})
 
     return router

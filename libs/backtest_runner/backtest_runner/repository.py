@@ -72,10 +72,18 @@ class InMemoryBacktestRepository:
                 return None
             return self._clone(task)
 
-    def list_by_user(self, *, user_id: str, status: str | None = None) -> list[BacktestTask]:
+    def list_by_user(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str | None = None,
+        status: str | None = None,
+    ) -> list[BacktestTask]:
         with self._lock:
             return [
                 self._clone(task)
                 for task in sorted(self._tasks.values(), key=lambda item: item.created_at)
-                if task.user_id == user_id and (status is None or task.status == status)
+                if task.user_id == user_id
+                and (strategy_id is None or task.strategy_id == strategy_id)
+                and (status is None or task.status == status)
             ]

@@ -6,6 +6,7 @@ from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.repository_sqlite import SQLiteBacktestRepository
 from backtest_runner.service import (
     BacktestAccessDeniedError,
+    BacktestDeleteInvalidStateError,
     BacktestDispatchError,
     BacktestIdempotencyConflictError,
     BacktestService,
@@ -18,6 +19,7 @@ __all__ = [
     "SQLiteBacktestRepository",
     "BacktestIdempotencyConflictError",
     "BacktestAccessDeniedError",
+    "BacktestDeleteInvalidStateError",
     "BacktestDispatchError",
     "JobOrchestrationBacktestDispatcher",
     "BacktestService",

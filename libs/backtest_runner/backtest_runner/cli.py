@@ -8,7 +8,12 @@ import sys
 
 from backtest_runner.domain import InvalidBacktestTransitionError
 from backtest_runner.repository import InMemoryBacktestRepository
-from backtest_runner.service import BacktestIdempotencyConflictError, BacktestService
+from backtest_runner.service import (
+    BacktestAccessDeniedError,
+    BacktestDeleteInvalidStateError,
+    BacktestIdempotencyConflictError,
+    BacktestService,
+)
 
 _repo = InMemoryBacktestRepository()
 _service = BacktestService(repository=_repo)
@@ -46,6 +51,17 @@ def _cmd_create(args: argparse.Namespace) -> None:
             config=config,
             idempotency_key=idempotency_key,
         )
+    except BacktestAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "BACKTEST_ACCESS_DENIED",
+                    "message": "strategy does not belong to current user",
+                },
+            }
+        )
+        return
     except BacktestIdempotencyConflictError as exc:
         _output({"success": False, "error": {"code": "BACKTEST_IDEMPOTENCY_CONFLICT", "message": str(exc)}})
         return
@@ -64,6 +80,7 @@ def _cmd_status(args: argparse.Namespace) -> None:
 def _cmd_list(args: argparse.Namespace) -> None:
     listing = _service.list_tasks(
         user_id=args.user_id,
+        strategy_id=getattr(args, "strategy_id", None),
         status=args.status,
         page=args.page,
         page_size=args.page_size,
@@ -136,8 +153,33 @@ def _cmd_retry(args: argparse.Namespace) -> None:
     _output({"success": True, "data": _serialize_task(task)})
 
 
+def _cmd_delete(args: argparse.Namespace) -> None:
+    try:
+        deleted = _service.delete_task(user_id=args.user_id, task_id=args.task_id)
+    except BacktestDeleteInvalidStateError as exc:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "BACKTEST_DELETE_INVALID_STATE",
+                    "message": str(exc),
+                },
+            }
+        )
+        return
+
+    if not deleted:
+        _output({"success": False, "error": {"code": "NOT_FOUND", "message": "task not found"}})
+        return
+
+    _output({"success": True, "data": {"deleted": True}})
+
+
 def _cmd_statistics(args: argparse.Namespace) -> None:
-    stats = _service.statistics(user_id=args.user_id)
+    stats = _service.statistics(
+        user_id=args.user_id,
+        strategy_id=getattr(args, "strategy_id", None),
+    )
     _output({"success": True, "data": stats})
 
 
@@ -168,6 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_cmd = sub.add_parser("list", help="列表查询回测任务")
     list_cmd.add_argument("--user-id", required=True)
+    list_cmd.add_argument("--strategy-id", default=None)
     list_cmd.add_argument("--status", default=None)
     list_cmd.add_argument("--page", type=int, default=1)
     list_cmd.add_argument("--page-size", type=int, default=20)
@@ -186,8 +229,13 @@ def build_parser() -> argparse.ArgumentParser:
     retry.add_argument("--user-id", required=True)
     retry.add_argument("--task-id", required=True)
 
+    delete = sub.add_parser("delete", help="删除任务")
+    delete.add_argument("--user-id", required=True)
+    delete.add_argument("--task-id", required=True)
+
     statistics = sub.add_parser("statistics", help="回测统计")
     statistics.add_argument("--user-id", required=True)
+    statistics.add_argument("--strategy-id", default=None)
 
     compare = sub.add_parser("compare", help="回测任务对比")
     compare.add_argument("--user-id", required=True)
@@ -203,6 +251,7 @@ _COMMANDS = {
     "transition": _cmd_transition,
     "cancel": _cmd_cancel,
     "retry": _cmd_retry,
+    "delete": _cmd_delete,
     "statistics": _cmd_statistics,
     "compare": _cmd_compare,
 }

@@ -21,6 +21,10 @@ class BacktestDispatchError(RuntimeError):
     """回测任务提交到编排系统失败。"""
 
 
+class BacktestDeleteInvalidStateError(RuntimeError):
+    """回测任务状态不允许删除。"""
+
+
 class BacktestDispatcher(Protocol):
     def submit_backtest(self, task: BacktestTask) -> str:
         """向编排系统提交回测任务并返回 job_id。"""
@@ -33,10 +37,12 @@ class BacktestService:
         repository: InMemoryBacktestRepository,
         on_task_created: Callable[[BacktestTask], None] | None = None,
         dispatcher: BacktestDispatcher | None = None,
+        strategy_owner_acl: Callable[[str, str], bool] | None = None,
     ) -> None:
         self._repository = repository
         self._on_task_created = on_task_created
         self._dispatcher = dispatcher
+        self._strategy_owner_acl = strategy_owner_acl or (lambda _user_id, _strategy_id: True)
 
     def create_task(
         self,
@@ -46,6 +52,9 @@ class BacktestService:
         config: dict,
         idempotency_key: str | None = None,
     ) -> BacktestTask:
+        if not self._strategy_owner_acl(user_id, strategy_id):
+            raise BacktestAccessDeniedError("strategy does not belong to current user")
+
         if idempotency_key:
             existing = self._repository.find_by_idempotency_key(
                 user_id=user_id,
@@ -87,11 +96,16 @@ class BacktestService:
         self,
         *,
         user_id: str,
+        strategy_id: str | None = None,
         status: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> dict:
-        all_items = self._repository.list_by_user(user_id=user_id, status=status)
+        all_items = self._repository.list_by_user(
+            user_id=user_id,
+            strategy_id=strategy_id,
+            status=status,
+        )
         total = len(all_items)
         start = max(page - 1, 0) * page_size
         end = start + page_size
@@ -123,8 +137,32 @@ class BacktestService:
     def retry_task(self, *, user_id: str, task_id: str) -> BacktestTask | None:
         return self.transition(user_id=user_id, task_id=task_id, to_status="pending")
 
-    def statistics(self, *, user_id: str) -> dict:
-        all_items = self._repository.list_by_user(user_id=user_id, status=None)
+    def delete_task(self, *, user_id: str, task_id: str) -> bool:
+        task = self._repository.get_by_id(task_id, user_id=user_id)
+        if task is None:
+            return False
+
+        if task.status not in {"completed", "failed", "cancelled"}:
+            raise BacktestDeleteInvalidStateError(
+                f"backtest_delete_invalid_state status={task.status}"
+            )
+
+        return self._repository.delete(user_id=user_id, task_id=task_id)
+
+    def count_active_backtests(self, *, user_id: str, strategy_id: str) -> int:
+        all_items = self._repository.list_by_user(
+            user_id=user_id,
+            strategy_id=strategy_id,
+            status=None,
+        )
+        return sum(1 for item in all_items if item.status in {"pending", "running"})
+
+    def statistics(self, *, user_id: str, strategy_id: str | None = None) -> dict:
+        all_items = self._repository.list_by_user(
+            user_id=user_id,
+            strategy_id=strategy_id,
+            status=None,
+        )
         counters = {
             "pendingCount": 0,
             "runningCount": 0,

@@ -38,10 +38,16 @@ class StrategyService:
         self,
         *,
         repository: InMemoryStrategyRepository,
-        count_active_backtests: Callable[[str], int],
+        count_active_backtests: Callable[..., int],
+        create_backtest_for_strategy: Callable[..., Any] | None = None,
+        list_backtests_for_strategy: Callable[..., dict[str, Any]] | None = None,
+        stats_backtests_for_strategy: Callable[..., dict[str, Any]] | None = None,
     ) -> None:
         self._repository = repository
         self._count_active_backtests = count_active_backtests
+        self._create_backtest_for_strategy = create_backtest_for_strategy
+        self._list_backtests_for_strategy = list_backtests_for_strategy
+        self._stats_backtests_for_strategy = stats_backtests_for_strategy
 
     def list_templates(self) -> list[dict[str, Any]]:
         return list(_TEMPLATE_CATALOG.values())
@@ -72,6 +78,53 @@ class StrategyService:
         if entry_z <= exit_z:
             raise InvalidStrategyParametersError("entryZ must be greater than exitZ")
 
+    def _require_owned_strategy(self, *, user_id: str, strategy_id: str) -> Strategy:
+        strategy = self._repository.get_by_id(strategy_id, user_id=user_id)
+        if strategy is None:
+            raise StrategyAccessDeniedError("strategy does not belong to current user")
+        return strategy
+
+    @staticmethod
+    def _call_maybe_legacy_count(
+        callback: Callable[..., int],
+        *,
+        user_id: str,
+        strategy_id: str,
+    ) -> int:
+        try:
+            return int(callback(user_id=user_id, strategy_id=strategy_id))
+        except TypeError:
+            pass
+
+        try:
+            return int(callback(user_id, strategy_id))
+        except TypeError:
+            return int(callback(strategy_id))
+
+    @staticmethod
+    def _call_required(callback: Callable[..., Any] | None, **kwargs: Any) -> Any:
+        if callback is None:
+            raise RuntimeError("backtest linkage callback is not configured")
+
+        try:
+            return callback(**kwargs)
+        except TypeError:
+            ordered = [
+                kwargs["user_id"],
+                kwargs["strategy_id"],
+            ]
+            if "config" in kwargs:
+                ordered.append(kwargs["config"])
+            if "idempotency_key" in kwargs:
+                ordered.append(kwargs["idempotency_key"])
+            if "status" in kwargs:
+                ordered.append(kwargs["status"])
+            if "page" in kwargs:
+                ordered.append(kwargs["page"])
+            if "page_size" in kwargs:
+                ordered.append(kwargs["page_size"])
+            return callback(*ordered)
+
     def validate_execution_parameters(
         self,
         *,
@@ -79,9 +132,7 @@ class StrategyService:
         strategy_id: str,
         parameters: dict[str, Any],
     ) -> Strategy:
-        strategy = self._repository.get_by_id(strategy_id, user_id=user_id)
-        if strategy is None:
-            raise StrategyAccessDeniedError("strategy does not belong to current user")
+        strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
         self._validate_parameters(template_id=strategy.template, parameters=parameters)
         return strategy
 
@@ -120,11 +171,76 @@ class StrategyService:
         self._repository.save(strategy)
         return strategy
 
+    def update_strategy(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        name: str | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> Strategy | None:
+        strategy = self._repository.get_by_id(strategy_id, user_id=user_id)
+        if strategy is None:
+            return None
+
+        if parameters is not None:
+            self._validate_parameters(template_id=strategy.template, parameters=parameters)
+
+        strategy.update(name=name, parameters=parameters)
+        self._repository.save(strategy)
+        return strategy
+
     def list_strategies(self, *, user_id: str) -> list[Strategy]:
         return self._repository.list_by_user(user_id=user_id)
 
     def get_strategy(self, *, user_id: str, strategy_id: str) -> Strategy | None:
         return self._repository.get_by_id(strategy_id, user_id=user_id)
+
+    def create_backtest_for_strategy(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        config: dict[str, Any],
+        idempotency_key: str | None = None,
+    ) -> Any:
+        strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
+        return self._call_required(
+            self._create_backtest_for_strategy,
+            user_id=user_id,
+            strategy_id=strategy.id,
+            config=config,
+            idempotency_key=idempotency_key,
+        )
+
+    def list_backtests_for_strategy(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        status: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
+        listing = self._call_required(
+            self._list_backtests_for_strategy,
+            user_id=user_id,
+            strategy_id=strategy.id,
+            status=status,
+            page=page,
+            page_size=page_size,
+        )
+        return dict(listing)
+
+    def backtest_stats_for_strategy(self, *, user_id: str, strategy_id: str) -> dict[str, Any]:
+        strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
+        stats = self._call_required(
+            self._stats_backtests_for_strategy,
+            user_id=user_id,
+            strategy_id=strategy.id,
+        )
+        return dict(stats)
 
     def activate_strategy(self, *, user_id: str, strategy_id: str) -> Strategy | None:
         strategy = self._repository.get_by_id(strategy_id, user_id=user_id)
@@ -155,7 +271,11 @@ class StrategyService:
         if strategy is None:
             return False
 
-        active_count = self._count_active_backtests(strategy.id)
+        active_count = self._call_maybe_legacy_count(
+            self._count_active_backtests,
+            user_id=user_id,
+            strategy_id=strategy.id,
+        )
         if active_count > 0:
             raise StrategyInUseError(
                 f"strategy_in_use active_backtests={active_count} strategy_id={strategy.id}"

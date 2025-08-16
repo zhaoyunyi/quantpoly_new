@@ -46,7 +46,7 @@ class Strategy:
     ) -> "Strategy":
         now = datetime.now(timezone.utc)
         return cls(
-            id=str(uuid.uuid4()),
+            id=f"{user_id}-{uuid.uuid4()}",
             user_id=user_id,
             name=name,
             template=template,
@@ -55,6 +55,25 @@ class Strategy:
             created_at=now,
             updated_at=now,
         )
+
+    def update(
+        self,
+        *,
+        name: str | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> None:
+        changed = False
+
+        if name is not None and name != self.name:
+            self.name = name
+            changed = True
+
+        if parameters is not None and parameters != self.parameters:
+            self.parameters = parameters
+            changed = True
+
+        if changed:
+            self.updated_at = datetime.now(timezone.utc)
 
     def transition_to(self, to_status: str) -> None:
         allowed = _STRATEGY_TRANSITIONS.get(self.status, set())

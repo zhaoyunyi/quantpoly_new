@@ -240,11 +240,38 @@ def register_all_routes(
     enabled_contexts: set[str],
     get_current_user: AuthUserFn,
 ) -> None:
+    backtest_service = BacktestService(
+        repository=context.backtest_repo,
+        strategy_owner_acl=lambda user_id, strategy_id: context.strategy_repo.get_by_id(
+            strategy_id,
+            user_id=user_id,
+        )
+        is not None,
+    )
     strategy_service = StrategyService(
         repository=context.strategy_repo,
-        count_active_backtests=lambda _strategy_id: 0,
+        count_active_backtests=lambda user_id, strategy_id: backtest_service.count_active_backtests(
+            user_id=user_id,
+            strategy_id=strategy_id,
+        ),
+        create_backtest_for_strategy=lambda user_id, strategy_id, config, idempotency_key: backtest_service.create_task(
+            user_id=user_id,
+            strategy_id=strategy_id,
+            config=config,
+            idempotency_key=idempotency_key,
+        ),
+        list_backtests_for_strategy=lambda user_id, strategy_id, status, page, page_size: backtest_service.list_tasks(
+            user_id=user_id,
+            strategy_id=strategy_id,
+            status=status,
+            page=page,
+            page_size=page_size,
+        ),
+        stats_backtests_for_strategy=lambda user_id, strategy_id: backtest_service.statistics(
+            user_id=user_id,
+            strategy_id=strategy_id,
+        ),
     )
-    backtest_service = BacktestService(repository=context.backtest_repo)
     trading_service = TradingAccountService(repository=context.trading_repo)
     risk_service = RiskControlService(
         repository=context.risk_repo,
