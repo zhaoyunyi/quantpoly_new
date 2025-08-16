@@ -77,18 +77,24 @@ class GovernancePolicyEngine:
         confirmation_token: str | None = None,
         context: dict[str, Any] | None = None,
     ) -> PolicyResult:
+        context_payload = dict(context or {})
+        context_payload.setdefault(
+            "adminDecisionSource",
+            "role_level" if role == "admin" else "none",
+        )
+
         policy = self._action_catalog.get(action)
         if policy is None:
-            self._audit(actor=actor_id, action=action, target=target, result="denied", context=context)
+            self._audit(actor=actor_id, action=action, target=target, result="denied", context=context_payload)
             raise GovernanceAccessDeniedError("action not in governance catalog")
 
         if role != policy.min_role or level < policy.min_level:
-            self._audit(actor=actor_id, action=action, target=target, result="denied", context=context)
+            self._audit(actor=actor_id, action=action, target=target, result="denied", context=context_payload)
             raise GovernanceAccessDeniedError("insufficient governance permission")
 
         if policy.requires_confirmation:
             if not confirmation_token:
-                self._audit(actor=actor_id, action=action, target=target, result="denied", context=context)
+                self._audit(actor=actor_id, action=action, target=target, result="denied", context=context_payload)
                 raise ConfirmationRequiredError("confirmation token required")
 
             ok = self._token_store.consume(
@@ -98,8 +104,8 @@ class GovernancePolicyEngine:
                 target=target,
             )
             if not ok:
-                self._audit(actor=actor_id, action=action, target=target, result="denied", context=context)
+                self._audit(actor=actor_id, action=action, target=target, result="denied", context=context_payload)
                 raise ConfirmationRequiredError("invalid or expired confirmation token")
 
-        self._audit(actor=actor_id, action=action, target=target, result="allowed", context=context)
+        self._audit(actor=actor_id, action=action, target=target, result="allowed", context=context_payload)
         return PolicyResult(allowed=True, action=action, reason="authorized")

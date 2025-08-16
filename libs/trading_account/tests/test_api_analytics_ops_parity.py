@@ -6,18 +6,35 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
-def _build_app(*, current_user_id: str, is_admin: bool = False):
+def _build_app(
+    *,
+    current_user_id: str,
+    is_admin: bool | None = False,
+    role: str | None = None,
+    level: int | None = None,
+):
     from trading_account.api import create_router
     from trading_account.repository import InMemoryTradingAccountRepository
     from trading_account.service import TradingAccountService
 
     class _User:
-        def __init__(self, user_id: str, admin: bool):
+        def __init__(
+            self,
+            user_id: str,
+            admin: bool | None,
+            user_role: str | None,
+            user_level: int | None,
+        ):
             self.id = user_id
-            self.is_admin = admin
+            if admin is not None:
+                self.is_admin = admin
+            if user_role is not None:
+                self.role = user_role
+            if user_level is not None:
+                self.level = user_level
 
     def _get_current_user():
-        return _User(current_user_id, is_admin)
+        return _User(current_user_id, is_admin, role, level)
 
     repo = InMemoryTradingAccountRepository()
     service = TradingAccountService(repository=repo)
@@ -121,3 +138,74 @@ def test_refresh_prices_idempotency_conflict_returns_409_for_admin():
     )
     assert conflict.status_code == 409
     assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+
+
+def test_ops_endpoints_accept_role_admin_without_is_admin_flag():
+    app, service = _build_app(current_user_id="admin-1", is_admin=None, role="admin")
+    account = service.create_account(user_id="admin-1", account_name="primary")
+    service.submit_order(
+        user_id="admin-1",
+        account_id=account.id,
+        symbol="MSFT",
+        side="BUY",
+        quantity=1,
+        price=100,
+    )
+
+    client = TestClient(app)
+
+    pending = client.get("/trading/ops/pending-orders")
+    assert pending.status_code == 200
+    assert pending.json()["success"] is True
+
+    refresh = client.post(
+        "/trading/ops/refresh-prices",
+        json={"priceUpdates": {"MSFT": 130}},
+    )
+    assert refresh.status_code == 200
+    assert refresh.json()["success"] is True
+
+
+def test_ops_endpoints_accept_legacy_is_admin_flag_without_role():
+    app, service = _build_app(current_user_id="admin-legacy", is_admin=True, role=None)
+    account = service.create_account(user_id="admin-legacy", account_name="primary")
+    service.submit_order(
+        user_id="admin-legacy",
+        account_id=account.id,
+        symbol="NVDA",
+        side="BUY",
+        quantity=1,
+        price=100,
+    )
+
+    client = TestClient(app)
+
+    pending = client.get("/trading/ops/pending-orders")
+    assert pending.status_code == 200
+    assert pending.json()["success"] is True
+
+
+def test_ops_endpoints_reject_role_user_without_is_admin_flag():
+    app, service = _build_app(current_user_id="u-1", is_admin=None, role="user")
+    account = service.create_account(user_id="u-1", account_name="primary")
+    service.submit_order(
+        user_id="u-1",
+        account_id=account.id,
+        symbol="AMD",
+        side="BUY",
+        quantity=1,
+        price=100,
+    )
+
+    client = TestClient(app)
+
+    pending = client.get("/trading/ops/pending-orders")
+    assert pending.status_code == 403
+    assert pending.json()["error"]["code"] == "ADMIN_REQUIRED"
+
+    refresh = client.post(
+        "/trading/ops/refresh-prices",
+        json={"priceUpdates": {"AMD": 120}},
+    )
+    assert refresh.status_code == 403
+    assert refresh.json()["error"]["code"] == "ADMIN_REQUIRED"

@@ -118,6 +118,7 @@ def _cmd_cleanup_all(args: argparse.Namespace) -> None:
         deleted = _service.cleanup_all_signals(
             user_id=args.user_id,
             is_admin=args.is_admin,
+            admin_decision_source="is_admin" if args.is_admin else "none",
             confirmation_token=getattr(args, "confirmation_token", None),
         )
     except AdminRequiredError:

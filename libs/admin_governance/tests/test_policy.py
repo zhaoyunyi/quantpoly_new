@@ -133,6 +133,40 @@ def test_audit_log_masks_sensitive_fields():
     assert "StrongPass123!" not in text
 
 
+def test_audit_context_contains_admin_decision_source_by_default():
+    from admin_governance.audit import InMemoryAuditLog
+    from admin_governance.catalog import default_action_catalog
+    from admin_governance.policy import GovernancePolicyEngine
+    from admin_governance.token import InMemoryConfirmationTokenStore
+
+    audit_log = InMemoryAuditLog()
+    token_store = InMemoryConfirmationTokenStore()
+    engine = GovernancePolicyEngine(
+        action_catalog=default_action_catalog(),
+        token_store=token_store,
+        audit_log=audit_log,
+    )
+
+    token = token_store.issue(
+        actor_id="admin-1",
+        action="signals.cleanup_all",
+        target="signals",
+        ttl_seconds=60,
+    )
+
+    engine.authorize(
+        actor_id="admin-1",
+        role="admin",
+        level=10,
+        action="signals.cleanup_all",
+        target="signals",
+        confirmation_token=token,
+    )
+
+    records = audit_log.list_records()
+    assert records[-1].context.get("adminDecisionSource") == "role_level"
+
+
 def test_catalog_contains_users_delete_action():
     from admin_governance.catalog import default_action_catalog
 

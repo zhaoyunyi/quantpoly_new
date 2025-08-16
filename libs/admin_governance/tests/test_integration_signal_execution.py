@@ -37,7 +37,7 @@ def test_signal_cleanup_all_uses_governance_checker():
     )
 
     with pytest.raises(AdminRequiredError):
-        service.cleanup_all_signals(user_id="u-1", is_admin=False)
+        service.cleanup_all_signals(user_id="u-1", is_admin=False, admin_decision_source="none")
 
     token = token_store.issue(
         actor_id="admin-1",
@@ -49,6 +49,7 @@ def test_signal_cleanup_all_uses_governance_checker():
     deleted = service.cleanup_all_signals(
         user_id="admin-1",
         is_admin=True,
+        admin_decision_source="role",
         confirmation_token=token,
     )
 
@@ -56,3 +57,6 @@ def test_signal_cleanup_all_uses_governance_checker():
     records = audit_log.list_records()
     assert any(item.action == "signals.cleanup_all" and item.result == "allowed" for item in records)
 
+    last = records[-1]
+    assert last.context.get("adminDecisionSource") == "role"
+    assert token not in str(last.context)

@@ -166,6 +166,7 @@ def _cmd_pending_orders(args: argparse.Namespace) -> None:
         orders = _service.list_pending_orders(
             user_id=args.user_id,
             is_admin=args.is_admin,
+            admin_decision_source="is_admin" if args.is_admin else "none",
             account_id=args.account_id,
         )
     except TradingAdminRequiredError:
@@ -186,6 +187,7 @@ def _cmd_refresh_prices(args: argparse.Namespace) -> None:
         result = _service.refresh_market_prices(
             user_id=args.user_id,
             is_admin=args.is_admin,
+            admin_decision_source="is_admin" if args.is_admin else "none",
             price_updates=price_updates,
             idempotency_key=args.idempotency_key,
             confirmation_token=args.confirmation_token,

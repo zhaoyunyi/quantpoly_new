@@ -44,6 +44,7 @@ def test_cleanup_all_audit_masks_confirmation_token():
     deleted = service.cleanup_all_signals(
         user_id="admin-1",
         is_admin=True,
+        admin_decision_source="role",
         confirmation_token=confirmation_token,
     )
 
@@ -55,3 +56,4 @@ def test_cleanup_all_audit_masks_confirmation_token():
     assert latest.result == "allowed"
     assert latest.context["token"] != confirmation_token
     assert latest.context["token"].endswith("***")
+    assert latest.context.get("adminDecisionSource") == "role"

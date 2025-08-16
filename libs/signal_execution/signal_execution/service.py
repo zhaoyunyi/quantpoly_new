@@ -394,6 +394,7 @@ class SignalExecutionService:
         *,
         user_id: str,
         is_admin: bool,
+        admin_decision_source: str = "unknown",
         confirmation_token: str | None = None,
     ) -> int:
         if self._governance_checker is not None:
@@ -407,7 +408,11 @@ class SignalExecutionService:
                     action="signals.cleanup_all",
                     target="signals",
                     confirmation_token=confirmation_token,
-                    context={"actor": user_id, "token": confirmation_token or ""},
+                    context={
+                        "actor": user_id,
+                        "token": confirmation_token or "",
+                        "adminDecisionSource": admin_decision_source,
+                    },
                 )
             except Exception as exc:  # noqa: BLE001
                 raise AdminRequiredError(str(exc)) from exc

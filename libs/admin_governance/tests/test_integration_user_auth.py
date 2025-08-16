@@ -61,6 +61,7 @@ def test_user_admin_actions_are_audited_and_masked():
     assert last.actor == admin.id
     context_text = str(last.context)
     assert admin_token not in context_text
+    assert last.context.get("adminDecisionSource") == "role_level"
 
 
 def test_admin_delete_user_action_is_audited_and_masked():
@@ -130,3 +131,4 @@ def test_admin_delete_user_action_is_audited_and_masked():
     assert last.actor == admin.id
     context_text = str(last.context)
     assert admin_token not in context_text
+    assert last.context.get("adminDecisionSource") == "role_level"

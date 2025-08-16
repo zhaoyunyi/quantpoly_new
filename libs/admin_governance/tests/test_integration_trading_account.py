@@ -39,6 +39,7 @@ def test_trading_refresh_prices_uses_governance_checker():
         service.refresh_market_prices(
             user_id="u-1",
             is_admin=False,
+            admin_decision_source="none",
             price_updates={"AAPL": 130},
         )
 
@@ -52,6 +53,7 @@ def test_trading_refresh_prices_uses_governance_checker():
     refreshed = service.refresh_market_prices(
         user_id="admin-1",
         is_admin=True,
+        admin_decision_source="role",
         price_updates={"AAPL": 130},
         confirmation_token=token,
     )
@@ -59,3 +61,7 @@ def test_trading_refresh_prices_uses_governance_checker():
     assert refreshed["updatedPositions"] == 1
     records = audit_log.list_records()
     assert any(item.action == "trading.refresh_prices" and item.result == "allowed" for item in records)
+
+    last = records[-1]
+    assert last.context.get("adminDecisionSource") == "role"
+    assert token not in str(last.context)

@@ -484,10 +484,12 @@ class TradingAccountService:
         *,
         user_id: str,
         is_admin: bool,
+        admin_decision_source: str = "unknown",
         account_id: str | None = None,
     ) -> list[TradeOrder]:
         if not is_admin:
             raise TradingAdminRequiredError("admin role required")
+        del admin_decision_source
         if account_id is not None:
             return self._repository.list_orders_by_status(status="pending", account_id=account_id)
         return self._repository.list_orders_by_status(status="pending")
@@ -497,6 +499,7 @@ class TradingAccountService:
         *,
         user_id: str,
         is_admin: bool,
+        admin_decision_source: str = "unknown",
         price_updates: dict[str, float],
         idempotency_key: str | None = None,
         confirmation_token: str | None = None,
@@ -516,7 +519,11 @@ class TradingAccountService:
                     action="trading.refresh_prices",
                     target="trading",
                     confirmation_token=confirmation_token,
-                    context={"actor": user_id, "token": confirmation_token or ""},
+                    context={
+                        "actor": user_id,
+                        "token": confirmation_token or "",
+                        "adminDecisionSource": admin_decision_source,
+                    },
                 )
             except Exception as exc:  # noqa: BLE001
                 raise TradingAdminRequiredError(str(exc)) from exc

@@ -6,18 +6,35 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
-def _build_app(*, current_user_id: str, is_admin: bool = False):
+def _build_app(
+    *,
+    current_user_id: str,
+    is_admin: bool | None = False,
+    role: str | None = None,
+    level: int | None = None,
+):
     from signal_execution.api import create_router
     from signal_execution.repository import InMemorySignalRepository
     from signal_execution.service import SignalExecutionService
 
     class _User:
-        def __init__(self, user_id: str, admin: bool):
+        def __init__(
+            self,
+            user_id: str,
+            admin: bool | None,
+            user_role: str | None,
+            user_level: int | None,
+        ):
             self.id = user_id
-            self.is_admin = admin
+            if admin is not None:
+                self.is_admin = admin
+            if user_role is not None:
+                self.role = user_role
+            if user_level is not None:
+                self.level = user_level
 
     def _get_current_user():
-        return _User(current_user_id, is_admin)
+        return _User(current_user_id, is_admin, role, level)
 
     service = SignalExecutionService(
         repository=InMemorySignalRepository(),
@@ -103,3 +120,62 @@ def test_execution_trend_is_user_scoped():
     assert payload["success"] is True
     assert payload["data"]["total"] == 1
 
+
+def test_cleanup_all_accepts_role_admin_without_is_admin_flag():
+    app, service = _build_app(current_user_id="admin-1", is_admin=None, role="admin")
+
+    service.create_signal(
+        user_id="u-1",
+        strategy_id="u-1-strategy",
+        account_id="u-1-account",
+        symbol="AAPL",
+        side="BUY",
+    )
+
+    client = TestClient(app)
+    resp = client.post("/signals/maintenance/cleanup-all")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["deleted"] >= 1
+
+
+def test_cleanup_all_accepts_legacy_is_admin_without_role():
+    app, service = _build_app(current_user_id="admin-legacy", is_admin=True, role=None)
+
+    service.create_signal(
+        user_id="u-1",
+        strategy_id="u-1-strategy",
+        account_id="u-1-account",
+        symbol="AAPL",
+        side="BUY",
+    )
+
+    client = TestClient(app)
+    resp = client.post("/signals/maintenance/cleanup-all")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["deleted"] >= 1
+
+
+def test_cleanup_all_rejects_role_user_without_is_admin_flag():
+    app, service = _build_app(current_user_id="u-1", is_admin=None, role="user")
+
+    service.create_signal(
+        user_id="u-1",
+        strategy_id="u-1-strategy",
+        account_id="u-1-account",
+        symbol="AAPL",
+        side="BUY",
+    )
+
+    client = TestClient(app)
+    resp = client.post("/signals/maintenance/cleanup-all")
+
+    assert resp.status_code == 403
+    payload = resp.json()
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "ADMIN_REQUIRED"

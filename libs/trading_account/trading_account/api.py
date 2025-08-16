@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from platform_core.authz import resolve_admin_decision
 from platform_core.response import error_response, success_response
 from trading_account.domain import InvalidTradeOrderTransitionError
 from trading_account.service import (
@@ -399,10 +400,12 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
         account_id: str | None = Query(default=None, alias="accountId"),
         current_user=Depends(get_current_user),
     ):
+        decision = resolve_admin_decision(current_user)
         try:
             orders = service.list_pending_orders(
                 user_id=current_user.id,
-                is_admin=bool(getattr(current_user, "is_admin", False)),
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
                 account_id=account_id,
             )
         except TradingAdminRequiredError:
@@ -416,10 +419,12 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
 
     @router.post("/trading/ops/refresh-prices")
     def refresh_prices(body: RefreshPricesRequest, current_user=Depends(get_current_user)):
+        decision = resolve_admin_decision(current_user)
         try:
             result = service.refresh_market_prices(
                 user_id=current_user.id,
-                is_admin=bool(getattr(current_user, "is_admin", False)),
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
                 price_updates=body.price_updates,
                 idempotency_key=body.idempotency_key,
                 confirmation_token=body.confirmation_token,

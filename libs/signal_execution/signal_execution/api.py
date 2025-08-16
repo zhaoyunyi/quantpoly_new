@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from platform_core.authz import resolve_admin_decision
 from platform_core.response import error_response, success_response
 from signal_execution.domain import ExecutionRecord, TradingSignal
 from signal_execution.service import (
@@ -324,10 +325,12 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
         body: CleanupAllRequest | None = None,
         current_user=Depends(get_current_user),
     ):
+        decision = resolve_admin_decision(current_user)
         try:
             deleted = service.cleanup_all_signals(
                 user_id=current_user.id,
-                is_admin=bool(getattr(current_user, "is_admin", False)),
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
                 confirmation_token=body.confirmation_token if body is not None else None,
             )
         except AdminRequiredError:
