@@ -242,6 +242,42 @@ def create_router(*, service: RiskControlService, get_current_user: Any) -> APIR
 
         return success_response(data=_assessment_payload(snapshot))
 
+    @router.get("/risk/accounts/{account_id}/snapshot")
+    def get_account_assessment_snapshot(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            snapshot = service.get_account_assessment_snapshot(
+                user_id=current_user.id,
+                account_id=account_id,
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(code="RULE_ACCESS_DENIED", message="account does not belong to current user"),
+            )
+
+        if snapshot is None:
+            return JSONResponse(
+                status_code=404,
+                content=error_response(code="ASSESSMENT_NOT_FOUND", message="assessment snapshot not found"),
+            )
+
+        return success_response(data=_assessment_payload(snapshot))
+
+    @router.post("/risk/accounts/{account_id}/evaluate")
+    def evaluate_account_risk(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            snapshot = service.evaluate_account_risk(
+                user_id=current_user.id,
+                account_id=account_id,
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(code="RULE_ACCESS_DENIED", message="account does not belong to current user"),
+            )
+
+        return success_response(data=_assessment_payload(snapshot))
+
     @router.post("/risk/check/strategy/{strategy_id}")
     def check_strategy_risk(
         strategy_id: str,

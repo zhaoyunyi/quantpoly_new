@@ -188,6 +188,22 @@ class RiskControlService:
             strategy_id=strategy_id,
         )
 
+    def get_account_assessment_snapshot(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+    ) -> RiskAssessmentSnapshot | None:
+        self._assert_account_scope(user_id=user_id, account_id=account_id)
+        return self._repository.get_latest_assessment(
+            user_id=user_id,
+            account_id=account_id,
+            strategy_id=None,
+        )
+
+    def evaluate_account_risk(self, *, user_id: str, account_id: str) -> RiskAssessmentSnapshot:
+        return self.assess_account_risk(user_id=user_id, account_id=account_id)
+
     def get_risk_dashboard(self, *, user_id: str, account_id: str) -> dict:
         self._assert_account_scope(user_id=user_id, account_id=account_id)
         latest_account = self._repository.get_latest_assessment(

@@ -15,6 +15,8 @@ from trading_account.service import (
     LedgerTransactionError,
     OrderNotFoundError,
     PriceRefreshConflictError,
+    RiskAssessmentPendingError,
+    RiskAssessmentUnavailableError,
     TradingAccountService,
     TradingAdminRequiredError,
 )
@@ -99,6 +101,152 @@ def _serialize_cash_flow(flow) -> dict:
         "relatedTradeId": flow.related_trade_id,
         "createdAt": _dt(flow.created_at),
     }
+
+
+def _cmd_account_create(args: argparse.Namespace) -> None:
+    created = _service.create_account(
+        user_id=args.user_id,
+        account_name=args.account_name,
+        initial_capital=float(getattr(args, "initial_capital", 0.0) or 0.0),
+    )
+    _output({"success": True, "data": _serialize_account(created)})
+
+
+def _cmd_account_get(args: argparse.Namespace) -> None:
+    account = _service.get_account(user_id=args.user_id, account_id=args.account_id)
+    if account is None:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+    _output({"success": True, "data": _serialize_account(account)})
+
+
+def _cmd_account_update(args: argparse.Namespace) -> None:
+    account_name = getattr(args, "account_name", None)
+    is_active = getattr(args, "is_active", None)
+
+    if isinstance(is_active, str):
+        lowered = is_active.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            is_active = True
+        elif lowered in {"0", "false", "no", "off"}:
+            is_active = False
+        else:
+            _error(code="INVALID_ARGUMENT", message="is_active must be true/false")
+            return
+
+    updated = _service.update_account(
+        user_id=args.user_id,
+        account_id=args.account_id,
+        account_name=account_name,
+        is_active=is_active,
+    )
+    if updated is None:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    _output({"success": True, "data": _serialize_account(updated)})
+
+
+def _cmd_account_filter_config(args: argparse.Namespace) -> None:
+    config = _service.account_filter_config(user_id=args.user_id)
+    _output({"success": True, "data": config})
+
+
+def _cmd_account_summary(args: argparse.Namespace) -> None:
+    try:
+        summary = _service.account_summary(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+    except RiskAssessmentUnavailableError as exc:
+        _error(code="RISK_ASSESSMENT_UNAVAILABLE", message=str(exc))
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "account": _serialize_account(summary["account"]),
+                "positions": [
+                    {
+                        "id": item.id,
+                        "userId": item.user_id,
+                        "accountId": item.account_id,
+                        "symbol": item.symbol,
+                        "quantity": item.quantity,
+                        "avgPrice": item.avg_price,
+                        "lastPrice": item.last_price,
+                    }
+                    for item in summary["positions"]
+                ],
+                "positionCount": summary["positionCount"],
+                "totalReturnRatio": summary["totalReturnRatio"],
+                "stats": summary["stats"],
+            },
+        }
+    )
+
+
+def _cmd_cash_flow_summary(args: argparse.Namespace) -> None:
+    try:
+        summary = _service.cash_flow_summary(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    _output({"success": True, "data": summary})
+
+
+def _cmd_risk_assessment(args: argparse.Namespace) -> None:
+    try:
+        snapshot = _service.get_risk_assessment(user_id=args.user_id, account_id=args.account_id)
+    except RiskAssessmentPendingError as exc:
+        _error(code="RISK_ASSESSMENT_PENDING", message=str(exc))
+        return
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+    except RiskAssessmentUnavailableError as exc:
+        _error(code="RISK_ASSESSMENT_UNAVAILABLE", message=str(exc))
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "assessmentId": snapshot.id,
+                "accountId": snapshot.account_id,
+                "strategyId": snapshot.strategy_id,
+                "riskScore": snapshot.risk_score,
+                "riskLevel": snapshot.risk_level,
+                "triggeredRuleIds": snapshot.triggered_rule_ids,
+                "createdAt": snapshot.created_at.isoformat(),
+            },
+        }
+    )
+
+
+def _cmd_risk_assessment_evaluate(args: argparse.Namespace) -> None:
+    try:
+        snapshot = _service.evaluate_risk_assessment(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "assessmentId": snapshot.id,
+                "accountId": snapshot.account_id,
+                "strategyId": snapshot.strategy_id,
+                "riskScore": snapshot.risk_score,
+                "riskLevel": snapshot.risk_level,
+                "triggeredRuleIds": snapshot.triggered_rule_ids,
+                "createdAt": snapshot.created_at.isoformat(),
+            },
+        }
+    )
 
 
 def _cmd_account_list(args: argparse.Namespace) -> None:
@@ -339,6 +487,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="trading-account", description="QuantPoly 交易账户 CLI")
     sub = parser.add_subparsers(dest="command")
 
+    account_create = sub.add_parser("account-create", help="创建交易账户")
+    account_create.add_argument("--user-id", required=True)
+    account_create.add_argument("--account-name", required=True)
+    account_create.add_argument("--initial-capital", type=float, default=0.0)
+
+    account_get = sub.add_parser("account-get", help="查询交易账户详情")
+    account_get.add_argument("--user-id", required=True)
+    account_get.add_argument("--account-id", required=True)
+
+    account_update = sub.add_parser("account-update", help="更新交易账户")
+    account_update.add_argument("--user-id", required=True)
+    account_update.add_argument("--account-id", required=True)
+    account_update.add_argument("--account-name", default=None)
+    account_update.add_argument("--is-active", default=None)
+
+    account_filter_config = sub.add_parser("account-filter-config", help="查询账户筛选配置")
+    account_filter_config.add_argument("--user-id", required=True)
+
     account_list = sub.add_parser("account-list", help="查询用户账户列表")
     account_list.add_argument("--user-id", required=True)
 
@@ -418,6 +584,22 @@ def build_parser() -> argparse.ArgumentParser:
     withdraw.add_argument("--account-id", required=True)
     withdraw.add_argument("--amount", required=True, type=float)
 
+    account_summary = sub.add_parser("account-summary", help="账户摘要")
+    account_summary.add_argument("--user-id", required=True)
+    account_summary.add_argument("--account-id", required=True)
+
+    cash_flow_summary = sub.add_parser("cash-flow-summary", help="资金流水摘要")
+    cash_flow_summary.add_argument("--user-id", required=True)
+    cash_flow_summary.add_argument("--account-id", required=True)
+
+    risk_assessment = sub.add_parser("risk-assessment", help="查询账户风险评估")
+    risk_assessment.add_argument("--user-id", required=True)
+    risk_assessment.add_argument("--account-id", required=True)
+
+    risk_assessment_evaluate = sub.add_parser("risk-assessment-evaluate", help="触发账户风险评估")
+    risk_assessment_evaluate.add_argument("--user-id", required=True)
+    risk_assessment_evaluate.add_argument("--account-id", required=True)
+
     account_overview = sub.add_parser("account-overview", help="账户概览")
     account_overview.add_argument("--user-id", required=True)
     account_overview.add_argument("--account-id", required=True)
@@ -426,6 +608,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 _COMMANDS = {
+    "account-create": _cmd_account_create,
+    "account-get": _cmd_account_get,
+    "account-update": _cmd_account_update,
+    "account-filter-config": _cmd_account_filter_config,
     "account-list": _cmd_account_list,
     "account-aggregate": _cmd_account_aggregate,
     "position-summary": _cmd_position_summary,
@@ -443,6 +629,10 @@ _COMMANDS = {
     "cash-flow-list": _cmd_cash_flow_list,
     "deposit": _cmd_deposit,
     "withdraw": _cmd_withdraw,
+    "account-summary": _cmd_account_summary,
+    "cash-flow-summary": _cmd_cash_flow_summary,
+    "risk-assessment": _cmd_risk_assessment,
+    "risk-assessment-evaluate": _cmd_risk_assessment_evaluate,
     "account-overview": _cmd_account_overview,
 }
 

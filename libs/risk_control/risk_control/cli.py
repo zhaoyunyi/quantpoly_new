@@ -18,6 +18,69 @@ def _output(payload: dict) -> None:
     sys.stdout.write("\n")
 
 
+def _serialize_assessment(snapshot) -> dict:
+    return {
+        "assessmentId": snapshot.id,
+        "accountId": snapshot.account_id,
+        "strategyId": snapshot.strategy_id,
+        "riskScore": snapshot.risk_score,
+        "riskLevel": snapshot.risk_level,
+        "triggeredRuleIds": snapshot.triggered_rule_ids,
+        "createdAt": snapshot.created_at.isoformat(),
+    }
+
+
+def _cmd_assessment_snapshot(args: argparse.Namespace) -> None:
+    try:
+        snapshot = _service.get_account_assessment_snapshot(
+            user_id=args.user_id,
+            account_id=args.account_id,
+        )
+    except AccountAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "RULE_ACCESS_DENIED",
+                    "message": "account does not belong to current user",
+                },
+            }
+        )
+        return
+
+    if snapshot is None:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "ASSESSMENT_NOT_FOUND",
+                    "message": "assessment snapshot not found",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": _serialize_assessment(snapshot)})
+
+
+def _cmd_assessment_evaluate(args: argparse.Namespace) -> None:
+    try:
+        snapshot = _service.evaluate_account_risk(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "RULE_ACCESS_DENIED",
+                    "message": "account does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": _serialize_assessment(snapshot)})
+
+
 def _cmd_stats(args: argparse.Namespace) -> None:
     try:
         stats = _service.alert_stats(user_id=args.user_id, account_id=args.account_id)
@@ -125,6 +188,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="risk-control", description="QuantPoly 风控 CLI")
     sub = parser.add_subparsers(dest="command")
 
+    assessment_snapshot = sub.add_parser("assessment-snapshot", help="查询账户风险评估快照")
+    assessment_snapshot.add_argument("--user-id", required=True)
+    assessment_snapshot.add_argument("--account-id", required=True)
+
+    assessment_evaluate = sub.add_parser("assessment-evaluate", help="触发账户风险评估")
+    assessment_evaluate.add_argument("--user-id", required=True)
+    assessment_evaluate.add_argument("--account-id", required=True)
+
     stats = sub.add_parser("stats", help="统计告警")
     stats.add_argument("--user-id", required=True)
     stats.add_argument("--account-id", default=None)
@@ -146,6 +217,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 _COMMANDS = {
+    "assessment-snapshot": _cmd_assessment_snapshot,
+    "assessment-evaluate": _cmd_assessment_evaluate,
     "stats": _cmd_stats,
     "batch-acknowledge": _cmd_batch_acknowledge,
     "applicable-rules": _cmd_applicable_rules,

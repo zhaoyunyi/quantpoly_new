@@ -18,6 +18,8 @@ from trading_account.service import (
     LedgerTransactionError,
     OrderNotFoundError,
     PriceRefreshConflictError,
+    RiskAssessmentPendingError,
+    RiskAssessmentUnavailableError,
     TradeNotFoundError,
     TradingAccountService,
     TradingAdminRequiredError,
@@ -86,6 +88,19 @@ def _trade_to_payload(trade) -> dict[str, Any]:
     }
 
 
+
+
+def _assessment_to_payload(snapshot) -> dict[str, Any]:
+    return {
+        "assessmentId": snapshot.id,
+        "accountId": snapshot.account_id,
+        "strategyId": snapshot.strategy_id,
+        "riskScore": snapshot.risk_score,
+        "riskLevel": snapshot.risk_level,
+        "triggeredRuleIds": snapshot.triggered_rule_ids,
+        "createdAt": _dt(snapshot.created_at),
+    }
+
 def _cash_flow_to_payload(flow) -> dict[str, Any]:
     return {
         "id": flow.id,
@@ -97,6 +112,21 @@ def _cash_flow_to_payload(flow) -> dict[str, Any]:
         "createdAt": _dt(flow.created_at),
     }
 
+
+
+
+class AccountCreateRequest(BaseModel):
+    account_name: str = Field(alias="accountName")
+    initial_capital: float = Field(default=0.0, alias="initialCapital")
+
+    model_config = {"populate_by_name": True}
+
+
+class AccountUpdateRequest(BaseModel):
+    account_name: str | None = Field(default=None, alias="accountName")
+    is_active: bool | None = Field(default=None, alias="isActive")
+
+    model_config = {"populate_by_name": True}
 
 class OrderCreateRequest(BaseModel):
     symbol: str
@@ -126,10 +156,54 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
         accounts = service.list_accounts(user_id=current_user.id)
         return success_response(data=[_account_to_payload(item) for item in accounts])
 
+    @router.post("/trading/accounts")
+    def create_account(body: AccountCreateRequest, current_user=Depends(get_current_user)):
+        created = service.create_account(
+            user_id=current_user.id,
+            account_name=body.account_name,
+            initial_capital=body.initial_capital,
+        )
+        return success_response(data=_account_to_payload(created))
+
     @router.get("/trading/accounts/aggregate")
     def account_aggregate(current_user=Depends(get_current_user)):
         data = service.user_account_aggregate(user_id=current_user.id)
         return success_response(data=data)
+
+    @router.get("/trading/accounts/filter-config")
+    def account_filter_config(current_user=Depends(get_current_user)):
+        return success_response(data=service.account_filter_config(user_id=current_user.id))
+
+    @router.get("/trading/accounts/{account_id}")
+    def get_account(account_id: str, current_user=Depends(get_current_user)):
+        account = service.get_account(user_id=current_user.id, account_id=account_id)
+        if account is None:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        return success_response(data=_account_to_payload(account))
+
+    @router.put("/trading/accounts/{account_id}")
+    def update_account(
+        account_id: str,
+        body: AccountUpdateRequest,
+        current_user=Depends(get_current_user),
+    ):
+        updated = service.update_account(
+            user_id=current_user.id,
+            account_id=account_id,
+            account_name=body.account_name,
+            is_active=body.is_active,
+        )
+        if updated is None:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        return success_response(data=_account_to_payload(updated))
 
     @router.get("/trading/accounts/{account_id}/positions")
     def list_positions(account_id: str, current_user=Depends(get_current_user)):
@@ -450,6 +524,87 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
             )
 
         return success_response(data=result)
+
+    @router.get("/trading/accounts/{account_id}/summary")
+    def account_summary(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            summary = service.account_summary(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+
+        return success_response(
+            data={
+                "account": _account_to_payload(summary["account"]),
+                "positions": [_position_to_payload(item) for item in summary["positions"]],
+                "positionCount": summary["positionCount"],
+                "totalReturnRatio": summary["totalReturnRatio"],
+                "stats": summary["stats"],
+            }
+        )
+
+    @router.get("/trading/accounts/{account_id}/cash-flows/summary")
+    def cash_flow_summary(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            summary = service.cash_flow_summary(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+
+        return success_response(data=summary)
+
+    @router.get("/trading/accounts/{account_id}/risk-assessment")
+    def get_risk_assessment(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            snapshot = service.get_risk_assessment(user_id=current_user.id, account_id=account_id)
+        except RiskAssessmentPendingError as exc:
+            return _error(
+                status_code=202,
+                code="RISK_ASSESSMENT_PENDING",
+                message=str(exc),
+            )
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        except RiskAssessmentUnavailableError as exc:
+            return _error(
+                status_code=503,
+                code="RISK_ASSESSMENT_UNAVAILABLE",
+                message=str(exc),
+            )
+
+        return success_response(data=_assessment_to_payload(snapshot))
+
+    @router.post("/trading/accounts/{account_id}/risk-assessment/evaluate")
+    def evaluate_risk_assessment(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            snapshot = service.evaluate_risk_assessment(
+                user_id=current_user.id,
+                account_id=account_id,
+            )
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        except RiskAssessmentUnavailableError as exc:
+            return _error(
+                status_code=503,
+                code="RISK_ASSESSMENT_UNAVAILABLE",
+                message=str(exc),
+            )
+
+        return success_response(data=_assessment_to_payload(snapshot))
 
     @router.get("/trading/accounts/{account_id}/overview")
     def account_overview(account_id: str, current_user=Depends(get_current_user)):

@@ -272,7 +272,6 @@ def register_all_routes(
             strategy_id=strategy_id,
         ),
     )
-    trading_service = TradingAccountService(repository=context.trading_repo)
     risk_service = RiskControlService(
         repository=context.risk_repo,
         account_owner_acl=lambda user_id, account_id: context.trading_repo.get_account(
@@ -280,6 +279,17 @@ def register_all_routes(
             user_id=user_id,
         )
         is not None,
+    )
+    trading_service = TradingAccountService(
+        repository=context.trading_repo,
+        risk_snapshot_reader=lambda user_id, account_id: risk_service.get_account_assessment_snapshot(
+            user_id=user_id,
+            account_id=account_id,
+        ),
+        risk_evaluator=lambda user_id, account_id: risk_service.evaluate_account_risk(
+            user_id=user_id,
+            account_id=account_id,
+        ),
     )
     signal_service = SignalExecutionService(
         repository=context.signal_repo,

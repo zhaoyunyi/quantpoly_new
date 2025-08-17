@@ -46,6 +46,14 @@ class PriceRefreshConflictError(RuntimeError):
     """价格刷新幂等键冲突。"""
 
 
+class RiskAssessmentPendingError(RuntimeError):
+    """风险评估快照尚未生成。"""
+
+
+class RiskAssessmentUnavailableError(RuntimeError):
+    """风险评估能力未接线。"""
+
+
 def _default_uow_factory(repository: Any) -> Callable[[], UnitOfWork]:
     if hasattr(repository, "snapshot_state") and hasattr(repository, "restore_state"):
         return lambda: SnapshotUnitOfWork(
@@ -62,15 +70,27 @@ class TradingAccountService:
         repository: InMemoryTradingAccountRepository,
         uow_factory: Callable[[], UnitOfWork] | None = None,
         governance_checker: Callable[..., Any] | None = None,
+        risk_snapshot_reader: Callable[..., Any] | None = None,
+        risk_evaluator: Callable[..., Any] | None = None,
     ) -> None:
         self._repository = repository
         self._uow_factory = uow_factory or _default_uow_factory(repository)
         self._governance_checker = governance_checker
+        self._risk_snapshot_reader = risk_snapshot_reader
+        self._risk_evaluator = risk_evaluator
         self._refresh_records: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
 
-    def create_account(self, *, user_id: str, account_name: str) -> TradingAccount:
+    def create_account(
+        self,
+        *,
+        user_id: str,
+        account_name: str,
+        initial_capital: float = 0.0,
+    ) -> TradingAccount:
         account = TradingAccount.create(user_id=user_id, account_name=account_name)
         self._repository.save_account(account)
+        if initial_capital > 0:
+            self.deposit(user_id=user_id, account_id=account.id, amount=initial_capital)
         return account
 
     def list_accounts(self, *, user_id: str) -> list[TradingAccount]:
@@ -78,6 +98,141 @@ class TradingAccountService:
 
     def get_account(self, *, user_id: str, account_id: str) -> TradingAccount | None:
         return self._repository.get_account(account_id=account_id, user_id=user_id)
+
+    def update_account(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        account_name: str | None = None,
+        is_active: bool | None = None,
+    ) -> TradingAccount | None:
+        account = self._repository.get_account(account_id=account_id, user_id=user_id)
+        if account is None:
+            return None
+
+        if account_name is not None:
+            account.account_name = account_name
+        if is_active is not None:
+            account.is_active = bool(is_active)
+
+        self._repository.save_account(account)
+        return account
+
+    @staticmethod
+    def _range_stats(values: list[float]) -> dict[str, float | None] | None:
+        if not values:
+            return None
+        return {
+            "min": min(values),
+            "max": max(values),
+            "average": sum(values) / len(values),
+        }
+
+    def account_filter_config(self, *, user_id: str) -> dict[str, Any]:
+        accounts = self.list_accounts(user_id=user_id)
+
+        total_assets_values: list[float] = []
+        profit_loss_values: list[float] = []
+        profit_loss_rate_values: list[float] = []
+        status_counts: dict[str, int] = {"active": 0, "inactive": 0}
+        risk_level_counts: dict[str, int] = {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "UNKNOWN": 0}
+        has_positions_count = 0
+
+        for account in accounts:
+            cash_balance = self.cash_balance(user_id=user_id, account_id=account.id)
+            position_summary = self.position_summary(user_id=user_id, account_id=account.id)
+            risk_metrics = self.account_risk_metrics(user_id=user_id, account_id=account.id)
+
+            total_market_value = float(position_summary.get("totalMarketValue", 0.0))
+            unrealized_pnl = float(position_summary.get("unrealizedPnl", 0.0))
+            unrealized_pnl_ratio = float(position_summary.get("unrealizedPnlRatio", 0.0))
+
+            total_assets_values.append(cash_balance + total_market_value)
+            profit_loss_values.append(unrealized_pnl)
+            profit_loss_rate_values.append(unrealized_pnl_ratio)
+
+            if float(position_summary.get("positionCount", 0)) > 0:
+                has_positions_count += 1
+
+            status_key = "active" if account.is_active else "inactive"
+            status_counts[status_key] = status_counts.get(status_key, 0) + 1
+
+            risk_level = str(risk_metrics.get("riskLevel", "UNKNOWN")).upper()
+            if risk_level not in risk_level_counts:
+                risk_level_counts[risk_level] = 0
+            risk_level_counts[risk_level] += 1
+
+        return {
+            "totalAccounts": len(accounts),
+            "totalAssets": self._range_stats(total_assets_values),
+            "profitLoss": self._range_stats(profit_loss_values),
+            "profitLossRate": self._range_stats(profit_loss_rate_values),
+            "accountTypeCounts": {"paper": len(accounts)},
+            "statusCounts": status_counts,
+            "riskLevelCounts": risk_level_counts,
+            "hasPositionsCount": has_positions_count,
+            "hasFrozenBalanceCount": 0,
+        }
+
+    def account_summary(self, *, user_id: str, account_id: str) -> dict[str, Any]:
+        account = self._repository.get_account(account_id=account_id, user_id=user_id)
+        if account is None:
+            raise AccountAccessDeniedError("无权访问该账户")
+
+        positions = self.list_positions(user_id=user_id, account_id=account_id)
+        position_summary = self.position_summary(user_id=user_id, account_id=account_id)
+        stats = self.trade_stats(user_id=user_id, account_id=account_id)
+
+        return {
+            "account": account,
+            "positions": positions,
+            "positionCount": len(positions),
+            "totalReturnRatio": float(position_summary.get("unrealizedPnlRatio", 0.0)),
+            "stats": stats,
+        }
+
+    def cash_flow_summary(self, *, user_id: str, account_id: str) -> dict[str, Any]:
+        flows = self.list_cash_flows(user_id=user_id, account_id=account_id)
+        total_inflow = sum(item.amount for item in flows if item.amount > 0)
+        total_outflow = sum(-item.amount for item in flows if item.amount < 0)
+        latest_flow_at = max((item.created_at for item in flows), default=None)
+
+        return {
+            "flowCount": len(flows),
+            "totalInflow": total_inflow,
+            "totalOutflow": total_outflow,
+            "netFlow": total_inflow - total_outflow,
+            "latestFlowAt": latest_flow_at.isoformat() if latest_flow_at else None,
+        }
+
+    def _call_risk_callback(self, callback: Callable[..., Any] | None, **kwargs: Any) -> Any:
+        if callback is None:
+            raise RiskAssessmentUnavailableError("risk assessment callback is not configured")
+
+        try:
+            return callback(**kwargs)
+        except TypeError:
+            return callback(kwargs["user_id"], kwargs["account_id"])
+
+    def get_risk_assessment(self, *, user_id: str, account_id: str) -> Any:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        snapshot = self._call_risk_callback(
+            self._risk_snapshot_reader,
+            user_id=user_id,
+            account_id=account_id,
+        )
+        if snapshot is None:
+            raise RiskAssessmentPendingError("risk assessment snapshot is pending")
+        return snapshot
+
+    def evaluate_risk_assessment(self, *, user_id: str, account_id: str) -> Any:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        return self._call_risk_callback(
+            self._risk_evaluator,
+            user_id=user_id,
+            account_id=account_id,
+        )
 
     def _assert_account_owner(self, *, user_id: str, account_id: str) -> None:
         account = self._repository.get_account(account_id=account_id, user_id=user_id)
