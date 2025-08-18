@@ -46,6 +46,21 @@ def _dt(value: datetime | None) -> str | None:
     return value.isoformat()
 
 
+def _signal_payload(signal) -> dict:
+    return {
+        "id": signal.id,
+        "userId": signal.user_id,
+        "strategyId": signal.strategy_id,
+        "accountId": signal.account_id,
+        "symbol": signal.symbol,
+        "side": signal.side,
+        "status": signal.status,
+        "createdAt": _dt(signal.created_at),
+        "updatedAt": _dt(signal.updated_at),
+        "expiresAt": _dt(signal.expires_at),
+    }
+
+
 def _execution_payload(record) -> dict:
     return {
         "id": record.id,
@@ -126,6 +141,57 @@ def _cmd_cleanup_all(args: argparse.Namespace) -> None:
         return
 
     _output({"success": True, "data": {"deleted": deleted}})
+
+
+def _cmd_signal_get(args: argparse.Namespace) -> None:
+    try:
+        signal = _service.get_signal_detail(user_id=args.user_id, signal_id=args.signal_id)
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": _signal_payload(signal)})
+
+
+def _cmd_pending(args: argparse.Namespace) -> None:
+    items = _service.list_pending_signals(user_id=args.user_id)
+    _output({"success": True, "data": [_signal_payload(item) for item in items]})
+
+
+def _cmd_expired(args: argparse.Namespace) -> None:
+    items = _service.list_expired_signals(user_id=args.user_id)
+    _output({"success": True, "data": [_signal_payload(item) for item in items]})
+
+
+def _cmd_search(args: argparse.Namespace) -> None:
+    items = _service.search_signals(
+        user_id=args.user_id,
+        keyword=args.keyword,
+        strategy_id=args.strategy_id,
+        account_id=args.account_id,
+        symbol=args.symbol,
+        status=args.status,
+    )
+    _output({"success": True, "data": [_signal_payload(item) for item in items]})
+
+
+def _cmd_dashboard(args: argparse.Namespace) -> None:
+    data = _service.signal_dashboard(
+        user_id=args.user_id,
+        keyword=args.keyword,
+        strategy_id=args.strategy_id,
+        account_id=args.account_id,
+        symbol=args.symbol,
+    )
+    _output({"success": True, "data": data})
 
 
 def _cmd_execute(args: argparse.Namespace) -> None:
@@ -240,6 +306,31 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup_all.add_argument("--is-admin", action="store_true")
     cleanup_all.add_argument("--confirmation-token", default=None)
 
+    signal_get = sub.add_parser("signal-get", help="信号详情")
+    signal_get.add_argument("--user-id", required=True)
+    signal_get.add_argument("--signal-id", required=True)
+
+    pending = sub.add_parser("pending", help="待处理信号")
+    pending.add_argument("--user-id", required=True)
+
+    expired = sub.add_parser("expired", help="已过期信号")
+    expired.add_argument("--user-id", required=True)
+
+    search = sub.add_parser("search", help="信号高级搜索")
+    search.add_argument("--user-id", required=True)
+    search.add_argument("--keyword", default=None)
+    search.add_argument("--strategy-id", default=None)
+    search.add_argument("--account-id", default=None)
+    search.add_argument("--symbol", default=None)
+    search.add_argument("--status", default=None)
+
+    dashboard = sub.add_parser("dashboard", help="信号账户仪表板")
+    dashboard.add_argument("--user-id", required=True)
+    dashboard.add_argument("--keyword", default=None)
+    dashboard.add_argument("--strategy-id", default=None)
+    dashboard.add_argument("--account-id", default=None)
+    dashboard.add_argument("--symbol", default=None)
+
     execute = sub.add_parser("execute", help="执行信号")
     execute.add_argument("--user-id", required=True)
     execute.add_argument("--signal-id", required=True)
@@ -273,6 +364,11 @@ _COMMANDS = {
     "trend": _cmd_trend,
     "validate-parameters": _cmd_validate_parameters,
     "cleanup-all": _cmd_cleanup_all,
+    "signal-get": _cmd_signal_get,
+    "pending": _cmd_pending,
+    "expired": _cmd_expired,
+    "search": _cmd_search,
+    "dashboard": _cmd_dashboard,
     "execute": _cmd_execute,
     "batch-execute": _cmd_batch_execute,
     "batch-cancel": _cmd_batch_cancel,

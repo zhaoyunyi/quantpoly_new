@@ -144,12 +144,20 @@ def _default_summary(*, user_id: str, signal_source: SourceFn, alert_source: Sou
         if str(item.get("severity", "")).strip().lower() in {"critical", "high"}
     ]
 
+    pending_signals = [
+        item for item in user_signals if str(item.get("status", "pending")).strip().lower() == "pending"
+    ]
+    expired_signals = [
+        item for item in user_signals if str(item.get("status", "")).strip().lower() == "expired"
+    ]
+
     return {
         "type": "monitor.summary",
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "signals": {
             "total": len(user_signals),
-            "pending": len(user_signals),
+            "pending": len(pending_signals),
+            "expired": len(expired_signals),
         },
         "alerts": {
             "open": len(open_alerts),

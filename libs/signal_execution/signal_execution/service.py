@@ -51,6 +51,16 @@ class SignalExecutionService:
     def _idempotency_fingerprint(self, *, signal_ids: list[str]) -> str:
         return "|".join(sorted(signal_ids))
 
+    @staticmethod
+    def _signal_stats(signals: list[TradingSignal]) -> dict[str, int]:
+        return {
+            "total": len(signals),
+            "pending": sum(1 for item in signals if item.status == "pending"),
+            "expired": sum(1 for item in signals if item.status == "expired"),
+            "executed": sum(1 for item in signals if item.status == "executed"),
+            "cancelled": sum(1 for item in signals if item.status == "cancelled"),
+        }
+
     def validate_parameters(
         self,
         *,
@@ -105,12 +115,25 @@ class SignalExecutionService:
     def get_signal(self, *, user_id: str, signal_id: str) -> TradingSignal | None:
         return self._repository.get_signal(signal_id=signal_id, user_id=user_id)
 
+    def get_signal_detail(self, *, user_id: str, signal_id: str) -> TradingSignal:
+        signal = self._repository.get_signal(signal_id=signal_id, user_id=user_id)
+        if signal is None:
+            raise SignalAccessDeniedError("signal does not belong to current user")
+
+        self._assert_signal_acl(
+            user_id=user_id,
+            strategy_id=signal.strategy_id,
+            account_id=signal.account_id,
+        )
+        return signal
+
     def list_signals(
         self,
         *,
         user_id: str,
         keyword: str | None = None,
         strategy_id: str | None = None,
+        account_id: str | None = None,
         symbol: str | None = None,
         status: str | None = None,
     ) -> list[TradingSignal]:
@@ -118,9 +141,68 @@ class SignalExecutionService:
             user_id=user_id,
             keyword=keyword,
             strategy_id=strategy_id,
+            account_id=account_id,
             symbol=symbol,
             status=status,
         )
+
+    def list_pending_signals(self, *, user_id: str) -> list[TradingSignal]:
+        return self.list_signals(user_id=user_id, status="pending")
+
+    def list_expired_signals(self, *, user_id: str) -> list[TradingSignal]:
+        return self.list_signals(user_id=user_id, status="expired")
+
+    def search_signals(
+        self,
+        *,
+        user_id: str,
+        keyword: str | None = None,
+        strategy_id: str | None = None,
+        account_id: str | None = None,
+        symbol: str | None = None,
+        status: str | None = None,
+    ) -> list[TradingSignal]:
+        return self.list_signals(
+            user_id=user_id,
+            keyword=keyword,
+            strategy_id=strategy_id,
+            account_id=account_id,
+            symbol=symbol,
+            status=status,
+        )
+
+    def signal_dashboard(
+        self,
+        *,
+        user_id: str,
+        keyword: str | None = None,
+        strategy_id: str | None = None,
+        account_id: str | None = None,
+        symbol: str | None = None,
+    ) -> dict[str, Any]:
+        signals = self.search_signals(
+            user_id=user_id,
+            keyword=keyword,
+            strategy_id=strategy_id,
+            account_id=account_id,
+            symbol=symbol,
+        )
+        overall = self._signal_stats(signals)
+
+        by_account_group: dict[str, list[TradingSignal]] = {}
+        for signal in signals:
+            account_signals = by_account_group.setdefault(signal.account_id, [])
+            account_signals.append(signal)
+
+        by_account: list[dict[str, Any]] = []
+        for key in sorted(by_account_group.keys()):
+            item = {"accountId": key}
+            item.update(self._signal_stats(by_account_group[key]))
+            by_account.append(item)
+
+        result = dict(overall)
+        result["byAccount"] = by_account
+        return result
 
     def execute_signal(
         self,

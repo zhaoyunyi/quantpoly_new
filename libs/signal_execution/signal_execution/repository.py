@@ -29,6 +29,7 @@ class InMemorySignalRepository:
         user_id: str,
         keyword: str | None = None,
         strategy_id: str | None = None,
+        account_id: str | None = None,
         symbol: str | None = None,
         status: str | None = None,
     ) -> list[TradingSignal]:
@@ -38,6 +39,8 @@ class InMemorySignalRepository:
             if item.user_id != user_id:
                 return False
             if strategy_id is not None and item.strategy_id != strategy_id:
+                return False
+            if account_id is not None and item.account_id != account_id:
                 return False
             if symbol is not None and item.symbol != symbol:
                 return False

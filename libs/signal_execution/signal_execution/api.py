@@ -163,6 +163,7 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
     def list_signals(
         keyword: str | None = Query(default=None),
         strategy_id: str | None = Query(default=None, alias="strategyId"),
+        account_id: str | None = Query(default=None, alias="accountId"),
         symbol: str | None = Query(default=None),
         status: str | None = Query(default=None),
         current_user=Depends(get_current_user),
@@ -171,10 +172,58 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
             user_id=current_user.id,
             keyword=keyword,
             strategy_id=strategy_id,
+            account_id=account_id,
             symbol=symbol,
             status=status,
         )
         return success_response(data=[_signal_payload(item) for item in signals])
+
+    @router.get("/signals/search")
+    def search_signals(
+        keyword: str | None = Query(default=None),
+        strategy_id: str | None = Query(default=None, alias="strategyId"),
+        account_id: str | None = Query(default=None, alias="accountId"),
+        symbol: str | None = Query(default=None),
+        status: str | None = Query(default=None),
+        current_user=Depends(get_current_user),
+    ):
+        signals = service.search_signals(
+            user_id=current_user.id,
+            keyword=keyword,
+            strategy_id=strategy_id,
+            account_id=account_id,
+            symbol=symbol,
+            status=status,
+        )
+        return success_response(data=[_signal_payload(item) for item in signals])
+
+    @router.get("/signals/pending")
+    def list_pending_signals(current_user=Depends(get_current_user)):
+        signals = service.list_pending_signals(user_id=current_user.id)
+        return success_response(data=[_signal_payload(item) for item in signals])
+
+    @router.get("/signals/expired")
+    def list_expired_signals(current_user=Depends(get_current_user)):
+        signals = service.list_expired_signals(user_id=current_user.id)
+        return success_response(data=[_signal_payload(item) for item in signals])
+
+    @router.get("/signals/dashboard")
+    def signal_dashboard(
+        keyword: str | None = Query(default=None),
+        strategy_id: str | None = Query(default=None, alias="strategyId"),
+        account_id: str | None = Query(default=None, alias="accountId"),
+        symbol: str | None = Query(default=None),
+        current_user=Depends(get_current_user),
+    ):
+        return success_response(
+            data=service.signal_dashboard(
+                user_id=current_user.id,
+                keyword=keyword,
+                strategy_id=strategy_id,
+                account_id=account_id,
+                symbol=symbol,
+            )
+        )
 
     @router.get("/signals/strategy/{strategy_id}")
     def list_signals_by_strategy(strategy_id: str, current_user=Depends(get_current_user)):
@@ -304,6 +353,21 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
             )
 
         return success_response(data=_execution_payload(execution))
+
+    @router.get("/signals/{signal_id}")
+    def get_signal_detail(signal_id: str, current_user=Depends(get_current_user)):
+        try:
+            signal = service.get_signal_detail(user_id=current_user.id, signal_id=signal_id)
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        return success_response(data=_signal_payload(signal))
 
     @router.post("/signals/maintenance/update-expired")
     def update_expired(current_user=Depends(get_current_user)):
