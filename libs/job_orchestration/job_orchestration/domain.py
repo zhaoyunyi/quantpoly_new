@@ -28,6 +28,9 @@ class Job:
     payload: dict[str, Any]
     idempotency_key: str
     status: str = "queued"
+    result: dict[str, Any] | None = None
+    error_code: str | None = None
+    error_message: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -57,6 +60,22 @@ class Job:
             raise InvalidJobTransitionError(f"invalid_transition from={self.status} to={to_status}")
         self.status = to_status
         self.updated_at = datetime.now(timezone.utc)
+        if to_status == "queued":
+            self.result = None
+            self.error_code = None
+            self.error_message = None
+
+    def mark_succeeded(self, *, result: dict[str, Any] | None = None) -> None:
+        self.transition_to("succeeded")
+        self.result = dict(result or {})
+        self.error_code = None
+        self.error_message = None
+
+    def mark_failed(self, *, error_code: str, error_message: str) -> None:
+        self.transition_to("failed")
+        self.result = None
+        self.error_code = error_code
+        self.error_message = error_message
 
 
 @dataclass

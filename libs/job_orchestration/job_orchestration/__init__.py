@@ -1,5 +1,6 @@
 """job_orchestration 库。"""
 
+from job_orchestration.api import create_router
 from job_orchestration.celery_adapter import CeleryJobAdapter
 from job_orchestration.domain import InvalidJobTransitionError, Job, ScheduleConfig
 from job_orchestration.repository import InMemoryJobRepository
@@ -22,4 +23,5 @@ __all__ = [
     "IdempotencyConflictError",
     "JobAccessDeniedError",
     "JobOrchestrationService",
+    "create_router",
 ]

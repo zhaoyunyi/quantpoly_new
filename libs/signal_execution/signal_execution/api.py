@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from job_orchestration.service import (
+    IdempotencyConflictError as JobIdempotencyConflictError,
+)
+from job_orchestration.service import JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from platform_core.authz import resolve_admin_decision
@@ -97,7 +102,21 @@ def _running_signal_payload(signal: TradingSignal) -> dict:
     }
 
 
-def create_router(*, service: SignalExecutionService, get_current_user: Any) -> APIRouter:
+def _job_payload(job) -> dict[str, Any]:
+    return {
+        "taskId": job.id,
+        "taskType": job.task_type,
+        "status": job.status,
+        "result": job.result,
+    }
+
+
+def create_router(
+    *,
+    service: SignalExecutionService,
+    get_current_user: Any,
+    job_service: JobOrchestrationService | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.post("/signals/validate-parameters")
@@ -272,6 +291,86 @@ def create_router(*, service: SignalExecutionService, get_current_user: Any) -> 
             )
 
         return success_response(data=result)
+
+    @router.post("/signals/batch/execute-task")
+    def batch_execute_task(body: BatchSignalRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"signal-batch-execute:{uuid4()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="signal_batch_execute",
+                payload={"signalIds": body.signal_ids},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.batch_execute_signals(
+                user_id=current_user.id,
+                signal_ids=body.signal_ids,
+                idempotency_key=None,
+            )
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/signals/batch/cancel-task")
+    def batch_cancel_task(body: BatchSignalRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"signal-batch-cancel:{uuid4()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="signal_batch_cancel",
+                payload={"signalIds": body.signal_ids},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.batch_cancel_signals(
+                user_id=current_user.id,
+                signal_ids=body.signal_ids,
+                idempotency_key=None,
+            )
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
 
     @router.post("/signals/{signal_id}/execute")
     def execute_signal(signal_id: str, current_user=Depends(get_current_user)):

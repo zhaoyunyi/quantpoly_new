@@ -7,6 +7,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from job_orchestration.service import (
+    IdempotencyConflictError as JobIdempotencyConflictError,
+)
+from job_orchestration.service import JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from platform_core.response import error_response, success_response
@@ -39,6 +43,12 @@ class RuleToggleRequest(BaseModel):
 
 class BatchAcknowledgeRequest(BaseModel):
     alert_ids: list[str] = Field(alias="alertIds")
+
+    model_config = {"populate_by_name": True}
+
+
+class EvaluateTaskRequest(BaseModel):
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
 
     model_config = {"populate_by_name": True}
 
@@ -92,7 +102,21 @@ def _assessment_payload(snapshot: RiskAssessmentSnapshot) -> dict:
     }
 
 
-def create_router(*, service: RiskControlService, get_current_user: Any) -> APIRouter:
+def _job_payload(job) -> dict[str, Any]:
+    return {
+        "taskId": job.id,
+        "taskType": job.task_type,
+        "status": job.status,
+        "result": job.result,
+    }
+
+
+def create_router(
+    *,
+    service: RiskControlService,
+    get_current_user: Any,
+    job_service: JobOrchestrationService | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.post("/risk/rules")
@@ -277,6 +301,61 @@ def create_router(*, service: RiskControlService, get_current_user: Any) -> APIR
             )
 
         return success_response(data=_assessment_payload(snapshot))
+
+    @router.post("/risk/accounts/{account_id}/evaluate-task")
+    def evaluate_account_risk_task(
+        account_id: str,
+        body: EvaluateTaskRequest | None = None,
+        current_user=Depends(get_current_user),
+    ):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        try:
+            service.list_rules(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(code="RULE_ACCESS_DENIED", message="account does not belong to current user"),
+            )
+
+        job_idempotency_key = (body.idempotency_key if body is not None else None) or f"risk-account-evaluate:{account_id}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_account_evaluate",
+                payload={"accountId": account_id},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            snapshot = service.evaluate_account_risk(
+                user_id=current_user.id,
+                account_id=account_id,
+            )
+            job = job_service.succeed_job(
+                user_id=current_user.id,
+                job_id=job.id,
+                result=_assessment_payload(snapshot),
+            )
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
 
     @router.post("/risk/check/strategy/{strategy_id}")
     def check_strategy_risk(

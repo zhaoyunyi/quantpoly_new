@@ -9,6 +9,10 @@ from job_orchestration.scheduler import InMemoryScheduler
 _SUPPORTED_TASK_TYPES = {
     "backtest_run",
     "market_data_sync",
+    "signal_batch_execute",
+    "signal_batch_cancel",
+    "risk_account_evaluate",
+    "trading_refresh_prices",
 }
 
 
@@ -29,6 +33,9 @@ class JobOrchestrationService:
     ) -> None:
         self._repository = repository
         self._scheduler = scheduler
+
+    def supported_task_types(self) -> list[str]:
+        return sorted(_SUPPORTED_TASK_TYPES)
 
     def submit_job(
         self,
@@ -59,11 +66,20 @@ class JobOrchestrationService:
             raise IdempotencyConflictError("idempotency key already exists")
         return job
 
+    def find_by_idempotency_key(self, *, user_id: str, idempotency_key: str) -> Job | None:
+        return self._repository.find_by_idempotency_key(user_id=user_id, idempotency_key=idempotency_key)
+
     def get_job(self, *, user_id: str, job_id: str) -> Job | None:
         return self._repository.get(user_id=user_id, job_id=job_id)
 
-    def list_jobs(self, *, user_id: str, status: str | None = None) -> list[Job]:
-        return self._repository.list(user_id=user_id, status=status)
+    def list_jobs(
+        self,
+        *,
+        user_id: str,
+        status: str | None = None,
+        task_type: str | None = None,
+    ) -> list[Job]:
+        return self._repository.list(user_id=user_id, status=status, task_type=task_type)
 
     def transition_job(self, *, user_id: str, job_id: str, to_status: str) -> Job:
         job = self._repository.get(user_id=user_id, job_id=job_id)
@@ -71,6 +87,27 @@ class JobOrchestrationService:
             raise JobAccessDeniedError("job does not belong to current user")
 
         job.transition_to(to_status)
+        self._repository.save(job)
+        return job
+
+    def start_job(self, *, user_id: str, job_id: str) -> Job:
+        return self.transition_job(user_id=user_id, job_id=job_id, to_status="running")
+
+    def succeed_job(self, *, user_id: str, job_id: str, result: dict) -> Job:
+        job = self._repository.get(user_id=user_id, job_id=job_id)
+        if job is None:
+            raise JobAccessDeniedError("job does not belong to current user")
+
+        job.mark_succeeded(result=result)
+        self._repository.save(job)
+        return job
+
+    def fail_job(self, *, user_id: str, job_id: str, error_code: str, error_message: str) -> Job:
+        job = self._repository.get(user_id=user_id, job_id=job_id)
+        if job is None:
+            raise JobAccessDeniedError("job does not belong to current user")
+
+        job.mark_failed(error_code=error_code, error_message=error_message)
         self._repository.save(job)
         return job
 

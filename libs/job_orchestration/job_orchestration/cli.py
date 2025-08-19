@@ -28,11 +28,19 @@ def _output(payload: dict) -> None:
 def _serialize_job(job) -> dict:
     return {
         "id": job.id,
+        "taskId": job.id,
         "userId": job.user_id,
         "taskType": job.task_type,
         "payload": job.payload,
         "idempotencyKey": job.idempotency_key,
         "status": job.status,
+        "result": job.result,
+        "error": {
+            "code": job.error_code,
+            "message": job.error_message,
+        }
+        if job.error_code or job.error_message
+        else None,
     }
 
 

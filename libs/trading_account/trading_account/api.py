@@ -7,6 +7,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from job_orchestration.service import (
+    IdempotencyConflictError as JobIdempotencyConflictError,
+)
+from job_orchestration.service import JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from platform_core.authz import resolve_admin_decision
@@ -101,6 +105,15 @@ def _assessment_to_payload(snapshot) -> dict[str, Any]:
         "createdAt": _dt(snapshot.created_at),
     }
 
+
+def _job_payload(job) -> dict[str, Any]:
+    return {
+        "taskId": job.id,
+        "taskType": job.task_type,
+        "status": job.status,
+        "result": job.result,
+    }
+
 def _cash_flow_to_payload(flow) -> dict[str, Any]:
     return {
         "id": flow.id,
@@ -148,7 +161,12 @@ class RefreshPricesRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-def create_router(*, service: TradingAccountService, get_current_user: Any) -> APIRouter:
+def create_router(
+    *,
+    service: TradingAccountService,
+    get_current_user: Any,
+    job_service: JobOrchestrationService | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/trading/accounts")
@@ -524,6 +542,75 @@ def create_router(*, service: TradingAccountService, get_current_user: Any) -> A
             )
 
         return success_response(data=result)
+
+    @router.post("/trading/ops/refresh-prices/task")
+    def refresh_prices_task(body: RefreshPricesRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return _error(
+                status_code=503,
+                code="TASK_ORCHESTRATION_UNAVAILABLE",
+                message="job orchestration is not configured",
+            )
+
+        decision = resolve_admin_decision(current_user)
+        if not decision.is_admin:
+            return _error(
+                status_code=403,
+                code="ADMIN_REQUIRED",
+                message="admin role required",
+            )
+
+        job_idempotency_key = body.idempotency_key or f"trading-refresh-prices:{current_user.id}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="trading_refresh_prices",
+                payload={
+                    "accountId": body.account_id,
+                    "priceUpdates": body.price_updates,
+                },
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.refresh_market_prices(
+                user_id=current_user.id,
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
+                price_updates=body.price_updates,
+                idempotency_key=None,
+                confirmation_token=body.confirmation_token,
+                account_id=body.account_id,
+            )
+            if "symbols" in result and "updatedSymbols" not in result:
+                result = {**result, "updatedSymbols": result["symbols"]}
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return _error(
+                status_code=409,
+                code="IDEMPOTENCY_CONFLICT",
+                message="idempotency key already exists",
+            )
+        except TradingAdminRequiredError:
+            return _error(
+                status_code=403,
+                code="ADMIN_REQUIRED",
+                message="admin role required",
+            )
+        except ValueError as exc:
+            return _error(
+                status_code=400,
+                code="INVALID_ARGUMENT",
+                message=str(exc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _error(
+                status_code=500,
+                code="TASK_EXECUTION_FAILED",
+                message=str(exc),
+            )
+
+        return success_response(data=_job_payload(job))
 
     @router.get("/trading/accounts/{account_id}/summary")
     def account_summary(account_id: str, current_user=Depends(get_current_user)):

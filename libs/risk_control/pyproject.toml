@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.0",
   "fastapi>=0.100",
+  "job-orchestration>=0.1.0",
 ]
 
 [project.optional-dependencies]

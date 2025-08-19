@@ -15,8 +15,11 @@ from backtest_runner.api import create_router as create_backtest_router
 from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.repository_sqlite import SQLiteBacktestRepository
 from backtest_runner.service import BacktestService
+from job_orchestration.api import create_router as create_job_router
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.repository_sqlite import SQLiteJobRepository
+from job_orchestration.scheduler import InMemoryScheduler
+from job_orchestration.service import JobOrchestrationService
 from market_data.api import create_router as create_market_router
 from market_data.domain import MarketAsset, MarketCandle, MarketQuote
 from market_data.service import MarketDataService
@@ -240,6 +243,10 @@ def register_all_routes(
     enabled_contexts: set[str],
     get_current_user: AuthUserFn,
 ) -> None:
+    job_service = JobOrchestrationService(
+        repository=context.job_repo,
+        scheduler=InMemoryScheduler(),
+    )
     backtest_service = BacktestService(
         repository=context.backtest_repo,
         strategy_owner_acl=lambda user_id, strategy_id: context.strategy_repo.get_by_id(
@@ -321,20 +328,23 @@ def register_all_routes(
     if "strategy-management" in enabled_contexts:
         app.include_router(create_strategy_router(service=strategy_service, get_current_user=get_current_user))
 
+    if "job-orchestration" in enabled_contexts:
+        app.include_router(create_job_router(service=job_service, get_current_user=get_current_user))
+
     if "backtest-runner" in enabled_contexts:
-        app.include_router(create_backtest_router(service=backtest_service, get_current_user=get_current_user))
+        app.include_router(create_backtest_router(service=backtest_service, get_current_user=get_current_user, job_service=job_service))
 
     if "trading-account" in enabled_contexts:
-        app.include_router(create_trading_router(service=trading_service, get_current_user=get_current_user))
+        app.include_router(create_trading_router(service=trading_service, get_current_user=get_current_user, job_service=job_service))
 
     if "market-data" in enabled_contexts:
         app.include_router(create_market_router(service=context.market_service, get_current_user=get_current_user))
 
     if "risk-control" in enabled_contexts:
-        app.include_router(create_risk_router(service=risk_service, get_current_user=get_current_user))
+        app.include_router(create_risk_router(service=risk_service, get_current_user=get_current_user, job_service=job_service))
 
     if "signal-execution" in enabled_contexts:
-        app.include_router(create_signal_router(service=signal_service, get_current_user=get_current_user))
+        app.include_router(create_signal_router(service=signal_service, get_current_user=get_current_user, job_service=job_service))
 
     if "monitoring-realtime" in enabled_contexts:
         monitor_app = create_monitoring_app(

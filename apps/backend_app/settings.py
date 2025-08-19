@@ -10,6 +10,7 @@ _DEFAULT_CONTEXTS = {
     "user-auth",
     "user-preferences",
     "strategy-management",
+    "job-orchestration",
     "backtest-runner",
     "trading-account",
     "market-data",

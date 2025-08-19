@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from job_orchestration.service import IdempotencyConflictError, JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from backtest_runner.domain import InvalidBacktestTransitionError
@@ -57,6 +58,15 @@ def _serialize_task(task) -> dict[str, Any]:
     }
 
 
+def _serialize_job(job) -> dict[str, Any]:
+    return {
+        "taskId": job.id,
+        "taskType": job.task_type,
+        "status": job.status,
+        "result": job.result,
+    }
+
+
 def _access_denied_response() -> JSONResponse:
     return JSONResponse(
         status_code=403,
@@ -67,7 +77,12 @@ def _access_denied_response() -> JSONResponse:
     )
 
 
-def create_router(*, service: BacktestService, get_current_user: Any) -> APIRouter:
+def create_router(
+    *,
+    service: BacktestService,
+    get_current_user: Any,
+    job_service: JobOrchestrationService | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.post("/backtests")
@@ -90,6 +105,75 @@ def create_router(*, service: BacktestService, get_current_user: Any) -> APIRout
                 ),
             )
         return success_response(data=_serialize_task(task))
+
+    @router.post("/backtests/tasks")
+    def submit_backtest_task(body: CreateBacktestRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        try:
+            task = service.create_task(
+                user_id=current_user.id,
+                strategy_id=body.strategy_id,
+                config=body.config,
+                idempotency_key=body.idempotency_key,
+            )
+        except BacktestAccessDeniedError:
+            return _access_denied_response()
+        except BacktestIdempotencyConflictError as exc:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(
+                    code="BACKTEST_IDEMPOTENCY_CONFLICT",
+                    message=str(exc),
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"backtest-task:{task.id}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="backtest_run",
+                payload={
+                    "strategyId": task.strategy_id,
+                    "backtestTaskId": task.id,
+                    "config": task.config,
+                },
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            job = job_service.succeed_job(
+                user_id=current_user.id,
+                job_id=job.id,
+                result={
+                    "backtestTaskId": task.id,
+                    "status": task.status,
+                },
+            )
+        except IdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(
+                    code="IDEMPOTENCY_CONFLICT",
+                    message="idempotency key already exists",
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        payload = _serialize_job(job)
+        payload["backtestTask"] = _serialize_task(task)
+        return success_response(data=payload)
 
     @router.get("/backtests")
     def list_backtests(

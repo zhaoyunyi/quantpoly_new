@@ -45,6 +45,9 @@ class InMemoryJobRepository:
             payload=copy.deepcopy(job.payload),
             idempotency_key=job.idempotency_key,
             status=job.status,
+            result=copy.deepcopy(job.result),
+            error_code=job.error_code,
+            error_message=job.error_message,
             created_at=job.created_at,
             updated_at=job.updated_at,
         )
@@ -56,12 +59,20 @@ class InMemoryJobRepository:
                 return None
             return self._clone(job)
 
-    def list(self, *, user_id: str, status: str | None = None) -> list[Job]:
+    def list(
+        self,
+        *,
+        user_id: str,
+        status: str | None = None,
+        task_type: str | None = None,
+    ) -> list[Job]:
         with self._lock:
             return [
                 self._clone(job)
                 for job in self._jobs.values()
-                if job.user_id == user_id and (status is None or job.status == status)
+                if job.user_id == user_id
+                and (status is None or job.status == status)
+                and (task_type is None or job.task_type == task_type)
             ]
 
     def find_by_idempotency_key(self, *, user_id: str, idempotency_key: str) -> Job | None:
