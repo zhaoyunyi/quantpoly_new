@@ -36,3 +36,21 @@ TBD - created by archiving change add-job-orchestration-context-migration. Updat
 - **THEN** 仅允许一个任务创建成功
 - **AND** 其余请求必须返回明确幂等冲突语义
 
+### Requirement: 任务编排必须支持多领域异步任务类型
+任务编排系统 MUST 支持回测、信号、风控、交易等领域任务的统一提交与状态追踪。
+
+#### Scenario: 提交信号批处理任务返回 taskId
+- **GIVEN** 用户发起信号批处理请求
+- **WHEN** 系统接受任务
+- **THEN** 返回 `taskId` 与初始状态
+- **AND** 客户端可通过任务查询接口轮询状态
+
+### Requirement: 任务状态机语义必须跨领域一致
+不同领域任务的状态迁移 MUST 遵循统一状态机与错误码语义。
+
+#### Scenario: 重复幂等键提交返回同一任务语义
+- **GIVEN** 同一用户重复提交相同幂等键任务
+- **WHEN** 系统处理提交
+- **THEN** 返回同一任务语义或明确冲突
+- **AND** 不重复创建执行任务
+

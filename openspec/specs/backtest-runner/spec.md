@@ -48,3 +48,21 @@ TBD - created by archiving change add-strategy-backtest-migration. Update Purpos
 - **THEN** 任务状态迁移到 `cancelled`
 - **AND** 后续查询能稳定返回取消状态与时间戳
 
+### Requirement: 回测任务必须支持策略联动触发与删除闭环
+回测系统 MUST 支持从策略域触发任务，并提供删除闭环能力。
+
+#### Scenario: 删除已完成回测任务
+- **GIVEN** 回测任务处于 `completed/failed/cancelled`
+- **WHEN** 用户发起删除请求
+- **THEN** 任务被成功删除
+- **AND** 删除行为可追踪
+
+### Requirement: 回测提交必须支持任务编排桥接
+回测系统 MUST 支持通过任务编排桥接提交异步执行任务。
+
+#### Scenario: 回测创建后返回可追踪 taskId
+- **GIVEN** 用户创建回测请求
+- **WHEN** 系统采用任务编排模式处理
+- **THEN** 返回回测任务与编排 taskId 关联信息
+- **AND** 可查询其执行状态
+

@@ -54,3 +54,21 @@ TBD - created by archiving change add-strategy-backtest-migration. Update Purpos
 - **THEN** 后端拒绝请求并返回参数校验错误
 - **AND** 策略状态与执行记录保持不变
 
+### Requirement: 策略必须支持受控更新与参数重校验
+策略管理 MUST 提供更新能力，并在参数变化时执行模板约束校验。
+
+#### Scenario: 策略更新触发参数重校验
+- **GIVEN** 用户修改策略参数
+- **WHEN** 调用策略更新接口
+- **THEN** 系统执行模板参数校验
+- **AND** 校验失败时拒绝更新并返回稳定错误码
+
+### Requirement: 策略必须可查询关联回测视图
+策略管理 MUST 提供策略维度回测列表与统计视图，用于策略研究闭环。
+
+#### Scenario: 查询策略关联回测统计
+- **GIVEN** 策略已存在多次回测任务
+- **WHEN** 调用策略回测统计接口
+- **THEN** 返回该策略可访问范围内的回测统计
+- **AND** 不包含他人数据
+

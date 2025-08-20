@@ -39,3 +39,21 @@ TBD - created by archiving change add-risk-signal-context-migration. Update Purp
 - **THEN** 告警状态迁移到已解决
 - **AND** 记录操作人和时间戳
 
+### Requirement: 风险评估必须支持账户快照查询与主动评估
+风控系统 MUST 提供账户风险快照读取与主动 evaluate 触发能力。
+
+#### Scenario: 主动触发账户风险评估
+- **GIVEN** 用户账户存在持仓与交易数据
+- **WHEN** 调用风险评估 evaluate 接口
+- **THEN** 返回最新风险快照
+- **AND** 快照包含风险分值、等级与建议
+
+### Requirement: 风控巡检任务必须支持统一编排
+风控批量巡检与告警处理任务 MUST 支持统一任务编排与状态追踪。
+
+#### Scenario: 风控巡检任务可轮询状态
+- **GIVEN** 用户发起风控巡检任务
+- **WHEN** 系统接收并排队执行
+- **THEN** 返回可轮询状态的任务句柄
+- **AND** 查询结果仅限任务所属用户
+
