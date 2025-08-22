@@ -128,3 +128,20 @@ def test_foreign_user_cannot_read_or_transition_job():
     transition_resp = client_foreign.post(f"/jobs/{job_id}/transition", json={"toStatus": "running"})
     assert transition_resp.status_code == 403
     assert transition_resp.json()["error"]["code"] == "JOB_ACCESS_DENIED"
+
+
+def test_task_types_endpoint_returns_registry_metadata():
+    app, _service = _build_app(current_user_id="u-1")
+    client = TestClient(app)
+
+    response = client.get("/jobs/task-types")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+
+    rows = payload["data"]
+    strategy_item = next(item for item in rows if item["taskType"] == "strategy_batch_execute")
+    assert strategy_item["domain"] == "strategy"
+    assert strategy_item["schedulable"] is True
+    assert "strategy.batch_execute_strategies" in strategy_item["legacyNames"]

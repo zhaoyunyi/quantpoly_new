@@ -115,3 +115,21 @@ def test_public_methods_require_user_id():
     with pytest.raises(TypeError):
         service.list_jobs()  # type: ignore[misc]
 
+
+def test_supported_task_types_cover_wave3_worker_tasks():
+    from job_orchestration.repository import InMemoryJobRepository
+    from job_orchestration.scheduler import InMemoryScheduler
+    from job_orchestration.service import JobOrchestrationService
+
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+
+    supported = service.supported_task_types()
+
+    assert "strategy_batch_execute" in supported
+    assert "signal_batch_generate" in supported
+    assert "risk_report_generate" in supported
+    assert "trading_daily_stats_calculate" in supported
+    assert "market_indicators_calculate" in supported

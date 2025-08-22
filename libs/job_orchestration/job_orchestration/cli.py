@@ -66,6 +66,9 @@ def _cmd_submit(args: argparse.Namespace) -> None:
             }
         )
         return
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
+        return
 
     _output({"success": True, "data": _serialize_job(job)})
 
@@ -104,6 +107,10 @@ def _cmd_retry(args: argparse.Namespace) -> None:
     _output({"success": True, "data": _serialize_job(job)})
 
 
+def _cmd_types(_args: argparse.Namespace) -> None:
+    _output({"success": True, "data": _service.task_type_registry()})
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="job-orchestration", description="QuantPoly 任务编排 CLI")
     sub = parser.add_subparsers(dest="command")
@@ -126,6 +133,8 @@ def build_parser() -> argparse.ArgumentParser:
     retry.add_argument("--user-id", required=True)
     retry.add_argument("--job-id", required=True)
 
+    sub.add_parser("types", help="列出任务类型注册表")
+
     return parser
 
 
@@ -134,6 +143,7 @@ _COMMANDS = {
     "status": _cmd_status,
     "cancel": _cmd_cancel,
     "retry": _cmd_retry,
+    "types": _cmd_types,
 }
 
 

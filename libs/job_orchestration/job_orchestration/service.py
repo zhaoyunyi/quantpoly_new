@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from job_orchestration.domain import InvalidJobTransitionError, Job
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.scheduler import InMemoryScheduler
-
-_SUPPORTED_TASK_TYPES = {
-    "backtest_run",
-    "market_data_sync",
-    "signal_batch_execute",
-    "signal_batch_cancel",
-    "risk_account_evaluate",
-    "trading_refresh_prices",
-}
+from job_orchestration.task_registry import list_task_type_definitions, supported_task_types
 
 
 class IdempotencyConflictError(RuntimeError):
@@ -35,7 +29,14 @@ class JobOrchestrationService:
         self._scheduler = scheduler
 
     def supported_task_types(self) -> list[str]:
-        return sorted(_SUPPORTED_TASK_TYPES)
+        return sorted(supported_task_types())
+
+    def task_type_registry(self) -> list[dict[str, Any]]:
+        return [item.to_payload() for item in list_task_type_definitions()]
+
+    def _assert_task_type_supported(self, *, task_type: str) -> None:
+        if task_type not in supported_task_types():
+            raise ValueError(f"unsupported task_type={task_type}")
 
     def submit_job(
         self,
@@ -45,8 +46,7 @@ class JobOrchestrationService:
         payload: dict,
         idempotency_key: str,
     ) -> Job:
-        if task_type not in _SUPPORTED_TASK_TYPES:
-            raise ValueError(f"unsupported task_type={task_type}")
+        self._assert_task_type_supported(task_type=task_type)
 
         exists = self._repository.find_by_idempotency_key(
             user_id=user_id,
@@ -119,10 +119,12 @@ class JobOrchestrationService:
 
     def schedule_interval(self, *, user_id: str, task_type: str, every_seconds: int) -> None:
         del user_id
+        self._assert_task_type_supported(task_type=task_type)
         self._scheduler.register_interval(job_type=task_type, every_seconds=every_seconds)
 
     def schedule_cron(self, *, user_id: str, task_type: str, cron_expr: str) -> None:
         del user_id
+        self._assert_task_type_supported(task_type=task_type)
         self._scheduler.register_cron(job_type=task_type, cron_expr=cron_expr)
 
     def start_scheduler(self, *, user_id: str) -> None:

@@ -98,6 +98,11 @@ def create_router(*, service: JobOrchestrationService, get_current_user: Any) ->
         jobs = service.list_jobs(user_id=current_user.id, status=status, task_type=task_type)
         return success_response(data=[_job_payload(item) for item in jobs])
 
+    @router.get("/jobs/task-types")
+    def list_task_types(current_user=Depends(get_current_user)):
+        del current_user
+        return success_response(data=service.task_type_registry())
+
     @router.get("/jobs/{job_id}")
     def get_job(job_id: str, current_user=Depends(get_current_user)):
         job = service.get_job(user_id=current_user.id, job_id=job_id)

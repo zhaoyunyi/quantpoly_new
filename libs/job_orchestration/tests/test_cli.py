@@ -58,3 +58,17 @@ def test_cli_cancel_foreign_job_returns_access_denied(capsys, monkeypatch):
     assert payload["success"] is False
     assert payload["error"]["code"] == "JOB_ACCESS_DENIED"
 
+
+def test_cli_types_lists_task_registry(capsys, monkeypatch):
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+    monkeypatch.setattr(cli, "_service", service)
+
+    payload = _run(cli._cmd_types, capsys=capsys)
+
+    assert payload["success"] is True
+    rows = payload["data"]
+    item = next(row for row in rows if row["taskType"] == "risk_report_generate")
+    assert item["domain"] == "risk"
