@@ -145,3 +145,49 @@ def test_task_types_endpoint_returns_registry_metadata():
     assert strategy_item["domain"] == "strategy"
     assert strategy_item["schedulable"] is True
     assert "strategy.batch_execute_strategies" in strategy_item["legacyNames"]
+
+
+def test_schedule_query_and_stop_are_isolated_by_user_namespace():
+    app_owner, service = _build_app(current_user_id="u-1")
+    client_owner = TestClient(app_owner)
+
+    created = client_owner.post(
+        "/jobs/schedules/interval",
+        json={
+            "taskType": "market_data_sync",
+            "everySeconds": 60,
+        },
+    )
+
+    assert created.status_code == 200
+    payload = created.json()
+    schedule_id = payload["data"]["id"]
+
+    assert payload["data"]["namespace"] == "user:u-1"
+    assert payload["data"]["status"] == "active"
+    assert payload["data"]["createdAt"]
+
+    fetched = client_owner.get(f"/jobs/schedules/{schedule_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["data"]["id"] == schedule_id
+
+    from job_orchestration.api import create_router
+
+    def _foreign_user():
+        return _User("u-2")
+
+    app_foreign = FastAPI()
+    app_foreign.include_router(create_router(service=service, get_current_user=_foreign_user))
+    client_foreign = TestClient(app_foreign)
+
+    foreign_read = client_foreign.get(f"/jobs/schedules/{schedule_id}")
+    assert foreign_read.status_code == 403
+    assert foreign_read.json()["error"]["code"] == "SCHEDULE_ACCESS_DENIED"
+
+    foreign_stop = client_foreign.post(f"/jobs/schedules/{schedule_id}/stop")
+    assert foreign_stop.status_code == 403
+    assert foreign_stop.json()["error"]["code"] == "SCHEDULE_ACCESS_DENIED"
+
+    stopped = client_owner.post(f"/jobs/schedules/{schedule_id}/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["data"]["status"] == "stopped"

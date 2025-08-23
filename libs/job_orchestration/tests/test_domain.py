@@ -133,3 +133,23 @@ def test_supported_task_types_cover_wave3_worker_tasks():
     assert "risk_report_generate" in supported
     assert "trading_daily_stats_calculate" in supported
     assert "market_indicators_calculate" in supported
+
+
+def test_schedule_interval_isolated_by_user_namespace():
+    from job_orchestration.repository import InMemoryJobRepository
+    from job_orchestration.scheduler import InMemoryScheduler
+    from job_orchestration.service import JobOrchestrationService
+
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+
+    service.schedule_interval(user_id="u-1", task_type="market_data_sync", every_seconds=60)
+    service.schedule_interval(user_id="u-2", task_type="market_data_sync", every_seconds=60)
+
+    u1_schedules = service.list_schedules(user_id="u-1")
+    u2_schedules = service.list_schedules(user_id="u-2")
+
+    assert len(u1_schedules) == 1
+    assert len(u2_schedules) == 1

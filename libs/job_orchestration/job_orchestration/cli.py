@@ -13,6 +13,7 @@ from job_orchestration.service import (
     IdempotencyConflictError,
     JobAccessDeniedError,
     JobOrchestrationService,
+    ScheduleAccessDeniedError,
 )
 
 _repo = InMemoryJobRepository()
@@ -23,6 +24,12 @@ _service = JobOrchestrationService(repository=_repo, scheduler=_scheduler)
 def _output(payload: dict) -> None:
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
+
+
+def _dt(value) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat()
 
 
 def _serialize_job(job) -> dict:
@@ -41,6 +48,20 @@ def _serialize_job(job) -> dict:
         }
         if job.error_code or job.error_message
         else None,
+    }
+
+
+def _serialize_schedule(schedule) -> dict:
+    return {
+        "id": schedule.id,
+        "userId": schedule.user_id,
+        "namespace": schedule.namespace,
+        "taskType": schedule.job_type,
+        "scheduleType": schedule.schedule_type,
+        "expression": schedule.expression,
+        "status": schedule.status,
+        "createdAt": _dt(schedule.created_at),
+        "updatedAt": _dt(schedule.updated_at),
     }
 
 
@@ -111,6 +132,54 @@ def _cmd_types(_args: argparse.Namespace) -> None:
     _output({"success": True, "data": _service.task_type_registry()})
 
 
+def _cmd_schedule_interval(args: argparse.Namespace) -> None:
+    try:
+        schedule = _service.schedule_interval(
+            user_id=args.user_id,
+            task_type=args.task_type,
+            every_seconds=args.every_seconds,
+        )
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": _serialize_schedule(schedule)})
+
+
+def _cmd_schedule_cron(args: argparse.Namespace) -> None:
+    try:
+        schedule = _service.schedule_cron(
+            user_id=args.user_id,
+            task_type=args.task_type,
+            cron_expr=args.cron_expr,
+        )
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": _serialize_schedule(schedule)})
+
+
+def _cmd_schedules(args: argparse.Namespace) -> None:
+    schedules = _service.list_schedules(user_id=args.user_id)
+    _output({"success": True, "data": [_serialize_schedule(item) for item in schedules]})
+
+
+def _cmd_schedule_stop(args: argparse.Namespace) -> None:
+    try:
+        schedule = _service.stop_schedule(user_id=args.user_id, schedule_id=args.schedule_id)
+    except ScheduleAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {"code": "SCHEDULE_ACCESS_DENIED", "message": "schedule access denied"},
+            }
+        )
+        return
+
+    _output({"success": True, "data": _serialize_schedule(schedule)})
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="job-orchestration", description="QuantPoly 任务编排 CLI")
     sub = parser.add_subparsers(dest="command")
@@ -135,6 +204,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("types", help="列出任务类型注册表")
 
+    schedule_interval = sub.add_parser("schedule-interval", help="创建 interval 调度")
+    schedule_interval.add_argument("--user-id", required=True)
+    schedule_interval.add_argument("--task-type", required=True)
+    schedule_interval.add_argument("--every-seconds", required=True, type=int, dest="every_seconds")
+
+    schedule_cron = sub.add_parser("schedule-cron", help="创建 cron 调度")
+    schedule_cron.add_argument("--user-id", required=True)
+    schedule_cron.add_argument("--task-type", required=True)
+    schedule_cron.add_argument("--cron-expr", required=True, dest="cron_expr")
+
+    schedules = sub.add_parser("schedules", help="列出当前用户调度")
+    schedules.add_argument("--user-id", required=True)
+
+    schedule_stop = sub.add_parser("schedule-stop", help="停止调度")
+    schedule_stop.add_argument("--user-id", required=True)
+    schedule_stop.add_argument("--schedule-id", required=True)
+
     return parser
 
 
@@ -144,6 +230,10 @@ _COMMANDS = {
     "cancel": _cmd_cancel,
     "retry": _cmd_retry,
     "types": _cmd_types,
+    "schedule-interval": _cmd_schedule_interval,
+    "schedule-cron": _cmd_schedule_cron,
+    "schedules": _cmd_schedules,
+    "schedule-stop": _cmd_schedule_stop,
 }
 
 

@@ -80,6 +80,41 @@ class Job:
 
 @dataclass
 class ScheduleConfig:
+    id: str
+    user_id: str
+    namespace: str
     job_type: str
     schedule_type: str
     expression: str
+    status: str = "active"
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        user_id: str,
+        namespace: str,
+        job_type: str,
+        schedule_type: str,
+        expression: str,
+    ) -> "ScheduleConfig":
+        now = datetime.now(timezone.utc)
+        return cls(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            namespace=namespace,
+            job_type=job_type,
+            schedule_type=schedule_type,
+            expression=expression,
+            status="active",
+            created_at=now,
+            updated_at=now,
+        )
+
+    def stop(self) -> None:
+        if self.status == "stopped":
+            return
+        self.status = "stopped"
+        self.updated_at = datetime.now(timezone.utc)

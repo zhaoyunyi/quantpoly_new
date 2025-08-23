@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from job_orchestration.domain import InvalidJobTransitionError, Job
+from job_orchestration.domain import InvalidJobTransitionError, Job, ScheduleConfig
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.scheduler import InMemoryScheduler
 from job_orchestration.task_registry import list_task_type_definitions, supported_task_types
@@ -16,6 +16,10 @@ class IdempotencyConflictError(RuntimeError):
 
 class JobAccessDeniedError(PermissionError):
     """无权访问任务。"""
+
+
+class ScheduleAccessDeniedError(PermissionError):
+    """无权访问调度配置。"""
 
 
 class JobOrchestrationService:
@@ -37,6 +41,9 @@ class JobOrchestrationService:
     def _assert_task_type_supported(self, *, task_type: str) -> None:
         if task_type not in supported_task_types():
             raise ValueError(f"unsupported task_type={task_type}")
+
+    def _namespace_for_user(self, *, user_id: str) -> str:
+        return f"user:{user_id}"
 
     def submit_job(
         self,
@@ -117,15 +124,49 @@ class JobOrchestrationService:
     def retry_job(self, *, user_id: str, job_id: str) -> Job:
         return self.transition_job(user_id=user_id, job_id=job_id, to_status="queued")
 
-    def schedule_interval(self, *, user_id: str, task_type: str, every_seconds: int) -> None:
-        del user_id
+    def schedule_interval(self, *, user_id: str, task_type: str, every_seconds: int) -> ScheduleConfig:
         self._assert_task_type_supported(task_type=task_type)
-        self._scheduler.register_interval(job_type=task_type, every_seconds=every_seconds)
+        namespace = self._namespace_for_user(user_id=user_id)
+        return self._scheduler.register_interval(
+            user_id=user_id,
+            namespace=namespace,
+            job_type=task_type,
+            every_seconds=every_seconds,
+        )
 
-    def schedule_cron(self, *, user_id: str, task_type: str, cron_expr: str) -> None:
-        del user_id
+    def schedule_cron(self, *, user_id: str, task_type: str, cron_expr: str) -> ScheduleConfig:
         self._assert_task_type_supported(task_type=task_type)
-        self._scheduler.register_cron(job_type=task_type, cron_expr=cron_expr)
+        namespace = self._namespace_for_user(user_id=user_id)
+        return self._scheduler.register_cron(
+            user_id=user_id,
+            namespace=namespace,
+            job_type=task_type,
+            cron_expr=cron_expr,
+        )
+
+    def list_schedules(self, *, user_id: str) -> list[ScheduleConfig]:
+        namespace = self._namespace_for_user(user_id=user_id)
+        return self._scheduler.list_schedules(user_id=user_id, namespace=namespace)
+
+    def get_schedule(self, *, user_id: str, schedule_id: str) -> ScheduleConfig | None:
+        schedule = self._scheduler.get_schedule(schedule_id=schedule_id)
+        if schedule is None:
+            return None
+        if schedule.user_id != user_id:
+            return None
+        if schedule.namespace != self._namespace_for_user(user_id=user_id):
+            return None
+        return schedule
+
+    def stop_schedule(self, *, user_id: str, schedule_id: str) -> ScheduleConfig:
+        schedule = self.get_schedule(user_id=user_id, schedule_id=schedule_id)
+        if schedule is None:
+            raise ScheduleAccessDeniedError("schedule access denied")
+
+        stopped = self._scheduler.stop_schedule(schedule_id=schedule_id)
+        if stopped is None:
+            raise ScheduleAccessDeniedError("schedule access denied")
+        return stopped
 
     def start_scheduler(self, *, user_id: str) -> None:
         del user_id
@@ -135,14 +176,11 @@ class JobOrchestrationService:
         del user_id
         self._scheduler.stop()
 
-    def list_schedules(self, *, user_id: str):
-        del user_id
-        return self._scheduler.list_schedules()
-
 
 __all__ = [
     "JobOrchestrationService",
     "IdempotencyConflictError",
     "JobAccessDeniedError",
+    "ScheduleAccessDeniedError",
     "InvalidJobTransitionError",
 ]

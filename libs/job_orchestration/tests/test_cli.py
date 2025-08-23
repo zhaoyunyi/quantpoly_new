@@ -72,3 +72,31 @@ def test_cli_types_lists_task_registry(capsys, monkeypatch):
     rows = payload["data"]
     item = next(row for row in rows if row["taskType"] == "risk_report_generate")
     assert item["domain"] == "risk"
+
+
+def test_cli_schedule_list_and_stop_scoped_by_user(capsys, monkeypatch):
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+    monkeypatch.setattr(cli, "_service", service)
+
+    created = _run(
+        cli._cmd_schedule_interval,
+        capsys=capsys,
+        user_id="u-1",
+        task_type="market_data_sync",
+        every_seconds=60,
+    )
+    schedule_id = created["data"]["id"]
+
+    listed = _run(cli._cmd_schedules, capsys=capsys, user_id="u-1")
+    assert any(item["id"] == schedule_id for item in listed["data"])
+
+    denied = _run(cli._cmd_schedule_stop, capsys=capsys, user_id="u-2", schedule_id=schedule_id)
+    assert denied["success"] is False
+    assert denied["error"]["code"] == "SCHEDULE_ACCESS_DENIED"
+
+    stopped = _run(cli._cmd_schedule_stop, capsys=capsys, user_id="u-1", schedule_id=schedule_id)
+    assert stopped["success"] is True
+    assert stopped["data"]["status"] == "stopped"

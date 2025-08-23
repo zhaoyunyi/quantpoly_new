@@ -14,6 +14,7 @@ from job_orchestration.service import (
     IdempotencyConflictError,
     JobAccessDeniedError,
     JobOrchestrationService,
+    ScheduleAccessDeniedError,
 )
 from platform_core.response import error_response, success_response
 
@@ -28,6 +29,20 @@ class JobSubmitRequest(BaseModel):
 
 class JobTransitionRequest(BaseModel):
     to_status: str = Field(alias="toStatus")
+
+    model_config = {"populate_by_name": True}
+
+
+class IntervalScheduleRequest(BaseModel):
+    task_type: str = Field(alias="taskType")
+    every_seconds: int = Field(alias="everySeconds", ge=1)
+
+    model_config = {"populate_by_name": True}
+
+
+class CronScheduleRequest(BaseModel):
+    task_type: str = Field(alias="taskType")
+    cron_expr: str = Field(alias="cronExpr")
 
     model_config = {"populate_by_name": True}
 
@@ -57,10 +72,31 @@ def _job_payload(job) -> dict[str, Any]:
     }
 
 
+def _schedule_payload(schedule) -> dict[str, Any]:
+    return {
+        "id": schedule.id,
+        "userId": schedule.user_id,
+        "namespace": schedule.namespace,
+        "taskType": schedule.job_type,
+        "scheduleType": schedule.schedule_type,
+        "expression": schedule.expression,
+        "status": schedule.status,
+        "createdAt": _dt(schedule.created_at),
+        "updatedAt": _dt(schedule.updated_at),
+    }
+
+
 def _job_access_denied_response() -> JSONResponse:
     return JSONResponse(
         status_code=403,
         content=error_response(code="JOB_ACCESS_DENIED", message="job access denied"),
+    )
+
+
+def _schedule_access_denied_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content=error_response(code="SCHEDULE_ACCESS_DENIED", message="schedule access denied"),
     )
 
 
@@ -102,6 +138,58 @@ def create_router(*, service: JobOrchestrationService, get_current_user: Any) ->
     def list_task_types(current_user=Depends(get_current_user)):
         del current_user
         return success_response(data=service.task_type_registry())
+
+    @router.post("/jobs/schedules/interval")
+    def schedule_interval(body: IntervalScheduleRequest, current_user=Depends(get_current_user)):
+        try:
+            schedule = service.schedule_interval(
+                user_id=current_user.id,
+                task_type=body.task_type,
+                every_seconds=body.every_seconds,
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_response(code="INVALID_ARGUMENT", message=str(exc)),
+            )
+
+        return success_response(data=_schedule_payload(schedule))
+
+    @router.post("/jobs/schedules/cron")
+    def schedule_cron(body: CronScheduleRequest, current_user=Depends(get_current_user)):
+        try:
+            schedule = service.schedule_cron(
+                user_id=current_user.id,
+                task_type=body.task_type,
+                cron_expr=body.cron_expr,
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_response(code="INVALID_ARGUMENT", message=str(exc)),
+            )
+
+        return success_response(data=_schedule_payload(schedule))
+
+    @router.get("/jobs/schedules")
+    def list_schedules(current_user=Depends(get_current_user)):
+        schedules = service.list_schedules(user_id=current_user.id)
+        return success_response(data=[_schedule_payload(item) for item in schedules])
+
+    @router.get("/jobs/schedules/{schedule_id}")
+    def get_schedule(schedule_id: str, current_user=Depends(get_current_user)):
+        schedule = service.get_schedule(user_id=current_user.id, schedule_id=schedule_id)
+        if schedule is None:
+            return _schedule_access_denied_response()
+        return success_response(data=_schedule_payload(schedule))
+
+    @router.post("/jobs/schedules/{schedule_id}/stop")
+    def stop_schedule(schedule_id: str, current_user=Depends(get_current_user)):
+        try:
+            schedule = service.stop_schedule(user_id=current_user.id, schedule_id=schedule_id)
+        except ScheduleAccessDeniedError:
+            return _schedule_access_denied_response()
+        return success_response(data=_schedule_payload(schedule))
 
     @router.get("/jobs/{job_id}")
     def get_job(job_id: str, current_user=Depends(get_current_user)):
