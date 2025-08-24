@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from signal_execution.domain import ExecutionRecord, TradingSignal
@@ -33,12 +33,14 @@ class SignalExecutionService:
         repository: InMemorySignalRepository,
         strategy_owner_acl: Callable[[str, str], bool],
         account_owner_acl: Callable[[str, str], bool],
+        risk_checker: Callable[..., dict[str, Any]] | None = None,
         strategy_parameter_validator: Callable[[str, str, dict[str, Any]], None] | None = None,
         governance_checker: Callable[..., Any] | None = None,
     ) -> None:
         self._repository = repository
         self._strategy_owner_acl = strategy_owner_acl
         self._account_owner_acl = account_owner_acl
+        self._risk_checker = risk_checker
         self._strategy_parameter_validator = strategy_parameter_validator
         self._governance_checker = governance_checker
 
@@ -111,6 +113,32 @@ class SignalExecutionService:
         )
         self._repository.save_signal(signal)
         return signal
+
+    def generate_signals(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        account_id: str,
+        symbols: list[str],
+        side: str = "BUY",
+        parameters: dict[str, Any] | None = None,
+        expires_at: datetime | None = None,
+    ) -> list[TradingSignal]:
+        signals: list[TradingSignal] = []
+        for symbol in symbols:
+            signals.append(
+                self.create_signal(
+                    user_id=user_id,
+                    strategy_id=strategy_id,
+                    account_id=account_id,
+                    symbol=symbol,
+                    side=side,
+                    parameters=parameters,
+                    expires_at=expires_at,
+                )
+            )
+        return signals
 
     def get_signal(self, *, user_id: str, signal_id: str) -> TradingSignal | None:
         return self._repository.get_signal(signal_id=signal_id, user_id=user_id)
@@ -236,6 +264,47 @@ class SignalExecutionService:
             )
         )
         return signal
+
+    def process_signal(self, *, user_id: str, signal_id: str) -> tuple[TradingSignal, dict[str, Any]]:
+        signal = self._repository.get_signal(signal_id=signal_id, user_id=user_id)
+        if signal is None:
+            raise SignalAccessDeniedError("signal does not belong to current user")
+
+        self._assert_signal_acl(
+            user_id=user_id,
+            strategy_id=signal.strategy_id,
+            account_id=signal.account_id,
+        )
+
+        risk: dict[str, Any] = {"passed": True}
+        if self._risk_checker is not None:
+            risk = dict(
+                self._risk_checker(
+                    user_id=user_id,
+                    account_id=signal.account_id,
+                    strategy_id=signal.strategy_id,
+                )
+            )
+
+        if signal.status != "pending":
+            return signal, risk
+
+        if not risk.get("passed", True):
+            return self.cancel_signal(user_id=user_id, signal_id=signal_id), risk
+
+        execution_metrics: dict[str, float] = {}
+        risk_score = risk.get("riskScore")
+        if isinstance(risk_score, (int, float)):
+            execution_metrics["riskScore"] = float(risk_score)
+
+        return (
+            self.execute_signal(
+                user_id=user_id,
+                signal_id=signal_id,
+                execution_metrics=execution_metrics or None,
+            ),
+            risk,
+        )
 
     def cancel_signal(self, *, user_id: str, signal_id: str) -> TradingSignal:
         signal = self._repository.get_signal(signal_id=signal_id, user_id=user_id)
@@ -413,6 +482,43 @@ class SignalExecutionService:
             "expired": sum(1 for item in executions if item.status == "expired"),
         }
 
+    def daily_trend(
+        self,
+        *,
+        user_id: str,
+        days: int,
+        now: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        if days <= 0:
+            raise ValueError("days must be positive")
+
+        now_ts = now or datetime.now(timezone.utc)
+        start_date = now_ts.date() - timedelta(days=days - 1)
+        executions = self._repository.list_executions(user_id=user_id)
+        buckets: dict[str, list[ExecutionRecord]] = {}
+
+        for record in executions:
+            day = record.created_at.date()
+            if day < start_date:
+                continue
+            key = day.isoformat()
+            buckets.setdefault(key, []).append(record)
+
+        series: list[dict[str, Any]] = []
+        for key in sorted(buckets.keys()):
+            items = buckets[key]
+            series.append(
+                {
+                    "date": key,
+                    "total": len(items),
+                    "executed": sum(1 for item in items if item.status == "executed"),
+                    "cancelled": sum(1 for item in items if item.status == "cancelled"),
+                    "expired": sum(1 for item in items if item.status == "expired"),
+                }
+            )
+
+        return series
+
     def performance_statistics(
         self,
         *,
@@ -440,6 +546,36 @@ class SignalExecutionService:
             "totalExecutions": len(executions),
             "averagePnl": _avg(pnls),
             "averageLatencyMs": _avg(latencies),
+        }
+
+    def signal_performance(self, *, user_id: str, signal_id: str) -> dict[str, Any]:
+        signal = self._repository.get_signal(signal_id=signal_id, user_id=user_id)
+        if signal is None:
+            raise SignalAccessDeniedError("signal does not belong to current user")
+
+        self._assert_signal_acl(
+            user_id=user_id,
+            strategy_id=signal.strategy_id,
+            account_id=signal.account_id,
+        )
+
+        executions = self._repository.list_executions(
+            user_id=user_id,
+            signal_id=signal_id,
+            status="executed",
+        )
+        pnls = [float(item.metrics.get("pnl", 0.0)) for item in executions if "pnl" in item.metrics]
+
+        average_pnl = 0.0
+        if pnls:
+            average_pnl = round(sum(pnls) / len(pnls), 4)
+
+        return {
+            "signalId": signal_id,
+            "strategyId": signal.strategy_id,
+            "symbol": signal.symbol,
+            "totalExecutions": len(executions),
+            "averagePnl": average_pnl,
         }
 
     def cleanup_signals(self, *, user_id: str) -> int:

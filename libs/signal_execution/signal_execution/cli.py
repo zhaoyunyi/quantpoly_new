@@ -212,6 +212,68 @@ def _cmd_execute(args: argparse.Namespace) -> None:
     _output({"success": True, "data": {"id": signal.id, "status": signal.status}})
 
 
+def _cmd_generate(args: argparse.Namespace) -> None:
+    try:
+        symbols = _parse_csv(args.symbols)
+    except Exception:  # noqa: BLE001
+        _output({"success": False, "error": {"code": "INVALID_SYMBOLS", "message": "invalid symbols"}})
+        return
+
+    try:
+        signals = _service.generate_signals(
+            user_id=args.user_id,
+            strategy_id=args.strategy_id,
+            account_id=args.account_id,
+            symbols=symbols,
+            side=args.side,
+            parameters=_parse_json(args.parameters),
+            expires_at=None,
+        )
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+    except InvalidSignalParametersError as exc:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_INVALID_PARAMETERS",
+                    "message": str(exc),
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": {"signals": [_signal_payload(item) for item in signals]}})
+
+
+def _cmd_process(args: argparse.Namespace) -> None:
+    try:
+        signal, risk = _service.process_signal(user_id=args.user_id, signal_id=args.signal_id)
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+
+    payload = {"id": signal.id, "status": signal.status, "risk": risk}
+    _output({"success": True, "data": payload})
+
+
 def _cmd_batch_execute(args: argparse.Namespace) -> None:
     try:
         result = _service.batch_execute_signals(
@@ -288,6 +350,34 @@ def _cmd_performance(args: argparse.Namespace) -> None:
     _output({"success": True, "data": data})
 
 
+def _cmd_daily_trend(args: argparse.Namespace) -> None:
+    try:
+        data = _service.daily_trend(user_id=args.user_id, days=args.days)
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_DAYS", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": data})
+
+
+def _cmd_signal_performance(args: argparse.Namespace) -> None:
+    try:
+        data = _service.signal_performance(user_id=args.user_id, signal_id=args.signal_id)
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": data})
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="signal-execution", description="QuantPoly 信号执行 CLI")
     sub = parser.add_subparsers(dest="command")
@@ -335,6 +425,18 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument("--user-id", required=True)
     execute.add_argument("--signal-id", required=True)
 
+    generate = sub.add_parser("generate", help="策略触发生成信号")
+    generate.add_argument("--user-id", required=True)
+    generate.add_argument("--strategy-id", required=True)
+    generate.add_argument("--account-id", required=True)
+    generate.add_argument("--symbols", required=True, help="CSV 符号列表")
+    generate.add_argument("--side", default="BUY")
+    generate.add_argument("--parameters", default="{}")
+
+    process = sub.add_parser("process", help="处理单条信号（含风控前置）")
+    process.add_argument("--user-id", required=True)
+    process.add_argument("--signal-id", required=True)
+
     batch_execute = sub.add_parser("batch-execute", help="批量执行信号")
     batch_execute.add_argument("--user-id", required=True)
     batch_execute.add_argument("--signal-ids", required=True)
@@ -357,6 +459,14 @@ def build_parser() -> argparse.ArgumentParser:
     performance.add_argument("--strategy-id", default=None)
     performance.add_argument("--symbol", default=None)
 
+    daily_trend = sub.add_parser("daily-trend", help="按天趋势")
+    daily_trend.add_argument("--user-id", required=True)
+    daily_trend.add_argument("--days", type=int, default=7)
+
+    signal_performance = sub.add_parser("signal-performance", help="单信号绩效")
+    signal_performance.add_argument("--user-id", required=True)
+    signal_performance.add_argument("--signal-id", required=True)
+
     return parser
 
 
@@ -370,11 +480,15 @@ _COMMANDS = {
     "search": _cmd_search,
     "dashboard": _cmd_dashboard,
     "execute": _cmd_execute,
+    "generate": _cmd_generate,
+    "process": _cmd_process,
     "batch-execute": _cmd_batch_execute,
     "batch-cancel": _cmd_batch_cancel,
     "execution-detail": _cmd_execution_detail,
     "running": _cmd_running,
     "performance": _cmd_performance,
+    "daily-trend": _cmd_daily_trend,
+    "signal-performance": _cmd_signal_performance,
 }
 
 

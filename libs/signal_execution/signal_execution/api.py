@@ -58,6 +58,17 @@ class BatchSignalRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class GenerateSignalsRequest(BaseModel):
+    strategy_id: str = Field(alias="strategyId")
+    account_id: str = Field(alias="accountId")
+    symbols: list[str]
+    side: str = Field(default="BUY")
+    parameters: dict[str, Any] | None = Field(default=None)
+    expires_at: datetime | None = Field(default=None, alias="expiresAt")
+
+    model_config = {"populate_by_name": True}
+
+
 def _dt(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -118,6 +129,76 @@ def create_router(
     job_service: JobOrchestrationService | None = None,
 ) -> APIRouter:
     router = APIRouter()
+
+    @router.post("/signals/generate")
+    def generate_signals(body: GenerateSignalsRequest, current_user=Depends(get_current_user)):
+        try:
+            signals = service.generate_signals(
+                user_id=current_user.id,
+                strategy_id=body.strategy_id,
+                account_id=body.account_id,
+                symbols=body.symbols,
+                side=body.side,
+                parameters=body.parameters,
+                expires_at=body.expires_at,
+            )
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+        except InvalidSignalParametersError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="SIGNAL_INVALID_PARAMETERS",
+                    message=str(exc),
+                ),
+            )
+
+        return success_response(data={"signals": [_signal_payload(item) for item in signals]})
+
+    @router.post("/signals/{signal_id}/process")
+    def process_signal(signal_id: str, current_user=Depends(get_current_user)):
+        try:
+            signal, risk = service.process_signal(user_id=current_user.id, signal_id=signal_id)
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        payload = _signal_payload(signal)
+        payload["risk"] = risk
+        return success_response(data=payload)
+
+    @router.get("/signals/trends/daily")
+    def daily_trend(
+        days: int = Query(default=7, ge=1),
+        current_user=Depends(get_current_user),
+    ):
+        return success_response(data=service.daily_trend(user_id=current_user.id, days=days))
+
+    @router.get("/signals/performance/{signal_id}")
+    def signal_performance(signal_id: str, current_user=Depends(get_current_user)):
+        try:
+            data = service.signal_performance(user_id=current_user.id, signal_id=signal_id)
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        return success_response(data=data)
 
     @router.post("/signals/validate-parameters")
     def validate_parameters(body: ValidateSignalParametersRequest, current_user=Depends(get_current_user)):
