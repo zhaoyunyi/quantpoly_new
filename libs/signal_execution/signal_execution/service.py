@@ -44,6 +44,39 @@ class SignalExecutionService:
         self._strategy_parameter_validator = strategy_parameter_validator
         self._governance_checker = governance_checker
 
+    def _ensure_admin(
+        self,
+        *,
+        actor_id: str,
+        is_admin: bool,
+        admin_decision_source: str,
+        confirmation_token: str | None,
+        action: str,
+        target: str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            payload = dict(context or {})
+            payload.setdefault("adminDecisionSource", admin_decision_source)
+            try:
+                self._governance_checker(
+                    actor_id=actor_id,
+                    role=role,
+                    level=level,
+                    action=action,
+                    target=target,
+                    confirmation_token=confirmation_token,
+                    context=payload,
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise AdminRequiredError(str(exc)) from exc
+            return
+
+        if not is_admin:
+            raise AdminRequiredError("admin role required")
+
     def _assert_signal_acl(self, *, user_id: str, strategy_id: str, account_id: str) -> None:
         if not self._strategy_owner_acl(user_id, strategy_id):
             raise SignalAccessDeniedError("strategy does not belong to current user")
@@ -616,25 +649,62 @@ class SignalExecutionService:
         confirmation_token: str | None = None,
     ) -> int:
         if self._governance_checker is not None:
-            role = "admin" if is_admin else "user"
-            level = 10 if is_admin else 1
-            try:
-                self._governance_checker(
-                    actor_id=user_id,
-                    role=role,
-                    level=level,
-                    action="signals.cleanup_all",
-                    target="signals",
-                    confirmation_token=confirmation_token,
-                    context={
-                        "actor": user_id,
-                        "token": confirmation_token or "",
-                        "adminDecisionSource": admin_decision_source,
-                    },
-                )
-            except Exception as exc:  # noqa: BLE001
-                raise AdminRequiredError(str(exc)) from exc
-        elif not is_admin:
-            raise AdminRequiredError("admin role required")
+            self._ensure_admin(
+                actor_id=user_id,
+                is_admin=is_admin,
+                admin_decision_source=admin_decision_source,
+                confirmation_token=confirmation_token,
+                action="signals.cleanup_all",
+                target="signals",
+                context={
+                    "actor": user_id,
+                    "token": confirmation_token or "",
+                },
+            )
+        else:
+            self._ensure_admin(
+                actor_id=user_id,
+                is_admin=is_admin,
+                admin_decision_source=admin_decision_source,
+                confirmation_token=confirmation_token,
+                action="signals.cleanup_all",
+                target="signals",
+                context=None,
+            )
 
         return self._repository.delete_all_signals()
+
+    def cleanup_execution_history(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        retention_days: int,
+        admin_decision_source: str = "unknown",
+        confirmation_token: str | None = None,
+        audit_id: str,
+        now: datetime | None = None,
+    ) -> int:
+        if retention_days <= 0:
+            raise ValueError("retention_days must be positive")
+
+        cutoff_base = now or datetime.now(timezone.utc)
+        cutoff = cutoff_base - timedelta(days=retention_days)
+
+        self._ensure_admin(
+            actor_id=user_id,
+            is_admin=is_admin,
+            admin_decision_source=admin_decision_source,
+            confirmation_token=confirmation_token,
+            action="signals.cleanup_execution_history",
+            target="signals.executions",
+            context={
+                "actor": user_id,
+                "retentionDays": retention_days,
+                "cutoff": cutoff.isoformat(),
+                "auditId": audit_id,
+                "token": confirmation_token or "",
+            },
+        )
+
+        return self._repository.delete_executions_before(cutoff=cutoff)

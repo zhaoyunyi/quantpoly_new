@@ -143,6 +143,35 @@ def _cmd_cleanup_all(args: argparse.Namespace) -> None:
     _output({"success": True, "data": {"deleted": deleted}})
 
 
+def _cmd_cleanup_executions(args: argparse.Namespace) -> None:
+    try:
+        deleted = _service.cleanup_execution_history(
+            user_id=args.user_id,
+            is_admin=args.is_admin,
+            retention_days=args.retention_days,
+            admin_decision_source="is_admin" if args.is_admin else "none",
+            confirmation_token=getattr(args, "confirmation_token", None),
+            audit_id=getattr(args, "audit_id", "cli"),
+        )
+    except AdminRequiredError:
+        _output({"success": False, "error": {"code": "ADMIN_REQUIRED", "message": "admin role required"}})
+        return
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "deleted": deleted,
+                "retentionDays": args.retention_days,
+                "auditId": getattr(args, "audit_id", "cli"),
+            },
+        }
+    )
+
+
 def _cmd_signal_get(args: argparse.Namespace) -> None:
     try:
         signal = _service.get_signal_detail(user_id=args.user_id, signal_id=args.signal_id)
@@ -396,6 +425,13 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup_all.add_argument("--is-admin", action="store_true")
     cleanup_all.add_argument("--confirmation-token", default=None)
 
+    cleanup_executions = sub.add_parser("cleanup-executions", help="清理执行历史（管理员）")
+    cleanup_executions.add_argument("--user-id", required=True)
+    cleanup_executions.add_argument("--is-admin", action="store_true")
+    cleanup_executions.add_argument("--retention-days", type=int, required=True)
+    cleanup_executions.add_argument("--confirmation-token", default=None)
+    cleanup_executions.add_argument("--audit-id", default="cli")
+
     signal_get = sub.add_parser("signal-get", help="信号详情")
     signal_get.add_argument("--user-id", required=True)
     signal_get.add_argument("--signal-id", required=True)
@@ -474,6 +510,7 @@ _COMMANDS = {
     "trend": _cmd_trend,
     "validate-parameters": _cmd_validate_parameters,
     "cleanup-all": _cmd_cleanup_all,
+    "cleanup-executions": _cmd_cleanup_executions,
     "signal-get": _cmd_signal_get,
     "pending": _cmd_pending,
     "expired": _cmd_expired,

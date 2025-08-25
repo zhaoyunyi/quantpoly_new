@@ -7,6 +7,13 @@ from admin_governance.domain import ActionPolicy
 
 def default_action_catalog() -> dict[str, ActionPolicy]:
     return {
+        "signals.cleanup_execution_history": ActionPolicy(
+            action="signals.cleanup_execution_history",
+            min_role="admin",
+            min_level=5,
+            requires_confirmation=False,
+            high_risk=False,
+        ),
         "signals.cleanup_all": ActionPolicy(
             action="signals.cleanup_all",
             min_role="admin",

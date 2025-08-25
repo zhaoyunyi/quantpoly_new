@@ -50,11 +50,19 @@ class GovernancePolicyEngine:
         sensitive_keys = {"token", "cookie", "password", "api_key", "secret", "authorization"}
         if context is not None:
             for key, value in context.items():
-                raw = str(value)
                 if key.lower() in sensitive_keys:
-                    masked_context[key] = _mask_plain(raw)
-                else:
-                    masked_context[key] = mask_sensitive(raw)
+                    masked_context[key] = _mask_plain(str(value))
+                    continue
+
+                if isinstance(value, str):
+                    masked_context[key] = mask_sensitive(value)
+                    continue
+
+                if value is None or isinstance(value, (int, float, bool)):
+                    masked_context[key] = value
+                    continue
+
+                masked_context[key] = mask_sensitive(str(value))
 
         self._audit_log.append(
             AuditRecord(

@@ -51,6 +51,13 @@ class CleanupAllRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class CleanupExecutionsRequest(BaseModel):
+    retention_days: int = Field(alias="retentionDays", ge=1)
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
+
+    model_config = {"populate_by_name": True}
+
+
 class BatchSignalRequest(BaseModel):
     signal_ids: list[str] = Field(alias="signalIds")
     idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
@@ -563,6 +570,44 @@ def create_router(
     def cleanup_signals(current_user=Depends(get_current_user)):
         deleted = service.cleanup_signals(user_id=current_user.id)
         return success_response(data={"deleted": deleted})
+
+    @router.post("/signals/maintenance/cleanup-executions")
+    def cleanup_executions(
+        body: CleanupExecutionsRequest,
+        current_user=Depends(get_current_user),
+    ):
+        decision = resolve_admin_decision(current_user)
+        audit_id = str(uuid4())
+        try:
+            deleted = service.cleanup_execution_history(
+                user_id=current_user.id,
+                is_admin=decision.is_admin,
+                retention_days=body.retention_days,
+                admin_decision_source=decision.source,
+                confirmation_token=body.confirmation_token,
+                audit_id=audit_id,
+            )
+        except AdminRequiredError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="ADMIN_REQUIRED",
+                    message="admin role required",
+                ),
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_response(code="INVALID_ARGUMENT", message=str(exc)),
+            )
+
+        return success_response(
+            data={
+                "deleted": deleted,
+                "retentionDays": body.retention_days,
+                "auditId": audit_id,
+            }
+        )
 
     @router.post("/signals/maintenance/cleanup-all")
     def cleanup_all_signals(

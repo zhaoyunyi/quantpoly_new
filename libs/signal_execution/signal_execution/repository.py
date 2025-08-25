@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from signal_execution.domain import ExecutionRecord, TradingSignal
 
 
@@ -96,6 +98,12 @@ class InMemorySignalRepository:
         count = len(self._signals)
         self._signals.clear()
         return count
+
+    def delete_executions_before(self, *, cutoff: datetime) -> int:
+        target_ids = [item.id for item in self._executions.values() if item.created_at < cutoff]
+        for execution_id in target_ids:
+            del self._executions[execution_id]
+        return len(target_ids)
 
     def get_batch_record(
         self,
