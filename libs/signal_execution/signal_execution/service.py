@@ -581,6 +581,22 @@ class SignalExecutionService:
             "averageLatencyMs": _avg(latencies),
         }
 
+    def performance_statistics_by_strategy(self, *, user_id: str) -> list[dict[str, Any]]:
+        executions = self._repository.list_executions(user_id=user_id, status="executed")
+
+        grouped: dict[str, list[ExecutionRecord]] = {}
+        for record in executions:
+            grouped.setdefault(record.strategy_id, []).append(record)
+
+        result: list[dict[str, Any]] = []
+        for strategy_id in sorted(grouped.keys()):
+            metrics = self.performance_statistics(user_id=user_id, strategy_id=strategy_id)
+            metrics_payload = dict(metrics)
+            metrics_payload["strategyId"] = strategy_id
+            result.append(metrics_payload)
+
+        return result
+
     def signal_performance(self, *, user_id: str, signal_id: str) -> dict[str, Any]:
         signal = self._repository.get_signal(signal_id=signal_id, user_id=user_id)
         if signal is None:

@@ -526,6 +526,10 @@ def create_router(
             )
         )
 
+    @router.get("/signals/executions/performance/by-strategy")
+    def performance_statistics_by_strategy(current_user=Depends(get_current_user)):
+        return success_response(data=service.performance_statistics_by_strategy(user_id=current_user.id))
+
     @router.get("/signals/executions/{execution_id}")
     def get_execution(execution_id: str, current_user=Depends(get_current_user)):
         try:
