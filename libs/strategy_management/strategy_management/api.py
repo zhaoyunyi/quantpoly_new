@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from job_orchestration.service import IdempotencyConflictError
+from job_orchestration.service import JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from platform_core.response import error_response, success_response
@@ -16,6 +19,19 @@ from strategy_management.service import (
     StrategyAccessDeniedError,
     StrategyService,
 )
+
+
+class ResearchPerformanceTaskRequest(BaseModel):
+    analysis_period_days: int = Field(default=30, alias="analysisPeriodDays", ge=1, le=365)
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
+class ResearchOptimizationTaskRequest(BaseModel):
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
 
 
 class CreateStrategyRequest(BaseModel):
@@ -91,7 +107,13 @@ def _access_denied_response() -> JSONResponse:
     )
 
 
-def create_router(*, service: StrategyService, get_current_user: Any) -> APIRouter:
+def create_router(
+    *,
+    service: StrategyService,
+    get_current_user: Any,
+    job_service: JobOrchestrationService | None = None,
+    signal_service: Any | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/strategies/templates")
@@ -332,5 +354,161 @@ def create_router(*, service: StrategyService, get_current_user: Any) -> APIRout
             return _access_denied_response()
 
         return success_response(data={"deleted": True})
+
+    @router.post("/strategies/{strategy_id}/research/performance-task")
+    def submit_strategy_performance_task(
+        strategy_id: str,
+        body: ResearchPerformanceTaskRequest,
+        current_user=Depends(get_current_user),
+    ):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        try:
+            owned = service.get_strategy(user_id=current_user.id, strategy_id=strategy_id)
+        except StrategyAccessDeniedError:
+            owned = None
+        if owned is None:
+            return _access_denied_response()
+
+        if signal_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="SIGNAL_EXECUTION_UNAVAILABLE",
+                    message="signal execution is not configured",
+                ),
+            )
+
+        metrics = signal_service.performance_statistics(user_id=current_user.id, strategy_id=strategy_id)
+
+        job_idempotency_key = body.idempotency_key or f"strategy-performance-task:{strategy_id}:{uuid4()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="strategy_performance_analyze",
+                payload={
+                    "strategyId": strategy_id,
+                    "analysisPeriodDays": body.analysis_period_days,
+                },
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = {
+                "strategyId": strategy_id,
+                "analysisPeriodDays": body.analysis_period_days,
+                "metrics": metrics,
+            }
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except IdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(
+            data={
+                "taskId": job.id,
+                "taskType": job.task_type,
+                "status": job.status,
+                "result": job.result,
+            }
+        )
+
+    @router.post("/strategies/{strategy_id}/research/optimization-task")
+    def submit_strategy_optimization_task(
+        strategy_id: str,
+        body: ResearchOptimizationTaskRequest | None = None,
+        current_user=Depends(get_current_user),
+    ):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        try:
+            strategy = service.get_strategy(user_id=current_user.id, strategy_id=strategy_id)
+        except StrategyAccessDeniedError:
+            strategy = None
+        if strategy is None:
+            return _access_denied_response()
+
+        if signal_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="SIGNAL_EXECUTION_UNAVAILABLE",
+                    message="signal execution is not configured",
+                ),
+            )
+
+        metrics = signal_service.performance_statistics(user_id=current_user.id, strategy_id=strategy_id)
+        average_pnl = float(metrics.get("averagePnl", 0.0))
+        suggestion = "保持当前参数" if average_pnl >= 0 else "降低风险敞口"
+
+        now = datetime.now().isoformat()
+        result = {
+            "strategyId": strategy_id,
+            "generatedAt": now,
+            "parameterRange": {
+                "template": strategy.template,
+            },
+            "suggestions": [
+                {
+                    "code": "OPTIMIZE_PNL",
+                    "message": suggestion,
+                    "metrics": metrics,
+                }
+            ],
+        }
+
+        job_idempotency_key = ((body.idempotency_key if body is not None else None) or f"strategy-optimization-task:{strategy_id}:{uuid4()}")
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="strategy_optimization_suggest",
+                payload={
+                    "strategyId": strategy_id,
+                },
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except IdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(
+            data={
+                "taskId": job.id,
+                "taskType": job.task_type,
+                "status": job.status,
+                "result": job.result,
+            }
+        )
 
     return router

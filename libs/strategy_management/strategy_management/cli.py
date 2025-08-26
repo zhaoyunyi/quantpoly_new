@@ -5,9 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
+from uuid import uuid4
 
 from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.service import BacktestService
+from job_orchestration.repository import InMemoryJobRepository
+from job_orchestration.scheduler import InMemoryScheduler
+from job_orchestration.service import IdempotencyConflictError, JobOrchestrationService
+from signal_execution.repository import InMemorySignalRepository
+from signal_execution.service import SignalExecutionService
 from strategy_management.domain import InvalidStrategyTransitionError, StrategyInUseError
 from strategy_management.repository import InMemoryStrategyRepository
 from strategy_management.service import (
@@ -47,6 +54,14 @@ _service = StrategyService(
         strategy_id=strategy_id,
     ),
 )
+
+_signal_repo = InMemorySignalRepository()
+_signal_service = SignalExecutionService(
+    repository=_signal_repo,
+    strategy_owner_acl=lambda _user_id, _strategy_id: True,
+    account_owner_acl=lambda _user_id, _account_id: True,
+)
+_job_service = JobOrchestrationService(repository=InMemoryJobRepository(), scheduler=InMemoryScheduler())
 
 
 def _output(payload: dict) -> None:
@@ -344,6 +359,85 @@ def _cmd_delete(args: argparse.Namespace) -> None:
     _output({"success": True, "message": "deleted"})
 
 
+def _cmd_research_performance_task(args: argparse.Namespace) -> None:
+    job_idempotency_key = getattr(args, "idempotency_key", None) or f"strategy-performance-cli:{args.strategy_id}:{uuid4()}"
+
+    strategy = _service.get_strategy(user_id=args.user_id, strategy_id=args.strategy_id)
+    if strategy is None:
+        _output(
+            {
+                "success": False,
+                "error": {"code": "STRATEGY_ACCESS_DENIED", "message": "strategy does not belong to current user"},
+            }
+        )
+        return
+
+    metrics = _signal_service.performance_statistics(user_id=args.user_id, strategy_id=args.strategy_id)
+
+    try:
+        job = _job_service.submit_job(
+            user_id=args.user_id,
+            task_type="strategy_performance_analyze",
+            payload={"strategyId": args.strategy_id, "analysisPeriodDays": args.analysis_period_days},
+            idempotency_key=job_idempotency_key,
+        )
+        _job_service.start_job(user_id=args.user_id, job_id=job.id)
+        job = _job_service.succeed_job(
+            user_id=args.user_id,
+            job_id=job.id,
+            result={
+                "strategyId": args.strategy_id,
+                "analysisPeriodDays": args.analysis_period_days,
+                "metrics": metrics,
+            },
+        )
+    except IdempotencyConflictError:
+        _output({"success": False, "error": {"code": "IDEMPOTENCY_CONFLICT", "message": "idempotency key already exists"}})
+        return
+
+    _output({"success": True, "data": {"taskId": job.id, "taskType": job.task_type, "status": job.status, "result": job.result}})
+
+
+def _cmd_research_optimization_task(args: argparse.Namespace) -> None:
+    job_idempotency_key = getattr(args, "idempotency_key", None) or f"strategy-optimization-cli:{args.strategy_id}:{uuid4()}"
+
+    strategy = _service.get_strategy(user_id=args.user_id, strategy_id=args.strategy_id)
+    if strategy is None:
+        _output(
+            {
+                "success": False,
+                "error": {"code": "STRATEGY_ACCESS_DENIED", "message": "strategy does not belong to current user"},
+            }
+        )
+        return
+
+    metrics = _signal_service.performance_statistics(user_id=args.user_id, strategy_id=args.strategy_id)
+    average_pnl = float(metrics.get("averagePnl", 0.0))
+    suggestion = "保持当前参数" if average_pnl >= 0 else "降低风险敞口"
+
+    result = {
+        "strategyId": args.strategy_id,
+        "generatedAt": datetime.now().isoformat(),
+        "parameterRange": {"template": strategy.template},
+        "suggestions": [{"code": "OPTIMIZE_PNL", "message": suggestion, "metrics": metrics}],
+    }
+
+    try:
+        job = _job_service.submit_job(
+            user_id=args.user_id,
+            task_type="strategy_optimization_suggest",
+            payload={"strategyId": args.strategy_id},
+            idempotency_key=job_idempotency_key,
+        )
+        _job_service.start_job(user_id=args.user_id, job_id=job.id)
+        job = _job_service.succeed_job(user_id=args.user_id, job_id=job.id, result=result)
+    except IdempotencyConflictError:
+        _output({"success": False, "error": {"code": "IDEMPOTENCY_CONFLICT", "message": "idempotency key already exists"}})
+        return
+
+    _output({"success": True, "data": {"taskId": job.id, "taskType": job.task_type, "status": job.status, "result": job.result}})
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="strategy-management", description="QuantPoly 策略管理 CLI")
     sub = parser.add_subparsers(dest="command")
@@ -410,6 +504,17 @@ def build_parser() -> argparse.ArgumentParser:
     delete.add_argument("--user-id", required=True)
     delete.add_argument("--strategy-id", required=True)
 
+    research_perf = sub.add_parser("research-performance-task", help="提交策略绩效分析任务")
+    research_perf.add_argument("--user-id", required=True)
+    research_perf.add_argument("--strategy-id", required=True)
+    research_perf.add_argument("--analysis-period-days", type=int, default=30)
+    research_perf.add_argument("--idempotency-key", default=None)
+
+    research_opt = sub.add_parser("research-optimization-task", help="提交策略优化建议任务")
+    research_opt.add_argument("--user-id", required=True)
+    research_opt.add_argument("--strategy-id", required=True)
+    research_opt.add_argument("--idempotency-key", default=None)
+
     return parser
 
 
@@ -427,6 +532,8 @@ _COMMANDS = {
     "archive": _cmd_archive,
     "list": _cmd_list,
     "delete": _cmd_delete,
+    "research-performance-task": _cmd_research_performance_task,
+    "research-optimization-task": _cmd_research_optimization_task,
 }
 
 

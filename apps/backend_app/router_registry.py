@@ -326,7 +326,14 @@ def register_all_routes(
         )
 
     if "strategy-management" in enabled_contexts:
-        app.include_router(create_strategy_router(service=strategy_service, get_current_user=get_current_user))
+        app.include_router(
+            create_strategy_router(
+                service=strategy_service,
+                get_current_user=get_current_user,
+                job_service=job_service,
+                signal_service=signal_service,
+            )
+        )
 
     if "job-orchestration" in enabled_contexts:
         app.include_router(create_job_router(service=job_service, get_current_user=get_current_user))
