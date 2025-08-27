@@ -32,6 +32,24 @@ SourceFn = Callable[[str], list[dict[str, Any]]]
 SummaryFn = Callable[[str], dict[str, Any]]
 
 
+def _task_type(item: dict[str, Any]) -> str | None:
+    if "taskType" in item:
+        value = item.get("taskType")
+        return str(value) if value is not None else None
+    if "task_type" in item:
+        value = item.get("task_type")
+        return str(value) if value is not None else None
+    return None
+
+
+def _task_id(item: dict[str, Any]) -> str | None:
+    for key in ("taskId", "task_id", "id"):
+        value = item.get(key)
+        if value:
+            return str(value)
+    return None
+
+
 def _envelope(
     *,
     msg_type: str,
@@ -174,6 +192,7 @@ def create_app(
     session_store: SessionStore | None = None,
     signal_source: SourceFn | None = None,
     alert_source: SourceFn | None = None,
+    alert_task_source: SourceFn | None = None,
     summary_source: SummaryFn | None = None,
     max_items_per_message: int = 100,
 ) -> FastAPI:
@@ -185,6 +204,7 @@ def create_app(
 
     signals_source = signal_source or (lambda _user_id: [])
     alerts_source = alert_source or (lambda _user_id: [])
+    alert_tasks_source = alert_task_source or (lambda _user_id: [])
     auth_logger = logging.getLogger("monitoring_realtime.auth")
 
     @app.get("/monitor/summary")
@@ -271,22 +291,41 @@ def create_app(
             if "alerts" in subscriptions:
                 raw_alerts = alerts_source(user.id)
                 user_alerts = [item for item in raw_alerts if _item_user_id(item) == user.id]
+                unresolved_alerts = [
+                    item
+                    for item in user_alerts
+                    if str(item.get("status", "open")).strip().lower() != "resolved"
+                ]
                 alert_items, alert_truncated = _dedupe_and_truncate(
-                    items=user_alerts,
+                    items=unresolved_alerts,
                     seen_ids=sent_ids["alerts"],
-                    incremental=incremental,
+                    incremental=False,
                     max_items=max_items_per_message,
                 )
                 if alert_items:
+                    raw_tasks = alert_tasks_source(user.id)
+                    user_tasks = [item for item in raw_tasks if _item_user_id(item) == user.id]
+                    notify_tasks = [item for item in user_tasks if _task_type(item) == "risk_alert_notify"]
+                    task_summary: dict[str, Any] | None = None
+                    if notify_tasks:
+                        latest = notify_tasks[-1]
+                        task_summary = {
+                            "taskId": _task_id(latest),
+                            "taskType": _task_type(latest),
+                            "status": latest.get("status"),
+                            "result": latest.get("result"),
+                        }
+
                     await websocket.send_json(
                         _envelope(
                             msg_type="risk_alert",
                             payload={
-                                "snapshot": not incremental,
+                                "snapshot": True,
                                 "truncated": alert_truncated,
                                 "counts": {
-                                    "openAlerts": len(alert_items),
+                                    "openAlerts": len(unresolved_alerts),
                                 },
+                                "taskSummary": task_summary,
                             },
                             data={"items": alert_items},
                         )

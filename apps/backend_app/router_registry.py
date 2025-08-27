@@ -375,8 +375,25 @@ def register_all_routes(
                     "severity": item.severity,
                     "status": item.status,
                     "message": item.message,
+                    "acknowledgedAt": item.acknowledged_at.isoformat() if item.acknowledged_at else None,
+                    "acknowledgedBy": item.acknowledged_by,
+                    "resolvedAt": item.resolved_at.isoformat() if item.resolved_at else None,
+                    "resolvedBy": item.resolved_by,
+                    "notificationStatus": item.notification_status,
+                    "notifiedAt": item.notified_at.isoformat() if item.notified_at else None,
+                    "notifiedBy": item.notified_by,
                 }
                 for item in context.risk_repo.list_alerts(user_id=user_id)
+            ],
+            alert_task_source=lambda user_id: [
+                {
+                    "taskId": job.id,
+                    "userId": job.user_id,
+                    "taskType": job.task_type,
+                    "status": job.status,
+                    "result": job.result,
+                }
+                for job in job_service.list_jobs(user_id=user_id, task_type="risk_alert_notify")
             ],
         )
         for route in monitor_app.router.routes:

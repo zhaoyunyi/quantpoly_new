@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from risk_control.domain import RiskAlert, RiskAssessmentSnapshot, RiskRule
 from risk_control.repository import InMemoryRiskRepository
@@ -341,3 +342,76 @@ class RiskControlService:
             resolved=sum(1 for item in alerts if item.status == "resolved"),
             by_severity=by_severity,
         )
+
+    def batch_check_accounts(self, *, user_id: str, account_ids: list[str]) -> dict:
+        checked: list[dict] = []
+        for account_id in account_ids:
+            self._assert_account_scope(user_id=user_id, account_id=account_id)
+            snapshot = self.evaluate_account_risk(user_id=user_id, account_id=account_id)
+            checked.append(
+                {
+                    "accountId": account_id,
+                    "assessmentId": snapshot.id,
+                    "riskLevel": snapshot.risk_level,
+                    "riskScore": snapshot.risk_score,
+                }
+            )
+
+        return {"total": len(checked), "items": checked}
+
+    def generate_risk_report(self, *, user_id: str, report_type: str) -> dict:
+        report_type = (report_type or "").strip() or "daily"
+        alerts = self.list_alerts(user_id=user_id, account_id=None, unresolved_only=False)
+        total = len(alerts)
+        critical = sum(1 for item in alerts if str(item.severity).strip().lower() == "critical")
+        return {
+            "reportType": report_type,
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "summary": {
+                "totalAlerts": total,
+                "criticalAlerts": critical,
+            },
+        }
+
+    def notify_pending_alerts(self, *, user_id: str, actor_id: str) -> tuple[dict, str]:
+        alerts = self.list_alerts(user_id=user_id, account_id=None, unresolved_only=True)
+        pending = [item for item in alerts if item.notification_status != "sent"]
+        audit_id = f"audit-{datetime.now(timezone.utc).timestamp()}"
+
+        success = 0
+        for alert in pending:
+            alert.mark_notified(actor_id=actor_id, notification_status="sent")
+            self._repository.save_alert(alert)
+            success += 1
+
+        return {"total": len(pending), "success": success, "failed": len(pending) - success, "auditId": audit_id}, audit_id
+
+    def submit_continuous_monitor(self, *, user_id: str, account_ids: list[str]) -> dict:
+        for account_id in account_ids:
+            self._assert_account_scope(user_id=user_id, account_id=account_id)
+            self.assess_account_risk(user_id=user_id, account_id=account_id)
+
+        return {"monitoredAccounts": len(account_ids)}
+
+    def generate_all_snapshots(self, *, user_id: str, account_ids: list[str]) -> dict:
+        total = 0
+        success = 0
+        for account_id in account_ids:
+            total += 1
+            self._assert_account_scope(user_id=user_id, account_id=account_id)
+            self.evaluate_account_risk(user_id=user_id, account_id=account_id)
+            success += 1
+        return {"totalAccounts": total, "successCount": success}
+
+    def generate_account_snapshot(self, *, user_id: str, account_id: str) -> RiskAssessmentSnapshot:
+        self._assert_account_scope(user_id=user_id, account_id=account_id)
+        return self.evaluate_account_risk(user_id=user_id, account_id=account_id)
+
+    def cleanup_resolved_alerts(self, *, user_id: str, retention_days: int) -> tuple[int, str]:
+        retention_days = int(retention_days)
+        if retention_days <= 0:
+            raise ValueError("retentionDays must be positive")
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        deleted = self._repository.delete_resolved_alerts_older_than(user_id=user_id, cutoff=cutoff)
+        audit_id = f"audit-{datetime.now(timezone.utc).timestamp()}"
+        return deleted, audit_id

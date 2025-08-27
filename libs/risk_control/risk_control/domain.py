@@ -75,6 +75,9 @@ class RiskAlert:
     acknowledged_by: str | None = None
     resolved_at: datetime | None = None
     resolved_by: str | None = None
+    notification_status: str | None = None
+    notified_at: datetime | None = None
+    notified_by: str | None = None
 
     @classmethod
     def create(
@@ -106,6 +109,13 @@ class RiskAlert:
         self.status = "resolved"
         self.resolved_at = datetime.now(timezone.utc)
         self.resolved_by = actor_id
+
+    def mark_notified(self, *, actor_id: str, notification_status: str = "sent") -> None:
+        if self.status == "open":
+            self.acknowledge(actor_id=actor_id)
+        self.notification_status = notification_status
+        self.notified_at = datetime.now(timezone.utc)
+        self.notified_by = actor_id
 
 
 @dataclass

@@ -53,6 +53,41 @@ class EvaluateTaskRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class BatchCheckTaskRequest(BaseModel):
+    account_ids: list[str] = Field(alias="accountIds")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
+class ReportGenerateTaskRequest(BaseModel):
+    report_type: str = Field(alias="reportType")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
+class ContinuousMonitorTaskRequest(BaseModel):
+    account_ids: list[str] = Field(alias="accountIds")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
+class SnapshotGenerateAllTaskRequest(BaseModel):
+    account_ids: list[str] = Field(alias="accountIds")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
+class AlertCleanupTaskRequest(BaseModel):
+    retention_days: int = Field(alias="retentionDays")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
 def _dt(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -87,6 +122,9 @@ def _alert_payload(alert: RiskAlert) -> dict:
         "acknowledgedBy": alert.acknowledged_by,
         "resolvedAt": _dt(alert.resolved_at),
         "resolvedBy": alert.resolved_by,
+        "notificationStatus": alert.notification_status,
+        "notifiedAt": _dt(alert.notified_at),
+        "notifiedBy": alert.notified_by,
     }
 
 
@@ -118,6 +156,313 @@ def create_router(
     job_service: JobOrchestrationService | None = None,
 ) -> APIRouter:
     router = APIRouter()
+
+    @router.post("/risk/batch/check-task")
+    def batch_check_task(body: BatchCheckTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"risk-batch-check:{','.join(body.account_ids)}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_batch_check",
+                payload={"accountIds": body.account_ids},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.batch_check_accounts(user_id=current_user.id, account_ids=body.account_ids)
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(code="RULE_ACCESS_DENIED", message="account does not belong to current user"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/risk/reports/generate-task")
+    def generate_report_task(body: ReportGenerateTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"risk-report-generate:{body.report_type}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_report_generate",
+                payload={"reportType": body.report_type},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            report = service.generate_risk_report(user_id=current_user.id, report_type=body.report_type)
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=report)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/risk/alerts/notify-task")
+    def notify_alert_task(body: EvaluateTaskRequest | None = None, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = (body.idempotency_key if body is not None else None) or "risk-alert-notify"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_alert_notify",
+                payload={},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result, _audit_id = service.notify_pending_alerts(user_id=current_user.id, actor_id=current_user.id)
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/risk/monitor/continuous-task")
+    def continuous_monitor_task(body: ContinuousMonitorTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or "risk-continuous-monitor"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_continuous_monitor",
+                payload={"accountIds": body.account_ids},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.submit_continuous_monitor(user_id=current_user.id, account_ids=body.account_ids)
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(code="RULE_ACCESS_DENIED", message="account does not belong to current user"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.get("/risk/monitor/continuous-task/{task_id}")
+    def continuous_monitor_task_status(task_id: str, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job = job_service.get_job(user_id=current_user.id, job_id=task_id)
+        if job is None:
+            return JSONResponse(
+                status_code=404,
+                content=error_response(code="TASK_NOT_FOUND", message="task not found"),
+            )
+        return success_response(data=_job_payload(job))
+
+    @router.post("/risk/snapshots/generate-all-task")
+    def generate_all_snapshots_task(body: SnapshotGenerateAllTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or "risk-snapshot-generate-all"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_snapshot_generate_all",
+                payload={"accountIds": body.account_ids},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.generate_all_snapshots(user_id=current_user.id, account_ids=body.account_ids)
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(code="RULE_ACCESS_DENIED", message="account does not belong to current user"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/risk/accounts/{account_id}/snapshot-task")
+    def generate_account_snapshot_task(
+        account_id: str,
+        body: EvaluateTaskRequest | None = None,
+        current_user=Depends(get_current_user),
+    ):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = (body.idempotency_key if body is not None else None) or f"risk-snapshot-account:{account_id}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_snapshot_generate_account",
+                payload={"accountId": account_id},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            snapshot = service.generate_account_snapshot(user_id=current_user.id, account_id=account_id)
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=_assessment_payload(snapshot))
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(code="RULE_ACCESS_DENIED", message="account does not belong to current user"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/risk/alerts/cleanup-task")
+    def cleanup_alerts_task(body: AlertCleanupTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"risk-alert-cleanup:{body.retention_days}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="risk_alert_cleanup",
+                payload={"retentionDays": body.retention_days},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            deleted, audit_id = service.cleanup_resolved_alerts(
+                user_id=current_user.id,
+                retention_days=body.retention_days,
+            )
+            job = job_service.succeed_job(
+                user_id=current_user.id,
+                job_id=job.id,
+                result={"deleted": deleted, "auditId": audit_id},
+            )
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_response(code="ALERT_CLEANUP_INVALID", message=str(exc)),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
 
     @router.post("/risk/rules")
     def create_rule(body: RuleCreateRequest, current_user=Depends(get_current_user)):

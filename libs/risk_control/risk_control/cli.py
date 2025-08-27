@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import Any
 
 from risk_control.repository import InMemoryRiskRepository
 from risk_control.service import AccountAccessDeniedError, RiskControlService
@@ -28,6 +29,21 @@ def _serialize_assessment(snapshot) -> dict:
         "triggeredRuleIds": snapshot.triggered_rule_ids,
         "createdAt": snapshot.created_at.isoformat(),
     }
+
+
+def _cmd_report_generate(args: argparse.Namespace) -> None:
+    report = _service.generate_risk_report(user_id=args.user_id, report_type=args.report_type)
+    _output({"success": True, "data": report})
+
+
+def _cmd_alert_cleanup(args: argparse.Namespace) -> None:
+    try:
+        deleted, audit_id = _service.cleanup_resolved_alerts(user_id=args.user_id, retention_days=args.retention_days)
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": {"deleted": deleted, "auditId": audit_id}})
 
 
 def _cmd_assessment_snapshot(args: argparse.Namespace) -> None:
@@ -213,6 +229,14 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--user-id", required=True)
     dashboard.add_argument("--account-id", required=True)
 
+    report_generate = sub.add_parser("report-generate", help="生成风险报告")
+    report_generate.add_argument("--user-id", required=True)
+    report_generate.add_argument("--report-type", required=True)
+
+    alert_cleanup = sub.add_parser("alert-cleanup", help="清理历史告警")
+    alert_cleanup.add_argument("--user-id", required=True)
+    alert_cleanup.add_argument("--retention-days", required=True, type=int, dest="retention_days")
+
     return parser
 
 
@@ -223,6 +247,8 @@ _COMMANDS = {
     "batch-acknowledge": _cmd_batch_acknowledge,
     "applicable-rules": _cmd_applicable_rules,
     "dashboard": _cmd_dashboard,
+    "report-generate": _cmd_report_generate,
+    "alert-cleanup": _cmd_alert_cleanup,
 }
 
 

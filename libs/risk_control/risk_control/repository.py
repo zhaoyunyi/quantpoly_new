@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from risk_control.domain import RiskAlert, RiskAssessmentSnapshot, RiskRule
 
 
@@ -89,6 +91,19 @@ class InMemoryRiskRepository:
 
     def list_alerts_by_ids(self, *, alert_ids: list[str]) -> list[RiskAlert]:
         return [self._alerts[item] for item in alert_ids if item in self._alerts]
+
+    def delete_resolved_alerts_older_than(self, *, user_id: str, cutoff: datetime) -> int:
+        to_delete = [
+            alert_id
+            for alert_id, alert in self._alerts.items()
+            if alert.user_id == user_id
+            and alert.status == "resolved"
+            and alert.resolved_at is not None
+            and alert.resolved_at < cutoff
+        ]
+        for alert_id in to_delete:
+            del self._alerts[alert_id]
+        return len(to_delete)
 
     def save_assessment(self, snapshot: RiskAssessmentSnapshot) -> None:
         self._assessments[snapshot.id] = snapshot
