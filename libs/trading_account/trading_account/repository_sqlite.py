@@ -240,6 +240,45 @@ class SQLiteTradingAccountRepository:
                 ),
             )
 
+    def delete_order(self, *, order_id: str) -> TradeOrder | None:
+        existing = self._get_order_by_id(order_id=order_id)
+        if existing is None:
+            return None
+
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM trading_account_order WHERE id = ?",
+                (order_id,),
+            )
+        return existing
+
+    def _get_order_by_id(self, *, order_id: str) -> TradeOrder | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, user_id, account_id, symbol, side, quantity, price, status, created_at, updated_at
+                FROM trading_account_order
+                WHERE id = ?
+                """,
+                (order_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return TradeOrder(
+            id=row[0],
+            user_id=row[1],
+            account_id=row[2],
+            symbol=row[3],
+            side=row[4],
+            quantity=row[5],
+            price=row[6],
+            status=row[7],
+            created_at=self._to_dt(row[8]),
+            updated_at=self._to_dt(row[9]),
+        )
+
     def get_order(self, *, account_id: str, user_id: str, order_id: str) -> TradeOrder | None:
         with self._connect() as conn:
             row = conn.execute(

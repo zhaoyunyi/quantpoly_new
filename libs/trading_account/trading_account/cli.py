@@ -6,7 +6,11 @@ import argparse
 import json
 import sys
 from datetime import datetime
+from uuid import uuid4
 
+from job_orchestration.repository import InMemoryJobRepository
+from job_orchestration.scheduler import InMemoryScheduler
+from job_orchestration.service import IdempotencyConflictError, JobOrchestrationService
 from trading_account.domain import InvalidTradeOrderTransitionError
 from trading_account.repository import InMemoryTradingAccountRepository
 from trading_account.service import (
@@ -23,6 +27,7 @@ from trading_account.service import (
 
 _repo = InMemoryTradingAccountRepository()
 _service = TradingAccountService(repository=_repo)
+_job_service = JobOrchestrationService(repository=InMemoryJobRepository(), scheduler=InMemoryScheduler())
 
 
 def _output(payload: dict) -> None:
@@ -40,6 +45,18 @@ def _error(*, code: str, message: str) -> None:
             },
         }
     )
+
+
+def _job_payload(job) -> dict:
+    return {
+        "taskId": job.id,
+        "taskType": job.task_type,
+        "status": job.status,
+        "result": job.result,
+        "error": {"code": job.error_code, "message": job.error_message}
+        if job.error_code or job.error_message
+        else None,
+    }
 
 
 def _dt(value: datetime) -> str:
@@ -354,6 +371,154 @@ def _cmd_refresh_prices(args: argparse.Namespace) -> None:
     _output({"success": True, "data": result})
 
 
+def _cmd_ops_pending_process_task(args: argparse.Namespace) -> None:
+    if not args.is_admin:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+
+    job_idempotency_key = args.idempotency_key or f"trading-pending-process-cli:{args.user_id}:{args.max_trades}:{uuid4()}"
+
+    audit_id = getattr(args, "audit_id", None) or "cli"
+
+    try:
+        job = _job_service.submit_job(
+            user_id=args.user_id,
+            task_type="trading_pending_process",
+            payload={"maxTrades": args.max_trades},
+            idempotency_key=job_idempotency_key,
+        )
+        _job_service.start_job(user_id=args.user_id, job_id=job.id)
+        result = _service.process_pending_trades(
+            user_id=args.user_id,
+            is_admin=args.is_admin,
+            admin_decision_source="is_admin" if args.is_admin else "none",
+            max_trades=args.max_trades,
+            idempotency_key=args.idempotency_key,
+            confirmation_token=getattr(args, "confirmation_token", None),
+            audit_id=audit_id,
+        )
+        job = _job_service.succeed_job(user_id=args.user_id, job_id=job.id, result=result)
+    except IdempotencyConflictError:
+        _error(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        return
+    except TradingAdminRequiredError:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+    except ValueError as exc:
+        _error(code="INVALID_ARGUMENT", message=str(exc))
+        return
+    except Exception as exc:  # noqa: BLE001
+        _error(code="TASK_EXECUTION_FAILED", message=str(exc))
+        return
+
+    _output({"success": True, "data": _job_payload(job)})
+
+
+def _cmd_ops_daily_stats_task(args: argparse.Namespace) -> None:
+    if not args.is_admin:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+
+    job_idempotency_key = args.idempotency_key or f"trading-daily-stats-cli:{args.user_id}:{args.target_date}:{uuid4()}"
+
+    audit_id = getattr(args, "audit_id", None) or "cli"
+
+    try:
+        job = _job_service.submit_job(
+            user_id=args.user_id,
+            task_type="trading_daily_stats_calculate",
+            payload={"accountIds": args.account_ids, "targetDate": args.target_date},
+            idempotency_key=job_idempotency_key,
+        )
+        _job_service.start_job(user_id=args.user_id, job_id=job.id)
+        result = _service.calculate_daily_stats(
+            user_id=args.user_id,
+            is_admin=args.is_admin,
+            admin_decision_source="is_admin" if args.is_admin else "none",
+            account_ids=args.account_ids,
+            target_date=args.target_date,
+            idempotency_key=args.idempotency_key,
+            confirmation_token=getattr(args, "confirmation_token", None),
+            audit_id=audit_id,
+        )
+        job = _job_service.succeed_job(user_id=args.user_id, job_id=job.id, result=result)
+    except IdempotencyConflictError:
+        _error(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        return
+    except TradingAdminRequiredError:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+    except ValueError as exc:
+        _error(code="INVALID_ARGUMENT", message=str(exc))
+        return
+    except Exception as exc:  # noqa: BLE001
+        _error(code="TASK_EXECUTION_FAILED", message=str(exc))
+        return
+
+    _output({"success": True, "data": _job_payload(job)})
+
+
+def _cmd_stats_daily_get(args: argparse.Namespace) -> None:
+    try:
+        stats = _service.get_daily_stats(user_id=args.user_id, date=args.date, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    if stats is None:
+        _error(code="NOT_FOUND", message="daily stats not found")
+        return
+
+    _output({"success": True, "data": {"date": args.date, "items": [stats]}})
+
+
+def _cmd_ops_account_cleanup_task(args: argparse.Namespace) -> None:
+    if not args.is_admin:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+
+    job_idempotency_key = (
+        args.idempotency_key
+        or f"trading-account-cleanup-cli:{args.user_id}:{args.days_threshold}:{uuid4()}"
+    )
+
+    audit_id = getattr(args, "audit_id", None) or "cli"
+
+    try:
+        job = _job_service.submit_job(
+            user_id=args.user_id,
+            task_type="trading_account_cleanup",
+            payload={"accountIds": args.account_ids, "daysThreshold": args.days_threshold},
+            idempotency_key=job_idempotency_key,
+        )
+        _job_service.start_job(user_id=args.user_id, job_id=job.id)
+        result = _service.cleanup_account_history(
+            user_id=args.user_id,
+            is_admin=args.is_admin,
+            admin_decision_source="is_admin" if args.is_admin else "none",
+            account_ids=args.account_ids,
+            days_threshold=args.days_threshold,
+            idempotency_key=args.idempotency_key,
+            confirmation_token=getattr(args, "confirmation_token", None),
+            audit_id=audit_id,
+        )
+        job = _job_service.succeed_job(user_id=args.user_id, job_id=job.id, result=result)
+    except IdempotencyConflictError:
+        _error(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        return
+    except TradingAdminRequiredError:
+        _error(code="ADMIN_REQUIRED", message="admin role required")
+        return
+    except ValueError as exc:
+        _error(code="INVALID_ARGUMENT", message=str(exc))
+        return
+    except Exception as exc:  # noqa: BLE001
+        _error(code="TASK_EXECUTION_FAILED", message=str(exc))
+        return
+
+    _output({"success": True, "data": _job_payload(job)})
+
+
 def _cmd_order_create(args: argparse.Namespace) -> None:
     try:
         order = _service.submit_order(
@@ -544,6 +709,34 @@ def build_parser() -> argparse.ArgumentParser:
     refresh_prices.add_argument("--confirmation-token", default=None)
     refresh_prices.add_argument("--account-id", default=None)
 
+    ops_pending_process = sub.add_parser("ops-pending-process-task", help="待处理交易处理任务（管理员）")
+    ops_pending_process.add_argument("--user-id", required=True)
+    ops_pending_process.add_argument("--is-admin", action="store_true")
+    ops_pending_process.add_argument("--max-trades", type=int, default=100)
+    ops_pending_process.add_argument("--idempotency-key", default=None)
+    ops_pending_process.add_argument("--audit-id", default="cli")
+
+    ops_daily_stats = sub.add_parser("ops-daily-stats-task", help="生成交易日统计任务（管理员）")
+    ops_daily_stats.add_argument("--user-id", required=True)
+    ops_daily_stats.add_argument("--is-admin", action="store_true")
+    ops_daily_stats.add_argument("--account-id", action="append", dest="account_ids", default=[])
+    ops_daily_stats.add_argument("--target-date", required=True)
+    ops_daily_stats.add_argument("--idempotency-key", default=None)
+    ops_daily_stats.add_argument("--audit-id", default="cli")
+
+    stats_daily_get = sub.add_parser("stats-daily-get", help="读取交易日统计")
+    stats_daily_get.add_argument("--user-id", required=True)
+    stats_daily_get.add_argument("--date", required=True)
+    stats_daily_get.add_argument("--account-id", required=True)
+
+    ops_account_cleanup = sub.add_parser("ops-account-cleanup-task", help="账户清理任务（管理员）")
+    ops_account_cleanup.add_argument("--user-id", required=True)
+    ops_account_cleanup.add_argument("--is-admin", action="store_true")
+    ops_account_cleanup.add_argument("--account-id", action="append", dest="account_ids", default=[])
+    ops_account_cleanup.add_argument("--days-threshold", type=int, default=90)
+    ops_account_cleanup.add_argument("--idempotency-key", default=None)
+    ops_account_cleanup.add_argument("--audit-id", default="cli")
+
     order_create = sub.add_parser("order-create", help="创建订单")
     order_create.add_argument("--user-id", required=True)
     order_create.add_argument("--account-id", required=True)
@@ -621,6 +814,10 @@ _COMMANDS = {
     "position-analysis": _cmd_position_analysis,
     "pending-orders": _cmd_pending_orders,
     "refresh-prices": _cmd_refresh_prices,
+    "ops-pending-process-task": _cmd_ops_pending_process_task,
+    "ops-daily-stats-task": _cmd_ops_daily_stats_task,
+    "stats-daily-get": _cmd_stats_daily_get,
+    "ops-account-cleanup-task": _cmd_ops_account_cleanup_task,
     "order-create": _cmd_order_create,
     "order-list": _cmd_order_list,
     "order-fill": _cmd_order_fill,

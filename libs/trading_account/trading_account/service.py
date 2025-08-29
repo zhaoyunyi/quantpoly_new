@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import uuid4
 
 from platform_core.uow import NoopUnitOfWork, SnapshotUnitOfWork, UnitOfWork
 from trading_account.domain import (
@@ -16,6 +17,7 @@ from trading_account.domain import (
     TradingAccount,
 )
 from trading_account.repository import InMemoryTradingAccountRepository
+from trading_account.ops_store import InMemoryTradingOperationsStore
 
 
 class AccountAccessDeniedError(PermissionError):
@@ -72,6 +74,7 @@ class TradingAccountService:
         governance_checker: Callable[..., Any] | None = None,
         risk_snapshot_reader: Callable[..., Any] | None = None,
         risk_evaluator: Callable[..., Any] | None = None,
+        ops_store: InMemoryTradingOperationsStore | None = None,
     ) -> None:
         self._repository = repository
         self._uow_factory = uow_factory or _default_uow_factory(repository)
@@ -79,6 +82,7 @@ class TradingAccountService:
         self._risk_snapshot_reader = risk_snapshot_reader
         self._risk_evaluator = risk_evaluator
         self._refresh_records: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
+        self._ops_store = ops_store or InMemoryTradingOperationsStore()
 
     def create_account(
         self,
@@ -648,6 +652,418 @@ class TradingAccountService:
         if account_id is not None:
             return self._repository.list_orders_by_status(status="pending", account_id=account_id)
         return self._repository.list_orders_by_status(status="pending")
+
+    def process_pending_trades(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        admin_decision_source: str = "unknown",
+        max_trades: int = 100,
+        idempotency_key: str | None = None,
+        confirmation_token: str | None = None,
+        audit_id: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if max_trades <= 0:
+            raise ValueError("max_trades must be positive")
+
+        audit_id = audit_id or str(uuid4())
+
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            try:
+                self._governance_checker(
+                    actor_id=user_id,
+                    role=role,
+                    level=level,
+                    action="trading.process_pending",
+                    target="trading",
+                    confirmation_token=confirmation_token,
+                    context={
+                        "actor": user_id,
+                        "maxTrades": max_trades,
+                        "adminDecisionSource": admin_decision_source,
+                        "auditId": audit_id,
+                        "token": confirmation_token or "",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise TradingAdminRequiredError(str(exc)) from exc
+        elif not is_admin:
+            raise TradingAdminRequiredError("admin role required")
+
+        batch_key = idempotency_key
+        if batch_key:
+            existed = self._refresh_records.get((user_id, batch_key))
+            if existed is not None:
+                _stored_fingerprint, stored_result = existed
+                replay = dict(stored_result)
+                replay["idempotent"] = True
+                return replay
+
+        pending_orders: list[TradeOrder] = self._repository.list_orders_by_status(status="pending")
+
+        processed = 0
+        failed = 0
+        results: list[dict[str, Any]] = []
+
+        for order in pending_orders[: max_trades]:
+            try:
+                filled = self.fill_order(user_id=order.user_id, account_id=order.account_id, order_id=order.id)
+                processed += 1
+                results.append({"orderId": filled.id, "status": "filled"})
+            except Exception:  # noqa: BLE001
+                failed += 1
+                results.append({"orderId": order.id, "status": "failed"})
+
+        result = {
+            "processed": processed,
+            "failed": failed,
+            "totalPending": len(pending_orders),
+            "items": results,
+            "idempotent": False,
+            "auditId": audit_id,
+            "processedAt": (now or datetime.now(timezone.utc)).isoformat(),
+        }
+
+        if batch_key:
+            self._refresh_records[(user_id, batch_key)] = ("pending_process", dict(result))
+
+        return result
+
+    def calculate_daily_stats(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        admin_decision_source: str = "unknown",
+        account_ids: list[str],
+        target_date: str,
+        idempotency_key: str | None = None,
+        confirmation_token: str | None = None,
+        audit_id: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if not account_ids:
+            raise ValueError("account_ids must not be empty")
+
+        audit_id = audit_id or str(uuid4())
+
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            try:
+                self._governance_checker(
+                    actor_id=user_id,
+                    role=role,
+                    level=level,
+                    action="trading.calculate_daily_stats",
+                    target="trading",
+                    confirmation_token=confirmation_token,
+                    context={
+                        "actor": user_id,
+                        "date": target_date,
+                        "accountIds": account_ids,
+                        "adminDecisionSource": admin_decision_source,
+                        "auditId": audit_id,
+                        "token": confirmation_token or "",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise TradingAdminRequiredError(str(exc)) from exc
+        elif not is_admin:
+            raise TradingAdminRequiredError("admin role required")
+
+        batch_key = idempotency_key
+        if batch_key:
+            existed = self._refresh_records.get((user_id, batch_key))
+            if existed is not None:
+                _stored_fingerprint, stored_result = existed
+                replay = dict(stored_result)
+                replay["idempotent"] = True
+                return replay
+
+        items: list[dict[str, Any]] = []
+        for account_id in account_ids:
+            account = self._repository.get_account(account_id=account_id, user_id=user_id)
+            if account is None:
+                continue
+
+            orders = self._repository.list_orders(account_id=account_id, user_id=user_id)
+            trades = self._repository.list_trades(account_id=account_id, user_id=user_id)
+            flows = self._repository.list_cash_flows(account_id=account_id, user_id=user_id)
+            snapshot = {
+                "accountId": account_id,
+                "date": target_date,
+                "orderCount": len(orders),
+                "tradeCount": len(trades),
+                "cashFlowCount": len(flows),
+                "turnover": sum(item.quantity * item.price for item in trades),
+            }
+            self._ops_store.save_daily_stats(user_id=user_id, date=target_date, account_id=account_id, snapshot=snapshot)
+            items.append(snapshot)
+
+        result = {
+            "date": target_date,
+            "processedAccounts": len(items),
+            "items": items,
+            "idempotent": False,
+            "auditId": audit_id,
+            "generatedAt": (now or datetime.now(timezone.utc)).isoformat(),
+        }
+        if batch_key:
+            self._refresh_records[(user_id, batch_key)] = ("daily_stats", dict(result))
+        return result
+
+    def get_daily_stats(
+        self,
+        *,
+        user_id: str,
+        date: str,
+        account_id: str,
+    ) -> dict[str, Any] | None:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        return self._ops_store.get_daily_stats(user_id=user_id, date=date, account_id=account_id)
+
+    def batch_execute_trades(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        admin_decision_source: str = "unknown",
+        trade_requests: list[dict[str, Any]],
+        idempotency_key: str | None = None,
+        confirmation_token: str | None = None,
+        audit_id: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if not trade_requests:
+            raise ValueError("trade_requests must not be empty")
+
+        audit_id = audit_id or str(uuid4())
+
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            try:
+                self._governance_checker(
+                    actor_id=user_id,
+                    role=role,
+                    level=level,
+                    action="trading.batch_execute",
+                    target="trading",
+                    confirmation_token=confirmation_token,
+                    context={
+                        "actor": user_id,
+                        "requestCount": len(trade_requests),
+                        "adminDecisionSource": admin_decision_source,
+                        "auditId": audit_id,
+                        "token": confirmation_token or "",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise TradingAdminRequiredError(str(exc)) from exc
+        elif not is_admin:
+            raise TradingAdminRequiredError("admin role required")
+
+        batch_key = idempotency_key
+        if batch_key:
+            existed = self._refresh_records.get((user_id, batch_key))
+            if existed is not None:
+                _stored_fingerprint, stored_result = existed
+                replay = dict(stored_result)
+                replay["idempotent"] = True
+                return replay
+
+        results: list[dict[str, Any]] = []
+        success = 0
+        failed = 0
+
+        for req in trade_requests:
+            try:
+                account_id = str(req["accountId"])
+                symbol = str(req["symbol"])
+                side = str(req["side"])
+                quantity = float(req["quantity"])
+                price = float(req["price"])
+
+                self._assert_account_owner(user_id=user_id, account_id=account_id)
+                order = self.submit_order(
+                    user_id=user_id,
+                    account_id=account_id,
+                    symbol=symbol,
+                    side=side,
+                    quantity=quantity,
+                    price=price,
+                )
+                filled = self.fill_order(user_id=user_id, account_id=account_id, order_id=order.id)
+                success += 1
+                results.append({"success": True, "orderId": filled.id, "request": req})
+            except Exception as exc:  # noqa: BLE001
+                failed += 1
+                results.append({"success": False, "error": str(exc), "request": req})
+
+        payload = {
+            "total": len(trade_requests),
+            "success": success,
+            "failed": failed,
+            "results": results,
+            "executionTime": (now or datetime.now(timezone.utc)).isoformat(),
+            "idempotent": False,
+            "auditId": audit_id,
+        }
+
+        if batch_key:
+            self._refresh_records[(user_id, batch_key)] = ("batch_execute", dict(payload))
+
+        return payload
+
+    def monitor_risk(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        admin_decision_source: str = "unknown",
+        account_ids: list[str],
+        idempotency_key: str | None = None,
+        confirmation_token: str | None = None,
+        audit_id: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if not account_ids:
+            raise ValueError("account_ids must not be empty")
+
+        audit_id = audit_id or str(uuid4())
+
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            try:
+                self._governance_checker(
+                    actor_id=user_id,
+                    role=role,
+                    level=level,
+                    action="trading.risk_monitor",
+                    target="trading",
+                    confirmation_token=confirmation_token,
+                    context={
+                        "actor": user_id,
+                        "accountIds": account_ids,
+                        "adminDecisionSource": admin_decision_source,
+                        "auditId": audit_id,
+                        "token": confirmation_token or "",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise TradingAdminRequiredError(str(exc)) from exc
+        elif not is_admin:
+            raise TradingAdminRequiredError("admin role required")
+
+        batch_key = idempotency_key
+        if batch_key:
+            existed = self._refresh_records.get((user_id, batch_key))
+            if existed is not None:
+                _stored_fingerprint, stored_result = existed
+                replay = dict(stored_result)
+                replay["idempotent"] = True
+                return replay
+
+        items: list[dict[str, Any]] = []
+        for account_id in account_ids:
+            self._assert_account_owner(user_id=user_id, account_id=account_id)
+            items.append(self.account_risk_metrics(user_id=user_id, account_id=account_id))
+
+        payload = {
+            "totalAccounts": len(items),
+            "items": items,
+            "checkedAt": (now or datetime.now(timezone.utc)).isoformat(),
+            "idempotent": False,
+            "auditId": audit_id,
+        }
+
+        if batch_key:
+            self._refresh_records[(user_id, batch_key)] = ("risk_monitor", dict(payload))
+
+        return payload
+
+    def cleanup_account_history(
+        self,
+        *,
+        user_id: str,
+        is_admin: bool,
+        admin_decision_source: str = "unknown",
+        account_ids: list[str],
+        days_threshold: int,
+        idempotency_key: str | None = None,
+        confirmation_token: str | None = None,
+        audit_id: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if not account_ids:
+            raise ValueError("account_ids must not be empty")
+        if days_threshold <= 0:
+            raise ValueError("days_threshold must be positive")
+
+        audit_id = audit_id or str(uuid4())
+
+        if self._governance_checker is not None:
+            role = "admin" if is_admin else "user"
+            level = 10 if is_admin else 1
+            try:
+                self._governance_checker(
+                    actor_id=user_id,
+                    role=role,
+                    level=level,
+                    action="trading.account_cleanup",
+                    target="trading",
+                    confirmation_token=confirmation_token,
+                    context={
+                        "actor": user_id,
+                        "daysThreshold": days_threshold,
+                        "accountIds": account_ids,
+                        "adminDecisionSource": admin_decision_source,
+                        "auditId": audit_id,
+                        "token": confirmation_token or "",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise TradingAdminRequiredError(str(exc)) from exc
+        elif not is_admin:
+            raise TradingAdminRequiredError("admin role required")
+
+        batch_key = idempotency_key
+        if batch_key:
+            existed = self._refresh_records.get((user_id, batch_key))
+            if existed is not None:
+                _stored_fingerprint, stored_result = existed
+                replay = dict(stored_result)
+                replay["idempotent"] = True
+                return replay
+
+        cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days_threshold)
+
+        deleted_orders = 0
+        for account_id in account_ids:
+            self._assert_account_owner(user_id=user_id, account_id=account_id)
+            cancelled = self._repository.list_orders_by_status(status="cancelled", account_id=account_id, user_id=user_id)
+            for order in cancelled:
+                if order.updated_at < cutoff:
+                    if self._repository.delete_order(order_id=order.id) is not None:
+                        deleted_orders += 1
+
+        payload = {
+            "cutoff": cutoff.isoformat(),
+            "deletedOrders": deleted_orders,
+            "idempotent": False,
+            "auditId": audit_id,
+        }
+
+        if batch_key:
+            self._refresh_records[(user_id, batch_key)] = ("account_cleanup", dict(payload))
+
+        return payload
 
     def refresh_market_prices(
         self,

@@ -163,6 +163,13 @@ class InMemoryTradingAccountRepository:
         with self._lock:
             self._orders[order.id] = self._clone_order(order)
 
+    def delete_order(self, *, order_id: str) -> TradeOrder | None:
+        with self._lock:
+            existed = self._orders.pop(order_id, None)
+            if existed is None:
+                return None
+            return self._clone_order(existed)
+
     def get_order(self, *, account_id: str, user_id: str, order_id: str) -> TradeOrder | None:
         with self._lock:
             order = self._orders.get(order_id)

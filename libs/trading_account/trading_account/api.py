@@ -112,6 +112,9 @@ def _job_payload(job) -> dict[str, Any]:
         "taskType": job.task_type,
         "status": job.status,
         "result": job.result,
+        "error": {"code": job.error_code, "message": job.error_message}
+        if job.error_code or job.error_message
+        else None,
     }
 
 def _cash_flow_to_payload(flow) -> dict[str, Any]:
@@ -157,6 +160,48 @@ class RefreshPricesRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
     confirmation_token: str | None = Field(default=None, alias="confirmationToken")
     account_id: str | None = Field(default=None, alias="accountId")
+
+    model_config = {"populate_by_name": True}
+
+
+class PendingProcessTaskRequest(BaseModel):
+    max_trades: int = Field(default=100, ge=1, alias="maxTrades")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
+
+    model_config = {"populate_by_name": True}
+
+
+class DailyStatsTaskRequest(BaseModel):
+    account_ids: list[str] = Field(default_factory=list, alias="accountIds")
+    target_date: str = Field(alias="targetDate")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
+
+    model_config = {"populate_by_name": True}
+
+
+class BatchExecuteTaskRequest(BaseModel):
+    trade_requests: list[dict[str, Any]] = Field(default_factory=list, alias="tradeRequests")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
+
+    model_config = {"populate_by_name": True}
+
+
+class RiskMonitorTaskRequest(BaseModel):
+    account_ids: list[str] = Field(default_factory=list, alias="accountIds")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
+
+    model_config = {"populate_by_name": True}
+
+
+class AccountCleanupTaskRequest(BaseModel):
+    account_ids: list[str] = Field(default_factory=list, alias="accountIds")
+    days_threshold: int = Field(default=90, ge=1, alias="daysThreshold")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    confirmation_token: str | None = Field(default=None, alias="confirmationToken")
 
     model_config = {"populate_by_name": True}
 
@@ -610,6 +655,265 @@ def create_router(
                 message=str(exc),
             )
 
+        return success_response(data=_job_payload(job))
+
+    @router.post("/trading/ops/pending/process-task")
+    def pending_process_task(body: PendingProcessTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return _error(
+                status_code=503,
+                code="TASK_ORCHESTRATION_UNAVAILABLE",
+                message="job orchestration is not configured",
+            )
+
+        decision = resolve_admin_decision(current_user)
+        if not decision.is_admin:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+
+        job_idempotency_key = body.idempotency_key or f"trading-pending-process:{current_user.id}:{body.max_trades}"
+
+        audit_id = f"audit-{current_user.id}:{datetime.now().timestamp()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="trading_pending_process",
+                payload={"maxTrades": body.max_trades},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.process_pending_trades(
+                user_id=current_user.id,
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
+                max_trades=body.max_trades,
+                idempotency_key=body.idempotency_key,
+                confirmation_token=body.confirmation_token,
+                audit_id=audit_id,
+            )
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        except TradingAdminRequiredError:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+        except ValueError as exc:
+            return _error(status_code=400, code="INVALID_ARGUMENT", message=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return _error(status_code=500, code="TASK_EXECUTION_FAILED", message=str(exc))
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/trading/ops/daily-stats/calculate-task")
+    def daily_stats_task(body: DailyStatsTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return _error(
+                status_code=503,
+                code="TASK_ORCHESTRATION_UNAVAILABLE",
+                message="job orchestration is not configured",
+            )
+
+        decision = resolve_admin_decision(current_user)
+        if not decision.is_admin:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+
+        job_idempotency_key = body.idempotency_key or f"trading-daily-stats:{current_user.id}:{body.target_date}"
+
+        audit_id = f"audit-{current_user.id}:{datetime.now().timestamp()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="trading_daily_stats_calculate",
+                payload={"accountIds": body.account_ids, "targetDate": body.target_date},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.calculate_daily_stats(
+                user_id=current_user.id,
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
+                account_ids=body.account_ids,
+                target_date=body.target_date,
+                idempotency_key=body.idempotency_key,
+                confirmation_token=body.confirmation_token,
+                audit_id=audit_id,
+            )
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        except TradingAdminRequiredError:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+        except ValueError as exc:
+            return _error(status_code=400, code="INVALID_ARGUMENT", message=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return _error(status_code=500, code="TASK_EXECUTION_FAILED", message=str(exc))
+
+        return success_response(data=_job_payload(job))
+
+    @router.get("/trading/stats/daily")
+    def get_daily_stats(
+        date: str = Query(...),
+        account_id: str = Query(..., alias="accountId"),
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            stats = service.get_daily_stats(user_id=current_user.id, date=date, account_id=account_id)
+        except AccountAccessDeniedError:
+            return _error(status_code=403, code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+
+        if stats is None:
+            return _error(status_code=404, code="NOT_FOUND", message="daily stats not found")
+
+        return success_response(data={"date": date, "items": [stats]})
+
+    @router.post("/trading/ops/batch/execute-task")
+    def batch_execute_task(body: BatchExecuteTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return _error(status_code=503, code="TASK_ORCHESTRATION_UNAVAILABLE", message="job orchestration is not configured")
+
+        decision = resolve_admin_decision(current_user)
+        if not decision.is_admin:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+
+        job_idempotency_key = body.idempotency_key or f"trading-batch-execute:{current_user.id}"
+
+        audit_id = f"audit-{current_user.id}:{datetime.now().timestamp()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="trading_batch_execute",
+                payload={"tradeRequests": body.trade_requests},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.batch_execute_trades(
+                user_id=current_user.id,
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
+                trade_requests=body.trade_requests,
+                idempotency_key=body.idempotency_key,
+                confirmation_token=body.confirmation_token,
+                audit_id=audit_id,
+            )
+            if int(result.get("failed", 0)) > 0:
+                job = job_service.fail_job(
+                    user_id=current_user.id,
+                    job_id=job.id,
+                    error_code="TRADING_BATCH_EXECUTE_FAILED",
+                    error_message="batch execute completed with failures",
+                )
+                job.result = result
+            else:
+                job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        except TradingAdminRequiredError:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+        except ValueError as exc:
+            return _error(status_code=400, code="INVALID_ARGUMENT", message=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return _error(status_code=500, code="TASK_EXECUTION_FAILED", message=str(exc))
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/trading/ops/risk/monitor-task")
+    def risk_monitor_task(body: RiskMonitorTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return _error(status_code=503, code="TASK_ORCHESTRATION_UNAVAILABLE", message="job orchestration is not configured")
+
+        decision = resolve_admin_decision(current_user)
+        if not decision.is_admin:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+
+        job_idempotency_key = body.idempotency_key or f"trading-risk-monitor:{current_user.id}"
+
+        audit_id = f"audit-{current_user.id}:{datetime.now().timestamp()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="trading_risk_monitor",
+                payload={"accountIds": body.account_ids},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.monitor_risk(
+                user_id=current_user.id,
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
+                account_ids=body.account_ids,
+                idempotency_key=body.idempotency_key,
+                confirmation_token=body.confirmation_token,
+                audit_id=audit_id,
+            )
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        except TradingAdminRequiredError:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+        except ValueError as exc:
+            return _error(status_code=400, code="INVALID_ARGUMENT", message=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return _error(status_code=500, code="TASK_EXECUTION_FAILED", message=str(exc))
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/trading/ops/accounts/cleanup-task")
+    def account_cleanup_task(body: AccountCleanupTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return _error(status_code=503, code="TASK_ORCHESTRATION_UNAVAILABLE", message="job orchestration is not configured")
+
+        decision = resolve_admin_decision(current_user)
+        if not decision.is_admin:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+
+        job_idempotency_key = body.idempotency_key or f"trading-account-cleanup:{current_user.id}:{body.days_threshold}"
+
+        audit_id = f"audit-{current_user.id}:{datetime.now().timestamp()}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="trading_account_cleanup",
+                payload={"accountIds": body.account_ids, "daysThreshold": body.days_threshold},
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.cleanup_account_history(
+                user_id=current_user.id,
+                is_admin=decision.is_admin,
+                admin_decision_source=decision.source,
+                account_ids=body.account_ids,
+                days_threshold=body.days_threshold,
+                idempotency_key=body.idempotency_key,
+                confirmation_token=body.confirmation_token,
+                audit_id=audit_id,
+            )
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
+        except TradingAdminRequiredError:
+            return _error(status_code=403, code="ADMIN_REQUIRED", message="admin role required")
+        except ValueError as exc:
+            return _error(status_code=400, code="INVALID_ARGUMENT", message=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return _error(status_code=500, code="TASK_EXECUTION_FAILED", message=str(exc))
+
+        return success_response(data=_job_payload(job))
+
+    @router.get("/trading/ops/tasks/{task_id}")
+    def trading_ops_task_status(task_id: str, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return _error(
+                status_code=503,
+                code="TASK_ORCHESTRATION_UNAVAILABLE",
+                message="job orchestration is not configured",
+            )
+
+        job = job_service.get_job(user_id=current_user.id, job_id=task_id)
+        if job is None:
+            return _error(status_code=404, code="TASK_NOT_FOUND", message="task not found")
         return success_response(data=_job_payload(job))
 
     @router.get("/trading/accounts/{account_id}/summary")
