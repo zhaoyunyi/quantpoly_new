@@ -21,6 +21,12 @@ from market_data.domain import (
 from market_data.service import MarketDataService
 from platform_core.response import error_response, success_response
 
+from job_orchestration.service import (
+    IdempotencyConflictError as JobIdempotencyConflictError,
+)
+from job_orchestration.service import JobOrchestrationService
+from pydantic import BaseModel, Field
+
 
 def _dt(value: datetime | None) -> str | None:
     if value is None:
@@ -100,8 +106,250 @@ def _error_to_response(error: MarketDataError) -> JSONResponse:
     return JSONResponse(status_code=status, content=payload)
 
 
-def create_router(*, service: MarketDataService, get_current_user: Any) -> APIRouter:
+class SyncTaskRequest(BaseModel):
+    symbols: list[str] = Field(default_factory=list)
+    start_date: str = Field(alias="startDate")
+    end_date: str = Field(alias="endDate")
+    timeframe: str = Field(default="1Day")
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
+class IndicatorSpec(BaseModel):
+    name: str
+    period: int | None = None
+
+
+class IndicatorsTaskRequest(BaseModel):
+    symbol: str
+    start_date: str = Field(alias="startDate")
+    end_date: str = Field(alias="endDate")
+    timeframe: str = Field(default="1Day")
+    indicators: list[IndicatorSpec] = Field(default_factory=list)
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+
+    model_config = {"populate_by_name": True}
+
+
+class BoundaryCheckRequest(BaseModel):
+    symbols: list[str] = Field(default_factory=list)
+
+
+def _job_payload(job) -> dict[str, Any]:
+    return {
+        "taskId": job.id,
+        "taskType": job.task_type,
+        "status": job.status,
+        "result": job.result,
+        "error": {"code": job.error_code, "message": job.error_message}
+        if job.error_code or job.error_message
+        else None,
+    }
+
+
+def create_router(
+    *,
+    service: MarketDataService,
+    get_current_user: Any,
+    job_service: JobOrchestrationService | None = None,
+) -> APIRouter:
     router = APIRouter()
+
+    @router.post("/market/sync-task")
+    def submit_sync_task(body: SyncTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"market-data-sync:{','.join(body.symbols)}:{body.start_date}:{body.end_date}:{body.timeframe}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="market_data_sync",
+                payload={
+                    "symbols": body.symbols,
+                    "startDate": body.start_date,
+                    "endDate": body.end_date,
+                    "timeframe": body.timeframe,
+                },
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.sync_market_data(
+                user_id=current_user.id,
+                symbols=body.symbols,
+                start_date=body.start_date,
+                end_date=body.end_date,
+                timeframe=body.timeframe,
+            )
+            service.record_sync_result(user_id=current_user.id, task_id=job.id, result=result)
+            if result["summary"]["failureCount"] > 0:
+                job = job_service.fail_job(
+                    user_id=current_user.id,
+                    job_id=job.id,
+                    error_code="MARKET_DATA_SYNC_FAILED",
+                    error_message="market data sync completed with failures",
+                )
+                job.result = result
+            else:
+                job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.get("/market/sync-task/{task_id}")
+    def sync_task_status(task_id: str, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job = job_service.get_job(user_id=current_user.id, job_id=task_id)
+        if job is None:
+            return JSONResponse(status_code=404, content=error_response(code="TASK_NOT_FOUND", message="task not found"))
+
+        result = job.result
+        if result is None:
+            stored = service.get_sync_result(user_id=current_user.id, task_id=task_id)
+            if stored is not None:
+                result = stored
+                job.result = stored
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/market/sync-task/{task_id}/retry")
+    def retry_sync_task(task_id: str, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job = job_service.get_job(user_id=current_user.id, job_id=task_id)
+        if job is None:
+            return JSONResponse(status_code=404, content=error_response(code="TASK_NOT_FOUND", message="task not found"))
+
+        try:
+            job_service.retry_job(user_id=current_user.id, job_id=task_id)
+            job_service.start_job(user_id=current_user.id, job_id=task_id)
+            payload = dict(job.payload or {})
+            result = service.sync_market_data(
+                user_id=current_user.id,
+                symbols=list(payload.get("symbols") or []),
+                start_date=str(payload.get("startDate") or ""),
+                end_date=str(payload.get("endDate") or ""),
+                timeframe=str(payload.get("timeframe") or "1Day"),
+            )
+            service.record_sync_result(user_id=current_user.id, task_id=task_id, result=result)
+            if result["summary"]["failureCount"] > 0:
+                job = job_service.fail_job(
+                    user_id=current_user.id,
+                    job_id=task_id,
+                    error_code="MARKET_DATA_SYNC_FAILED",
+                    error_message="market data sync completed with failures",
+                )
+                job.result = result
+            else:
+                job = job_service.succeed_job(user_id=current_user.id, job_id=task_id, result=result)
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.post("/market/indicators/calculate-task")
+    def submit_indicators_task(body: IndicatorsTaskRequest, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        job_idempotency_key = body.idempotency_key or f"market-indicators:{body.symbol}:{body.start_date}:{body.end_date}:{body.timeframe}"
+
+        try:
+            job = job_service.submit_job(
+                user_id=current_user.id,
+                task_type="market_indicators_calculate",
+                payload={
+                    "symbol": body.symbol,
+                    "startDate": body.start_date,
+                    "endDate": body.end_date,
+                    "timeframe": body.timeframe,
+                    "indicators": [spec.model_dump() for spec in body.indicators],
+                },
+                idempotency_key=job_idempotency_key,
+            )
+            job_service.start_job(user_id=current_user.id, job_id=job.id)
+            result = service.calculate_indicators(
+                user_id=current_user.id,
+                symbol=body.symbol,
+                start_date=body.start_date,
+                end_date=body.end_date,
+                timeframe=body.timeframe,
+                indicators=[spec.model_dump() for spec in body.indicators],
+            )
+            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+        except JobIdempotencyConflictError:
+            return JSONResponse(
+                status_code=409,
+                content=error_response(code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                status_code=500,
+                content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
+            )
+
+        return success_response(data=_job_payload(job))
+
+    @router.get("/market/indicators/calculate-task/{task_id}")
+    def indicators_task_status(task_id: str, current_user=Depends(get_current_user)):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+        job = job_service.get_job(user_id=current_user.id, job_id=task_id)
+        if job is None:
+            return JSONResponse(status_code=404, content=error_response(code="TASK_NOT_FOUND", message="task not found"))
+        return success_response(data=_job_payload(job))
+
+    @router.post("/market/boundary/check")
+    def boundary_check(body: BoundaryCheckRequest, current_user=Depends(get_current_user)):
+        report = service.boundary_check(user_id=current_user.id, symbols=body.symbols)
+        return success_response(data=report)
 
     @router.get("/market/search")
     def search_assets(

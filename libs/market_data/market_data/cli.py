@@ -217,6 +217,57 @@ def _cmd_history(args: argparse.Namespace) -> None:
     )
 
 
+def _parse_json(text: str) -> object:
+    if not text:
+        return None
+    return json.loads(text)
+
+
+def _cmd_sync(args: argparse.Namespace) -> None:
+    symbols = _parse_symbols(args.symbols)
+    try:
+        result = _service.sync_market_data(
+            user_id=args.user_id,
+            symbols=symbols,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            timeframe=args.timeframe,
+        )
+    except MarketDataError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
+        return
+
+    _output({"success": True, "data": result})
+
+
+def _cmd_indicators_calculate(args: argparse.Namespace) -> None:
+    raw = _parse_json(args.indicators)
+    indicators: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        indicators = [item for item in raw if isinstance(item, dict)]
+
+    try:
+        result = _service.calculate_indicators(
+            user_id=args.user_id,
+            symbol=args.symbol,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            timeframe=args.timeframe,
+            indicators=indicators,
+        )
+    except MarketDataError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
+        return
+
+    _output({"success": True, "data": result})
+
+
+def _cmd_boundary_check(args: argparse.Namespace) -> None:
+    symbols = _parse_symbols(args.symbols)
+    report = _service.boundary_check(user_id=args.user_id, symbols=symbols)
+    _output({"success": True, "data": report})
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="market-data", description="QuantPoly 市场数据 CLI")
     sub = parser.add_subparsers(dest="command")
@@ -257,6 +308,29 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--timeframe", default="1Day")
     history.add_argument("--limit", type=int, default=None)
 
+    sync = sub.add_parser("sync", help="同步行情数据")
+    sync.add_argument("--user-id", required=True)
+    sync.add_argument("--symbols", required=True, help="逗号分隔的 symbol 列表")
+    sync.add_argument("--start-date", required=True)
+    sync.add_argument("--end-date", required=True)
+    sync.add_argument("--timeframe", default="1Day")
+
+    indicators = sub.add_parser("indicators", help="技术指标")
+    indicators_sub = indicators.add_subparsers(dest="indicators_command")
+    calculate = indicators_sub.add_parser("calculate", help="计算技术指标")
+    calculate.add_argument("--user-id", required=True)
+    calculate.add_argument("--symbol", required=True)
+    calculate.add_argument("--start-date", required=True)
+    calculate.add_argument("--end-date", required=True)
+    calculate.add_argument("--timeframe", default="1Day")
+    calculate.add_argument("--indicators", required=True, help='JSON: [{"name":"sma","period":3}]')
+
+    boundary = sub.add_parser("boundary", help="同步后边界一致性")
+    boundary_sub = boundary.add_subparsers(dest="boundary_command")
+    boundary_check = boundary_sub.add_parser("check", help="执行边界一致性校验")
+    boundary_check.add_argument("--user-id", required=True)
+    boundary_check.add_argument("--symbols", required=True, help="逗号分隔的 symbol 列表")
+
     return parser
 
 
@@ -269,6 +343,17 @@ _COMMANDS = {
     "quotes": _cmd_quotes,
     "provider-health": _cmd_provider_health,
     "history": _cmd_history,
+    "sync": _cmd_sync,
+}
+
+
+_NESTED_COMMANDS: dict[str, dict[str, Any]] = {
+    "indicators": {
+        "calculate": _cmd_indicators_calculate,
+    },
+    "boundary": {
+        "check": _cmd_boundary_check,
+    },
 }
 
 
@@ -282,8 +367,23 @@ def main() -> None:
 
     handler = _COMMANDS.get(args.command)
     if handler is None:
-        parser.print_help()
-        sys.exit(1)
+        nested = _NESTED_COMMANDS.get(args.command)
+        if nested is None:
+            parser.print_help()
+            sys.exit(1)
+
+        nested_key = None
+        if args.command == "indicators":
+            nested_key = getattr(args, "indicators_command", None)
+        elif args.command == "boundary":
+            nested_key = getattr(args, "boundary_command", None)
+
+        nested_handler = nested.get(str(nested_key or "")) if nested_key else None
+        if nested_handler is None:
+            parser.print_help()
+            sys.exit(1)
+        nested_handler(args)
+        return
 
     handler(args)
 

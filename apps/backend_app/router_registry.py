@@ -345,7 +345,13 @@ def register_all_routes(
         app.include_router(create_trading_router(service=trading_service, get_current_user=get_current_user, job_service=job_service))
 
     if "market-data" in enabled_contexts:
-        app.include_router(create_market_router(service=context.market_service, get_current_user=get_current_user))
+        app.include_router(
+            create_market_router(
+                service=context.market_service,
+                get_current_user=get_current_user,
+                job_service=job_service,
+            )
+        )
 
     if "risk-control" in enabled_contexts:
         app.include_router(create_risk_router(service=risk_service, get_current_user=get_current_user, job_service=job_service))

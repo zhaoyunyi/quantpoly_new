@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from market_data.cache import InMemoryTTLCache
 from market_data.domain import (
@@ -18,6 +19,7 @@ from market_data.domain import (
 )
 from market_data.provider import MarketDataProvider
 from market_data.rate_limit import SlidingWindowRateLimiter
+from market_data.pipeline_store import InMemoryMarketDataPipelineStore
 
 
 @dataclass
@@ -43,6 +45,7 @@ class MarketDataService:
         rate_limit_window_seconds: int = 10,
         cache: InMemoryTTLCache | None = None,
         quote_rate_limiter: SlidingWindowRateLimiter | None = None,
+        pipeline_store: InMemoryMarketDataPipelineStore | None = None,
     ) -> None:
         self._provider = provider
         self._quote_cache_ttl_seconds = quote_cache_ttl_seconds
@@ -51,6 +54,7 @@ class MarketDataService:
             max_requests=rate_limit_max_requests,
             window_seconds=rate_limit_window_seconds,
         )
+        self._pipeline_store = pipeline_store or InMemoryMarketDataPipelineStore()
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:
@@ -249,3 +253,140 @@ class MarketDataService:
             timeframe=timeframe,
             limit=limit,
         )
+
+    def sync_market_data(
+        self,
+        *,
+        user_id: str,
+        symbols: list[str],
+        start_date: str,
+        end_date: str,
+        timeframe: str = "1Day",
+    ) -> dict[str, Any]:
+        """同步行情数据（迁移期：以 provider.history 抽样拉取）。"""
+
+        normalized_symbols = self._normalize_symbols(symbols)
+        results: list[dict[str, Any]] = []
+        success_count = 0
+        failure_count = 0
+
+        for symbol in normalized_symbols:
+            try:
+                rows = self.get_history(
+                    user_id=user_id,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    timeframe=timeframe,
+                )
+                self._pipeline_store.record_synced_symbol(
+                    user_id=user_id,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    timeframe=timeframe,
+                    row_count=len(rows),
+                )
+                results.append({"symbol": symbol, "status": "ok", "rowCount": len(rows)})
+                success_count += 1
+            except Exception as exc:  # noqa: BLE001
+                mapped = self._map_provider_error(exc)
+                results.append(
+                    {
+                        "symbol": symbol,
+                        "status": "error",
+                        "errorCode": mapped.code,
+                        "errorMessage": mapped.message,
+                        "retryable": mapped.retryable,
+                    }
+                )
+                failure_count += 1
+
+        return {
+            "summary": {
+                "totalSymbols": len(normalized_symbols),
+                "successCount": success_count,
+                "failureCount": failure_count,
+                "startDate": start_date,
+                "endDate": end_date,
+                "timeframe": timeframe,
+            },
+            "items": results,
+        }
+
+    def record_sync_result(self, *, user_id: str, task_id: str, result: dict[str, Any]) -> None:
+        self._pipeline_store.record_sync_result(user_id=user_id, task_id=task_id, result=result)
+
+    def get_sync_result(self, *, user_id: str, task_id: str) -> dict[str, Any] | None:
+        return self._pipeline_store.get_sync_result(user_id=user_id, task_id=task_id)
+
+    def calculate_indicators(
+        self,
+        *,
+        user_id: str,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        timeframe: str,
+        indicators: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """计算技术指标（迁移期：仅实现最小 SMA）。"""
+
+        normalized_symbol = self._normalize_symbol(symbol)
+        rows = self.get_history(
+            user_id=user_id,
+            symbol=normalized_symbol,
+            start_date=start_date,
+            end_date=end_date,
+            timeframe=timeframe,
+        )
+        close_prices = [row.close_price for row in rows]
+
+        outputs: list[dict[str, Any]] = []
+        for spec in indicators:
+            name = str(spec.get("name") or "").strip().lower()
+            period = int(spec.get("period") or 0)
+            if name != "sma" or period <= 0:
+                outputs.append({"name": name or "unknown", "period": period, "status": "unsupported"})
+                continue
+
+            if len(close_prices) < period:
+                outputs.append(
+                    {
+                        "name": "sma",
+                        "period": period,
+                        "status": "insufficient_data",
+                    }
+                )
+                continue
+
+            window = close_prices[-period:]
+            value = sum(window) / float(period)
+            outputs.append({"name": "sma", "period": period, "value": value})
+
+        return {
+            "symbol": normalized_symbol,
+            "startDate": start_date,
+            "endDate": end_date,
+            "timeframe": timeframe,
+            "indicators": outputs,
+        }
+
+    def boundary_check(self, *, user_id: str, symbols: list[str]) -> dict[str, Any]:
+        """边界一致性校验：对账预期 symbols 与已同步 symbols。"""
+
+        from data_topology_boundary.reconciliation import reconcile_by_key
+
+        normalized_symbols = self._normalize_symbols(symbols)
+        before_rows = [{"symbol": symbol} for symbol in normalized_symbols]
+        after_rows = [{"symbol": symbol} for symbol in self._pipeline_store.list_synced_symbols(user_id=user_id)]
+        report = reconcile_by_key(before_rows=before_rows, after_rows=after_rows, key="symbol")
+
+        return {
+            "consistent": report.consistent,
+            "missingIds": report.missing_ids,
+            "extraIds": report.extra_ids,
+            "mismatchCount": report.mismatch_count,
+            "beforeCount": report.before_count,
+            "afterCount": report.after_count,
+        }

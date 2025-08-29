@@ -47,6 +47,38 @@ def test_composition_root_registers_rest_and_ws_contexts():
     assert "/ws/monitor" in paths
 
 
+def test_composition_market_data_sync_task_executes_with_job_orchestration():
+    app = create_app(storage_backend="memory")
+    client = TestClient(app)
+    token = _register_and_login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.post(
+        "/market/sync-task",
+        headers=headers,
+        json={
+            "symbols": ["AAPL", "MSFT"],
+            "startDate": "2026-02-01",
+            "endDate": "2026-02-05",
+            "idempotencyKey": "composition-sync-1",
+        },
+    )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert payload["data"]["taskType"] == "market_data_sync"
+    assert payload["data"]["status"] in {"succeeded", "failed"}
+    assert payload["data"]["result"]["summary"]["totalSymbols"] == 2
+
+    status = client.get(
+        f"/market/sync-task/{payload['data']['taskId']}",
+        headers=headers,
+    )
+    assert status.status_code == 200
+    assert status.json()["data"]["status"] in {"succeeded", "failed"}
+
+
 def test_composition_root_module_switch_disables_selected_contexts():
     app = create_app(enabled_contexts={"user-auth", "strategy-management"}, storage_backend="memory")
 
