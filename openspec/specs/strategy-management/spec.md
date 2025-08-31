@@ -72,3 +72,18 @@ TBD - created by archiving change add-strategy-backtest-migration. Update Purpos
 - **THEN** 返回该策略可访问范围内的回测统计
 - **AND** 不包含他人数据
 
+### Requirement: 策略域必须支持研究自动化任务
+策略管理系统 MUST 支持策略绩效分析与优化建议任务化提交，支持异步结果追踪。
+
+#### Scenario: 提交策略绩效分析任务
+- **GIVEN** 用户拥有可访问策略
+- **WHEN** 提交策略绩效分析任务
+- **THEN** 返回可追踪 `taskId`
+- **AND** 结果仅允许策略所有者读取
+
+#### Scenario: 提交优化建议任务并读取结果
+- **GIVEN** 用户策略具备历史执行数据
+- **WHEN** 提交优化建议任务并轮询完成
+- **THEN** 返回结构化优化建议
+- **AND** 建议结果包含生成时间与适用参数范围
+
