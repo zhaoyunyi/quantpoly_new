@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -320,6 +321,291 @@ class MarketDataService:
     def get_sync_result(self, *, user_id: str, task_id: str) -> dict[str, Any] | None:
         return self._pipeline_store.get_sync_result(user_id=user_id, task_id=task_id)
 
+    @staticmethod
+    def _parse_positive_int(raw_value: Any, *, default: int | None = None) -> int | None:
+        candidate = raw_value if raw_value is not None else default
+        if candidate is None:
+            return None
+        try:
+            parsed = int(candidate)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
+
+    @staticmethod
+    def _parse_positive_float(raw_value: Any, *, default: float | None = None) -> float | None:
+        candidate = raw_value if raw_value is not None else default
+        if candidate is None:
+            return None
+        try:
+            parsed = float(candidate)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
+
+    @staticmethod
+    def _ema_series(values: list[float], period: int) -> list[float]:
+        if period <= 0 or len(values) < period:
+            return []
+
+        smoothing = 2.0 / (period + 1.0)
+        seed = sum(values[:period]) / float(period)
+        series = [seed]
+        ema = seed
+        for value in values[period:]:
+            ema = (value - ema) * smoothing + ema
+            series.append(ema)
+        return series
+
+    @staticmethod
+    def _extract_indicator_parameters(spec: dict[str, Any]) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        for key in ('period', 'fast', 'slow', 'signal', 'stdDev', 'std_dev'):
+            if key in spec and spec[key] is not None:
+                normalized_key = 'stdDev' if key == 'std_dev' else key
+                metadata[normalized_key] = spec[key]
+        return metadata
+
+    @classmethod
+    def _build_unsupported_indicator(
+        cls,
+        *,
+        name: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        output = {
+            'name': name,
+            'status': 'unsupported',
+            'metadata': metadata or {},
+        }
+        period = cls._parse_positive_int((metadata or {}).get('period'))
+        if period is not None:
+            output['period'] = period
+        return output
+
+    @classmethod
+    def _build_insufficient_indicator(
+        cls,
+        *,
+        name: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        output = {
+            'name': name,
+            'status': 'insufficient_data',
+            'metadata': metadata,
+        }
+        period = cls._parse_positive_int(metadata.get('period'))
+        if period is not None:
+            output['period'] = period
+        return output
+
+    @classmethod
+    def _build_ok_indicator(
+        cls,
+        *,
+        name: str,
+        value: float,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        output = {
+            'name': name,
+            'status': 'ok',
+            'value': float(value),
+            'metadata': metadata,
+        }
+        period = cls._parse_positive_int(metadata.get('period'))
+        if period is not None:
+            output['period'] = period
+        return output
+
+    def _calculate_sma_indicator(self, *, close_prices: list[float], spec: dict[str, Any]) -> dict[str, Any]:
+        period = self._parse_positive_int(spec.get('period'), default=20)
+        if period is None:
+            return self._build_unsupported_indicator(
+                name='sma',
+                metadata=self._extract_indicator_parameters(spec),
+            )
+
+        if len(close_prices) < period:
+            return self._build_insufficient_indicator(
+                name='sma',
+                metadata={
+                    'period': period,
+                    'requiredDataPoints': period,
+                    'actualDataPoints': len(close_prices),
+                },
+            )
+
+        window = close_prices[-period:]
+        value = sum(window) / float(period)
+        return self._build_ok_indicator(name='sma', value=value, metadata={'period': period})
+
+    def _calculate_ema_indicator(self, *, close_prices: list[float], spec: dict[str, Any]) -> dict[str, Any]:
+        period = self._parse_positive_int(spec.get('period'), default=20)
+        if period is None:
+            return self._build_unsupported_indicator(
+                name='ema',
+                metadata=self._extract_indicator_parameters(spec),
+            )
+
+        ema_series = self._ema_series(close_prices, period)
+        if not ema_series:
+            return self._build_insufficient_indicator(
+                name='ema',
+                metadata={
+                    'period': period,
+                    'requiredDataPoints': period,
+                    'actualDataPoints': len(close_prices),
+                },
+            )
+
+        return self._build_ok_indicator(name='ema', value=ema_series[-1], metadata={'period': period})
+
+    def _calculate_rsi_indicator(self, *, close_prices: list[float], spec: dict[str, Any]) -> dict[str, Any]:
+        period = self._parse_positive_int(spec.get('period'), default=14)
+        if period is None:
+            return self._build_unsupported_indicator(
+                name='rsi',
+                metadata=self._extract_indicator_parameters(spec),
+            )
+
+        required_points = period + 1
+        if len(close_prices) < required_points:
+            return self._build_insufficient_indicator(
+                name='rsi',
+                metadata={
+                    'period': period,
+                    'requiredDataPoints': required_points,
+                    'actualDataPoints': len(close_prices),
+                },
+            )
+
+        prices = close_prices[-required_points:]
+        deltas = [
+            prices[idx] - prices[idx - 1]
+            for idx in range(1, len(prices))
+        ]
+        gains = [max(delta, 0.0) for delta in deltas]
+        losses = [abs(min(delta, 0.0)) for delta in deltas]
+
+        average_gain = sum(gains) / float(period)
+        average_loss = sum(losses) / float(period)
+
+        if average_loss == 0 and average_gain == 0:
+            rsi = 50.0
+        elif average_loss == 0:
+            rsi = 100.0
+        else:
+            relative_strength = average_gain / average_loss
+            rsi = 100.0 - (100.0 / (1.0 + relative_strength))
+
+        return self._build_ok_indicator(name='rsi', value=rsi, metadata={'period': period})
+
+    def _calculate_macd_indicator(self, *, close_prices: list[float], spec: dict[str, Any]) -> dict[str, Any]:
+        fast = self._parse_positive_int(spec.get('fast'), default=12)
+        slow = self._parse_positive_int(spec.get('slow'), default=26)
+        signal = self._parse_positive_int(spec.get('signal'), default=9)
+
+        if fast is None or slow is None or signal is None or fast >= slow:
+            return self._build_unsupported_indicator(
+                name='macd',
+                metadata=self._extract_indicator_parameters(spec),
+            )
+
+        if len(close_prices) < slow:
+            return self._build_insufficient_indicator(
+                name='macd',
+                metadata={
+                    'fast': fast,
+                    'slow': slow,
+                    'signal': signal,
+                    'requiredDataPoints': slow,
+                    'actualDataPoints': len(close_prices),
+                },
+            )
+
+        macd_series: list[float] = []
+        for index in range(slow - 1, len(close_prices)):
+            prices = close_prices[: index + 1]
+            fast_series = self._ema_series(prices, fast)
+            slow_series = self._ema_series(prices, slow)
+            if not fast_series or not slow_series:
+                continue
+            macd_series.append(fast_series[-1] - slow_series[-1])
+
+        if not macd_series:
+            return self._build_insufficient_indicator(
+                name='macd',
+                metadata={
+                    'fast': fast,
+                    'slow': slow,
+                    'signal': signal,
+                    'requiredDataPoints': slow,
+                    'actualDataPoints': len(close_prices),
+                },
+            )
+
+        signal_series = self._ema_series(macd_series, signal)
+        macd_value = macd_series[-1]
+        signal_value = signal_series[-1] if signal_series else macd_value
+        histogram = macd_value - signal_value
+
+        return self._build_ok_indicator(
+            name='macd',
+            value=macd_value,
+            metadata={
+                'fast': fast,
+                'slow': slow,
+                'signal': signal,
+                'signalLine': signal_value,
+                'histogram': histogram,
+            },
+        )
+
+    def _calculate_bollinger_indicator(self, *, close_prices: list[float], spec: dict[str, Any]) -> dict[str, Any]:
+        period = self._parse_positive_int(spec.get('period'), default=20)
+        std_dev = self._parse_positive_float(spec.get('stdDev') or spec.get('std_dev'), default=2.0)
+
+        if period is None or std_dev is None:
+            return self._build_unsupported_indicator(
+                name='bollinger',
+                metadata=self._extract_indicator_parameters(spec),
+            )
+
+        if len(close_prices) < period:
+            return self._build_insufficient_indicator(
+                name='bollinger',
+                metadata={
+                    'period': period,
+                    'stdDev': std_dev,
+                    'requiredDataPoints': period,
+                    'actualDataPoints': len(close_prices),
+                },
+            )
+
+        window = close_prices[-period:]
+        middle = sum(window) / float(period)
+        variance = sum((price - middle) ** 2 for price in window) / float(period)
+        deviation = math.sqrt(variance)
+        upper = middle + std_dev * deviation
+        lower = middle - std_dev * deviation
+
+        return self._build_ok_indicator(
+            name='bollinger',
+            value=middle,
+            metadata={
+                'period': period,
+                'stdDev': std_dev,
+                'upperBand': upper,
+                'lowerBand': lower,
+            },
+        )
+
     def calculate_indicators(
         self,
         *,
@@ -330,7 +616,7 @@ class MarketDataService:
         timeframe: str,
         indicators: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """计算技术指标（迁移期：仅实现最小 SMA）。"""
+        """计算技术指标（SMA/EMA/RSI/MACD/BOLL）。"""
 
         normalized_symbol = self._normalize_symbol(symbol)
         rows = self.get_history(
@@ -340,36 +626,38 @@ class MarketDataService:
             end_date=end_date,
             timeframe=timeframe,
         )
-        close_prices = [row.close_price for row in rows]
+        close_prices = [float(row.close_price) for row in rows]
+
+        calculators = {
+            'sma': self._calculate_sma_indicator,
+            'ema': self._calculate_ema_indicator,
+            'rsi': self._calculate_rsi_indicator,
+            'macd': self._calculate_macd_indicator,
+            'bollinger': self._calculate_bollinger_indicator,
+        }
 
         outputs: list[dict[str, Any]] = []
-        for spec in indicators:
-            name = str(spec.get("name") or "").strip().lower()
-            period = int(spec.get("period") or 0)
-            if name != "sma" or period <= 0:
-                outputs.append({"name": name or "unknown", "period": period, "status": "unsupported"})
-                continue
-
-            if len(close_prices) < period:
+        for raw_spec in indicators:
+            spec = raw_spec if isinstance(raw_spec, dict) else {}
+            name = str(spec.get('name') or '').strip().lower() or 'unknown'
+            calculator = calculators.get(name)
+            if calculator is None:
                 outputs.append(
-                    {
-                        "name": "sma",
-                        "period": period,
-                        "status": "insufficient_data",
-                    }
+                    self._build_unsupported_indicator(
+                        name=name,
+                        metadata=self._extract_indicator_parameters(spec),
+                    )
                 )
                 continue
 
-            window = close_prices[-period:]
-            value = sum(window) / float(period)
-            outputs.append({"name": "sma", "period": period, "value": value})
+            outputs.append(calculator(close_prices=close_prices, spec=spec))
 
         return {
-            "symbol": normalized_symbol,
-            "startDate": start_date,
-            "endDate": end_date,
-            "timeframe": timeframe,
-            "indicators": outputs,
+            'symbol': normalized_symbol,
+            'startDate': start_date,
+            'endDate': end_date,
+            'timeframe': timeframe,
+            'indicators': outputs,
         }
 
     def boundary_check(self, *, user_id: str, symbols: list[str]) -> dict[str, Any]:

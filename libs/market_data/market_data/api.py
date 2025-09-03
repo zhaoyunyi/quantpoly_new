@@ -119,6 +119,12 @@ class SyncTaskRequest(BaseModel):
 class IndicatorSpec(BaseModel):
     name: str
     period: int | None = None
+    fast: int | None = None
+    slow: int | None = None
+    signal: int | None = None
+    std_dev: float | None = Field(default=None, alias="stdDev")
+
+    model_config = {"populate_by_name": True}
 
 
 class IndicatorsTaskRequest(BaseModel):
@@ -304,7 +310,7 @@ def create_router(
                     "startDate": body.start_date,
                     "endDate": body.end_date,
                     "timeframe": body.timeframe,
-                    "indicators": [spec.model_dump() for spec in body.indicators],
+                    "indicators": [spec.model_dump(by_alias=True, exclude_none=True) for spec in body.indicators],
                 },
                 idempotency_key=job_idempotency_key,
             )
@@ -315,7 +321,7 @@ def create_router(
                 start_date=body.start_date,
                 end_date=body.end_date,
                 timeframe=body.timeframe,
-                indicators=[spec.model_dump() for spec in body.indicators],
+                indicators=[spec.model_dump(by_alias=True, exclude_none=True) for spec in body.indicators],
             )
             job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
