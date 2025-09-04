@@ -16,7 +16,7 @@ def test_create_and_list_strategies_are_user_scoped():
         user_id="u-1",
         name="mean-reversion-1",
         template="mean_reversion",
-        parameters={"window": 20},
+        parameters={"window": 20, "entryZ": 1.5, "exitZ": 0.5},
     )
 
     mine = service.list_strategies(user_id="u-1")
@@ -38,7 +38,7 @@ def test_get_strategy_returns_none_for_non_owner():
         user_id="u-1",
         name="mean-reversion-1",
         template="mean_reversion",
-        parameters={"window": 20},
+        parameters={"window": 20, "entryZ": 1.5, "exitZ": 0.5},
     )
 
     assert service.get_strategy(user_id="u-2", strategy_id=created.id) is None
@@ -56,7 +56,7 @@ def test_delete_strategy_blocked_when_backtest_in_use():
         user_id="u-1",
         name="mean-reversion-1",
         template="mean_reversion",
-        parameters={"window": 20},
+        parameters={"window": 20, "entryZ": 1.5, "exitZ": 0.5},
     )
 
     with pytest.raises(StrategyInUseError):
@@ -74,7 +74,7 @@ def test_delete_strategy_success_when_no_active_backtests():
         user_id="u-1",
         name="mean-reversion-1",
         template="mean_reversion",
-        parameters={"window": 20},
+        parameters={"window": 20, "entryZ": 1.5, "exitZ": 0.5},
     )
 
     service.delete_strategy(user_id="u-1", strategy_id=created.id)

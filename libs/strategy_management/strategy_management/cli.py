@@ -106,12 +106,17 @@ def _cmd_create(args: argparse.Namespace) -> None:
         _output({"success": False, "error": {"code": "INVALID_PARAMETERS", "message": "invalid parameters json"}})
         return
 
-    created = _service.create_strategy(
-        user_id=args.user_id,
-        name=args.name,
-        template=args.template,
-        parameters=parameters,
-    )
+    try:
+        created = _service.create_strategy(
+            user_id=args.user_id,
+            name=args.name,
+            template=args.template,
+            parameters=parameters,
+        )
+    except InvalidStrategyParametersError as exc:
+        _output({"success": False, "error": {"code": "STRATEGY_INVALID_PARAMETERS", "message": str(exc)}})
+        return
+
     _output({"success": True, "data": _serialize_strategy(created)})
 
 

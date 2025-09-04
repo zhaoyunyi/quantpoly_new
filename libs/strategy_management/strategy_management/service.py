@@ -13,15 +13,84 @@ from strategy_management.domain import (
 from strategy_management.repository import InMemoryStrategyRepository
 
 _TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
+    "moving_average": {
+        "templateId": "moving_average",
+        "name": "双均线",
+        "requiredParameters": {
+            "shortWindow": {"type": "int", "min": 2, "max": 200},
+            "longWindow": {"type": "int", "min": 3, "max": 400},
+        },
+        "defaults": {
+            "shortWindow": 5,
+            "longWindow": 20,
+        },
+    },
+    "bollinger_bands": {
+        "templateId": "bollinger_bands",
+        "name": "布林带",
+        "requiredParameters": {
+            "period": {"type": "int", "min": 5, "max": 200},
+            "stdDev": {"type": "float", "min": 0.1, "max": 5.0},
+        },
+        "defaults": {
+            "period": 20,
+            "stdDev": 2.0,
+        },
+    },
+    "rsi": {
+        "templateId": "rsi",
+        "name": "RSI 反转",
+        "requiredParameters": {
+            "period": {"type": "int", "min": 2, "max": 200},
+            "oversold": {"type": "float", "min": 0.0, "max": 100.0},
+            "overbought": {"type": "float", "min": 0.0, "max": 100.0},
+        },
+        "defaults": {
+            "period": 14,
+            "oversold": 30.0,
+            "overbought": 70.0,
+        },
+    },
+    "macd": {
+        "templateId": "macd",
+        "name": "MACD 趋势",
+        "requiredParameters": {
+            "fast": {"type": "int", "min": 1, "max": 100},
+            "slow": {"type": "int", "min": 2, "max": 200},
+            "signal": {"type": "int", "min": 1, "max": 100},
+        },
+        "defaults": {
+            "fast": 12,
+            "slow": 26,
+            "signal": 9,
+        },
+    },
     "mean_reversion": {
         "templateId": "mean_reversion",
         "name": "均值回归",
         "requiredParameters": {
-            "window": {"type": "int", "min": 2},
-            "entryZ": {"type": "float", "min": 0.1},
-            "exitZ": {"type": "float", "min": 0.0},
+            "window": {"type": "int", "min": 2, "max": 300},
+            "entryZ": {"type": "float", "min": 0.1, "max": 5.0},
+            "exitZ": {"type": "float", "min": 0.0, "max": 5.0},
         },
-    }
+        "defaults": {
+            "window": 20,
+            "entryZ": 1.5,
+            "exitZ": 0.5,
+        },
+    },
+    "momentum": {
+        "templateId": "momentum",
+        "name": "动量突破",
+        "requiredParameters": {
+            "lookback": {"type": "int", "min": 2, "max": 252},
+            "threshold": {"type": "float", "min": 0.0, "max": 1.0},
+        },
+        "defaults": {
+            "lookback": 20,
+            "threshold": 0.05,
+        },
+    },
 }
 
 
@@ -52,31 +121,85 @@ class StrategyService:
     def list_templates(self) -> list[dict[str, Any]]:
         return list(_TEMPLATE_CATALOG.values())
 
-    def _validate_parameters(self, *, template_id: str, parameters: dict[str, Any]) -> None:
+    @staticmethod
+    def _normalize_number(*, key: str, value: Any, expected_type: str) -> int | float:
+        if expected_type == "int":
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise InvalidStrategyParametersError(f"invalid parameter type: {key}")
+            return int(value)
+
+        if expected_type == "float":
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise InvalidStrategyParametersError(f"invalid parameter type: {key}")
+            return float(value)
+
+        raise InvalidStrategyParametersError(f"unsupported parameter type rule: {key}")
+
+    @staticmethod
+    def _validate_template_relationships(*, template_id: str, parameters: dict[str, Any]) -> None:
+        if template_id == "mean_reversion":
+            entry_z = float(parameters["entryZ"])
+            exit_z = float(parameters["exitZ"])
+            if entry_z <= exit_z:
+                raise InvalidStrategyParametersError("entryZ must be greater than exitZ")
+            return
+
+        if template_id == "moving_average":
+            short_window = int(parameters["shortWindow"])
+            long_window = int(parameters["longWindow"])
+            if long_window <= short_window:
+                raise InvalidStrategyParametersError("longWindow must be greater than shortWindow")
+            return
+
+        if template_id == "rsi":
+            oversold = float(parameters["oversold"])
+            overbought = float(parameters["overbought"])
+            if overbought <= oversold:
+                raise InvalidStrategyParametersError("overbought must be greater than oversold")
+            return
+
+        if template_id == "macd":
+            fast = int(parameters["fast"])
+            slow = int(parameters["slow"])
+            if slow <= fast:
+                raise InvalidStrategyParametersError("slow must be greater than fast")
+
+    def _validate_parameters(self, *, template_id: str, parameters: dict[str, Any]) -> dict[str, Any]:
         template = _TEMPLATE_CATALOG.get(template_id)
         if template is None:
             raise InvalidStrategyParametersError(f"unknown template: {template_id}")
 
         required = template["requiredParameters"]
+        parameter_keys = set(parameters.keys())
+        required_keys = set(required.keys())
+
+        unknown_keys = sorted(parameter_keys - required_keys)
+        if unknown_keys:
+            raise InvalidStrategyParametersError(f"unknown parameter: {unknown_keys[0]}")
+
+        normalized: dict[str, Any] = {}
         for key, rule in required.items():
             if key not in parameters:
                 raise InvalidStrategyParametersError(f"missing parameter: {key}")
 
-            value = parameters[key]
-            expected_type = rule["type"]
-            if expected_type == "int" and not isinstance(value, int):
-                raise InvalidStrategyParametersError(f"invalid parameter type: {key}")
-            if expected_type == "float" and not isinstance(value, (int, float)):
-                raise InvalidStrategyParametersError(f"invalid parameter type: {key}")
+            normalized_value = self._normalize_number(
+                key=key,
+                value=parameters[key],
+                expected_type=str(rule["type"]),
+            )
 
             min_value = rule.get("min")
-            if min_value is not None and value < min_value:
+            if min_value is not None and normalized_value < min_value:
                 raise InvalidStrategyParametersError(f"parameter below minimum: {key}")
 
-        entry_z = float(parameters["entryZ"])
-        exit_z = float(parameters["exitZ"])
-        if entry_z <= exit_z:
-            raise InvalidStrategyParametersError("entryZ must be greater than exitZ")
+            max_value = rule.get("max")
+            if max_value is not None and normalized_value > max_value:
+                raise InvalidStrategyParametersError(f"parameter above maximum: {key}")
+
+            normalized[key] = normalized_value
+
+        self._validate_template_relationships(template_id=template_id, parameters=normalized)
+        return normalized
 
     def _require_owned_strategy(self, *, user_id: str, strategy_id: str) -> Strategy:
         strategy = self._repository.get_by_id(strategy_id, user_id=user_id)
@@ -144,12 +267,12 @@ class StrategyService:
         template_id: str,
         parameters: dict[str, Any],
     ) -> Strategy:
-        self._validate_parameters(template_id=template_id, parameters=parameters)
+        validated_parameters = self._validate_parameters(template_id=template_id, parameters=parameters)
         strategy = Strategy.create(
             user_id=user_id,
             name=name,
             template=template_id,
-            parameters=parameters,
+            parameters=validated_parameters,
         )
         self._repository.save(strategy)
         return strategy
@@ -160,13 +283,14 @@ class StrategyService:
         user_id: str,
         name: str,
         template: str,
-        parameters: dict,
+        parameters: dict[str, Any],
     ) -> Strategy:
+        validated_parameters = self._validate_parameters(template_id=template, parameters=parameters)
         strategy = Strategy.create(
             user_id=user_id,
             name=name,
             template=template,
-            parameters=parameters,
+            parameters=validated_parameters,
         )
         self._repository.save(strategy)
         return strategy
@@ -183,10 +307,11 @@ class StrategyService:
         if strategy is None:
             return None
 
+        validated_parameters = parameters
         if parameters is not None:
-            self._validate_parameters(template_id=strategy.template, parameters=parameters)
+            validated_parameters = self._validate_parameters(template_id=strategy.template, parameters=parameters)
 
-        strategy.update(name=name, parameters=parameters)
+        strategy.update(name=name, parameters=validated_parameters)
         self._repository.save(strategy)
         return strategy
 

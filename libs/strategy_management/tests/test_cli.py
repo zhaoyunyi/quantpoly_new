@@ -33,7 +33,7 @@ def test_cli_create_and_list_scoped(capsys):
         user_id="u-1",
         name="mean-reversion-1",
         template="mean_reversion",
-        parameters='{"window": 20}',
+        parameters='{"window": 20, "entryZ": 1.5, "exitZ": 0.5}',
     )
     assert created["success"] is True
     strategy_id = created["data"]["id"]
@@ -58,7 +58,7 @@ def test_cli_delete_returns_strategy_in_use_code(capsys, monkeypatch):
         user_id="u-1",
         name="mean-reversion-1",
         template="mean_reversion",
-        parameters='{"window": 20}',
+        parameters='{"window": 20, "entryZ": 1.5, "exitZ": 0.5}',
     )
 
     deleted = _run(

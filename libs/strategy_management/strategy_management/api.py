@@ -135,12 +135,22 @@ def create_router(
 
     @router.post("/strategies")
     def create_strategy(body: CreateStrategyRequest, current_user=Depends(get_current_user)):
-        created = service.create_strategy(
-            user_id=current_user.id,
-            name=body.name,
-            template=body.template,
-            parameters=body.parameters,
-        )
+        try:
+            created = service.create_strategy(
+                user_id=current_user.id,
+                name=body.name,
+                template=body.template,
+                parameters=body.parameters,
+            )
+        except InvalidStrategyParametersError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="STRATEGY_INVALID_PARAMETERS",
+                    message=str(exc),
+                ),
+            )
+
         return success_response(data=_serialize_strategy(created))
 
     @router.put("/strategies/{strategy_id}")

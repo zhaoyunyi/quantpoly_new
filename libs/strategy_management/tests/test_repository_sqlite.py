@@ -22,7 +22,7 @@ def test_sqlite_repository_persists_strategy_state_across_restart(tmp_path):
         user_id="u-1",
         name="alpha",
         template="mean_reversion",
-        parameters={"window": 10},
+        parameters={"window": 10, "entryZ": 1.5, "exitZ": 0.5},
     )
     service1.activate_strategy(user_id="u-1", strategy_id=strategy.id)
 

@@ -31,7 +31,7 @@ def test_get_strategy_returns_403_for_non_owner():
         user_id="u-2",
         name="other-strategy",
         template="mean_reversion",
-        parameters={"window": 20},
+        parameters={"window": 20, "entryZ": 1.5, "exitZ": 0.5},
     )
 
     client = TestClient(app)
@@ -49,7 +49,7 @@ def test_delete_strategy_returns_409_when_active_backtests_exist():
         user_id="u-1",
         name="my-strategy",
         template="mean_reversion",
-        parameters={"window": 20},
+        parameters={"window": 20, "entryZ": 1.5, "exitZ": 0.5},
     )
 
     client = TestClient(app)
@@ -67,7 +67,7 @@ def test_list_strategy_uses_envelope_and_camel_case_fields():
         user_id="u-1",
         name="my-strategy",
         template="mean_reversion",
-        parameters={"window": 20},
+        parameters={"window": 20, "entryZ": 1.5, "exitZ": 0.5},
     )
 
     client = TestClient(app)
