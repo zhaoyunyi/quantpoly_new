@@ -76,6 +76,16 @@ class GenerateSignalsRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class GenerateByStrategyRequest(BaseModel):
+    strategy_id: str = Field(alias="strategyId")
+    account_id: str = Field(alias="accountId")
+    symbols: list[str]
+    timeframe: str = Field(default="1Day")
+    expires_at: datetime | None = Field(default=None, alias="expiresAt")
+
+    model_config = {"populate_by_name": True}
+
+
 def _dt(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -94,6 +104,7 @@ def _signal_payload(signal: TradingSignal) -> dict:
         "createdAt": _dt(signal.created_at),
         "updatedAt": _dt(signal.updated_at),
         "expiresAt": _dt(signal.expires_at),
+        "metadata": dict(signal.metadata),
     }
 
 
@@ -167,6 +178,43 @@ def create_router(
             )
 
         return success_response(data={"signals": [_signal_payload(item) for item in signals]})
+
+    @router.post("/signals/generate-by-strategy")
+    def generate_signals_by_strategy(body: GenerateByStrategyRequest, current_user=Depends(get_current_user)):
+        try:
+            result = service.generate_signals_by_strategy(
+                user_id=current_user.id,
+                strategy_id=body.strategy_id,
+                account_id=body.account_id,
+                symbols=body.symbols,
+                timeframe=body.timeframe,
+                expires_at=body.expires_at,
+            )
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+        except InvalidSignalParametersError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="SIGNAL_INVALID_PARAMETERS",
+                    message=str(exc),
+                ),
+            )
+
+        payload = {
+            "strategyId": result["strategyId"],
+            "accountId": result["accountId"],
+            "template": result["template"],
+            "signals": [_signal_payload(item) for item in result["signals"]],
+            "skipped": result["skipped"],
+        }
+        return success_response(data=payload)
 
     @router.post("/signals/{signal_id}/process")
     def process_signal(signal_id: str, current_user=Depends(get_current_user)):

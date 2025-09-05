@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 
 @dataclass
@@ -19,6 +20,7 @@ class TradingSignal:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def create(
@@ -30,6 +32,7 @@ class TradingSignal:
         symbol: str,
         side: str,
         expires_at: datetime | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> "TradingSignal":
         now = datetime.now(timezone.utc)
         return cls(
@@ -42,6 +45,7 @@ class TradingSignal:
             created_at=now,
             updated_at=now,
             expires_at=expires_at,
+            metadata=dict(metadata or {}),
         )
 
     def execute(self) -> None:

@@ -58,6 +58,7 @@ def _signal_payload(signal) -> dict:
         "createdAt": _dt(signal.created_at),
         "updatedAt": _dt(signal.updated_at),
         "expiresAt": _dt(signal.expires_at),
+        "metadata": dict(signal.metadata),
     }
 
 
@@ -284,6 +285,55 @@ def _cmd_generate(args: argparse.Namespace) -> None:
     _output({"success": True, "data": {"signals": [_signal_payload(item) for item in signals]}})
 
 
+def _cmd_generate_by_strategy(args: argparse.Namespace) -> None:
+    try:
+        symbols = _parse_csv(args.symbols)
+    except Exception:  # noqa: BLE001
+        _output({"success": False, "error": {"code": "INVALID_SYMBOLS", "message": "invalid symbols"}})
+        return
+
+    try:
+        result = _service.generate_signals_by_strategy(
+            user_id=args.user_id,
+            strategy_id=args.strategy_id,
+            account_id=args.account_id,
+            symbols=symbols,
+            timeframe=args.timeframe,
+            expires_at=None,
+        )
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+    except InvalidSignalParametersError as exc:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_INVALID_PARAMETERS",
+                    "message": str(exc),
+                },
+            }
+        )
+        return
+
+    payload = {
+        "strategyId": result["strategyId"],
+        "accountId": result["accountId"],
+        "template": result["template"],
+        "signals": [_signal_payload(item) for item in result["signals"]],
+        "skipped": result["skipped"],
+    }
+    _output({"success": True, "data": payload})
+
+
 def _cmd_process(args: argparse.Namespace) -> None:
     try:
         signal, risk = _service.process_signal(user_id=args.user_id, signal_id=args.signal_id)
@@ -469,6 +519,13 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--side", default="BUY")
     generate.add_argument("--parameters", default="{}")
 
+    generate_by_strategy = sub.add_parser("generate-by-strategy", help="按策略模板与行情自动生成信号")
+    generate_by_strategy.add_argument("--user-id", required=True)
+    generate_by_strategy.add_argument("--strategy-id", required=True)
+    generate_by_strategy.add_argument("--account-id", required=True)
+    generate_by_strategy.add_argument("--symbols", required=True, help="CSV 符号列表")
+    generate_by_strategy.add_argument("--timeframe", default="1Day")
+
     process = sub.add_parser("process", help="处理单条信号（含风控前置）")
     process.add_argument("--user-id", required=True)
     process.add_argument("--signal-id", required=True)
@@ -518,6 +575,7 @@ _COMMANDS = {
     "dashboard": _cmd_dashboard,
     "execute": _cmd_execute,
     "generate": _cmd_generate,
+    "generate-by-strategy": _cmd_generate_by_strategy,
     "process": _cmd_process,
     "batch-execute": _cmd_batch_execute,
     "batch-cancel": _cmd_batch_cancel,
