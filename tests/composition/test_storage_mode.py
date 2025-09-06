@@ -5,6 +5,8 @@ from __future__ import annotations
 from apps.backend_app.router_registry import build_context
 from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.repository_sqlite import SQLiteBacktestRepository
+from backtest_runner.result_store import InMemoryBacktestResultStore
+from backtest_runner.result_store_sqlite import SQLiteBacktestResultStore
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.repository_sqlite import SQLiteJobRepository
 from strategy_management.repository import InMemoryStrategyRepository
@@ -22,6 +24,7 @@ def test_build_context_uses_sqlite_repositories_for_production_mode(tmp_path):
     assert isinstance(context.backtest_repo, SQLiteBacktestRepository)
     assert isinstance(context.trading_repo, SQLiteTradingAccountRepository)
     assert isinstance(context.job_repo, SQLiteJobRepository)
+    assert isinstance(context.backtest_result_store, SQLiteBacktestResultStore)
 
 
 def test_build_context_uses_inmemory_repositories_for_test_mode():
@@ -31,3 +34,4 @@ def test_build_context_uses_inmemory_repositories_for_test_mode():
     assert isinstance(context.backtest_repo, InMemoryBacktestRepository)
     assert isinstance(context.trading_repo, InMemoryTradingAccountRepository)
     assert isinstance(context.job_repo, InMemoryJobRepository)
+    assert isinstance(context.backtest_result_store, InMemoryBacktestResultStore)

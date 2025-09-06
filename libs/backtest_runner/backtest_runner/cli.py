@@ -11,6 +11,7 @@ from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.service import (
     BacktestAccessDeniedError,
     BacktestDeleteInvalidStateError,
+    BacktestExecutionError,
     BacktestIdempotencyConflictError,
     BacktestService,
 )
@@ -75,6 +76,81 @@ def _cmd_status(args: argparse.Namespace) -> None:
         _output({"success": False, "error": {"code": "NOT_FOUND", "message": "task not found"}})
         return
     _output({"success": True, "data": _serialize_task(task)})
+
+
+def _cmd_run_task(args: argparse.Namespace) -> None:
+    try:
+        config = json.loads(args.config) if args.config else {}
+    except json.JSONDecodeError:
+        _output({"success": False, "error": {"code": "INVALID_CONFIG", "message": "invalid config json"}})
+        return
+
+    idempotency_key = getattr(args, "idempotency_key", None)
+
+    try:
+        task = _service.create_task(
+            user_id=args.user_id,
+            strategy_id=args.strategy_id,
+            config=config,
+            idempotency_key=idempotency_key,
+        )
+        executed = _service.execute_task(user_id=args.user_id, task_id=task.id)
+    except BacktestAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "BACKTEST_ACCESS_DENIED",
+                    "message": "strategy does not belong to current user",
+                },
+            }
+        )
+        return
+    except BacktestIdempotencyConflictError as exc:
+        _output({"success": False, "error": {"code": "BACKTEST_IDEMPOTENCY_CONFLICT", "message": str(exc)}})
+        return
+    except BacktestExecutionError as exc:
+        latest = _service.get_task(user_id=args.user_id, task_id=task.id)
+        _output(
+            {
+                "success": False,
+                "error": {"code": exc.code, "message": exc.message},
+                "data": _serialize_task(latest) if latest is not None else _serialize_task(task),
+            }
+        )
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "task": _serialize_task(executed["task"]),
+                "result": executed["result"],
+            },
+        }
+    )
+
+
+def _cmd_result(args: argparse.Namespace) -> None:
+    try:
+        result = _service.get_task_result(user_id=args.user_id, task_id=args.task_id)
+    except BacktestAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "BACKTEST_ACCESS_DENIED",
+                    "message": "backtest task does not belong to current user",
+                },
+            }
+        )
+        return
+
+    if result is None:
+        _output({"success": False, "error": {"code": "BACKTEST_RESULT_NOT_READY", "message": "backtest result is not ready"}})
+        return
+
+    _output({"success": True, "data": result})
 
 
 def _cmd_list(args: argparse.Namespace) -> None:
@@ -208,6 +284,16 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--user-id", required=True)
     status.add_argument("--task-id", required=True)
 
+    run_task = sub.add_parser("run-task", help="创建并执行回测任务")
+    run_task.add_argument("--user-id", required=True)
+    run_task.add_argument("--strategy-id", required=True)
+    run_task.add_argument("--config", default="{}")
+    run_task.add_argument("--idempotency-key", default=None)
+
+    result = sub.add_parser("result", help="读取回测结果")
+    result.add_argument("--user-id", required=True)
+    result.add_argument("--task-id", required=True)
+
     list_cmd = sub.add_parser("list", help="列表查询回测任务")
     list_cmd.add_argument("--user-id", required=True)
     list_cmd.add_argument("--strategy-id", default=None)
@@ -247,6 +333,8 @@ def build_parser() -> argparse.ArgumentParser:
 _COMMANDS = {
     "create": _cmd_create,
     "status": _cmd_status,
+    "run-task": _cmd_run_task,
+    "result": _cmd_result,
     "list": _cmd_list,
     "transition": _cmd_transition,
     "cancel": _cmd_cancel,

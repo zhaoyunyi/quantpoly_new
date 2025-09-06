@@ -14,6 +14,7 @@ from backtest_runner.domain import InvalidBacktestTransitionError
 from backtest_runner.service import (
     BacktestAccessDeniedError,
     BacktestDeleteInvalidStateError,
+    BacktestExecutionError,
     BacktestIdempotencyConflictError,
     BacktestService,
 )
@@ -64,6 +65,12 @@ def _serialize_job(job) -> dict[str, Any]:
         "taskType": job.task_type,
         "status": job.status,
         "result": job.result,
+        "error": {
+            "code": job.error_code,
+            "message": job.error_message,
+        }
+        if job.error_code or job.error_message
+        else None,
     }
 
 
@@ -149,14 +156,30 @@ def create_router(
                 idempotency_key=job_idempotency_key,
             )
             job_service.start_job(user_id=current_user.id, job_id=job.id)
+
+            execution = service.execute_task(user_id=current_user.id, task_id=task.id)
+            task = execution["task"]
+
             job = job_service.succeed_job(
                 user_id=current_user.id,
                 job_id=job.id,
                 result={
                     "backtestTaskId": task.id,
                     "status": task.status,
+                    "metrics": task.metrics,
                 },
             )
+        except BacktestExecutionError as exc:
+            job = job_service.fail_job(
+                user_id=current_user.id,
+                job_id=job.id,
+                error_code=exc.code,
+                error_message=exc.message,
+            )
+            latest_task = service.get_task(user_id=current_user.id, task_id=task.id)
+            payload = _serialize_job(job)
+            payload["backtestTask"] = _serialize_task(latest_task) if latest_task is not None else _serialize_task(task)
+            return success_response(data=payload)
         except IdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -211,6 +234,24 @@ def create_router(
         except BacktestAccessDeniedError:
             return _access_denied_response()
         return success_response(data=compared)
+
+    @router.get("/backtests/{task_id}/result")
+    def get_backtest_result(task_id: str, current_user=Depends(get_current_user)):
+        try:
+            result = service.get_task_result(user_id=current_user.id, task_id=task_id)
+        except BacktestAccessDeniedError:
+            return _access_denied_response()
+
+        if result is None:
+            return JSONResponse(
+                status_code=404,
+                content=error_response(
+                    code="BACKTEST_RESULT_NOT_READY",
+                    message="backtest result is not ready",
+                ),
+            )
+
+        return success_response(data=result)
 
     @router.get("/backtests/{task_id}")
     def get_backtest(task_id: str, current_user=Depends(get_current_user)):

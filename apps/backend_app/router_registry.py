@@ -14,6 +14,8 @@ from fastapi.responses import JSONResponse
 from backtest_runner.api import create_router as create_backtest_router
 from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.repository_sqlite import SQLiteBacktestRepository
+from backtest_runner.result_store import InMemoryBacktestResultStore
+from backtest_runner.result_store_sqlite import SQLiteBacktestResultStore
 from backtest_runner.service import BacktestService
 from job_orchestration.api import create_router as create_job_router
 from job_orchestration.repository import InMemoryJobRepository
@@ -103,6 +105,7 @@ class CompositionContext:
     signal_repo: InMemorySignalRepository
     preferences_store: InMemoryPreferencesStore
     market_service: MarketDataService
+    backtest_result_store: InMemoryBacktestResultStore | SQLiteBacktestResultStore
 
 
 class MetricsCollector:
@@ -150,6 +153,7 @@ def build_context(
         backtest_repo = SQLiteBacktestRepository(db_path=sqlite_db_path)
         trading_repo = SQLiteTradingAccountRepository(db_path=sqlite_db_path)
         job_repo = SQLiteJobRepository(db_path=sqlite_db_path)
+        backtest_result_store = SQLiteBacktestResultStore(db_path=sqlite_db_path)
     else:
         user_repo = UserRepository()
         session_store = SessionStore()
@@ -157,6 +161,7 @@ def build_context(
         backtest_repo = InMemoryBacktestRepository()
         trading_repo = InMemoryTradingAccountRepository()
         job_repo = InMemoryJobRepository()
+        backtest_result_store = InMemoryBacktestResultStore()
 
     risk_repo = InMemoryRiskRepository()
     signal_repo = InMemorySignalRepository()
@@ -175,6 +180,7 @@ def build_context(
         signal_repo=signal_repo,
         preferences_store=preferences_store,
         market_service=market_service,
+        backtest_result_store=backtest_result_store,
     )
 
 
@@ -249,11 +255,24 @@ def register_all_routes(
     )
     backtest_service = BacktestService(
         repository=context.backtest_repo,
+        result_store=context.backtest_result_store,
         strategy_owner_acl=lambda user_id, strategy_id: context.strategy_repo.get_by_id(
             strategy_id,
             user_id=user_id,
         )
         is not None,
+        strategy_reader=lambda user_id, strategy_id: context.strategy_repo.get_by_id(
+            strategy_id,
+            user_id=user_id,
+        ),
+        market_history_reader=lambda user_id, symbol, start_date, end_date, timeframe, limit: context.market_service.get_history(
+            user_id=user_id,
+            symbol=symbol,
+            start_date=start_date or "1970-01-01",
+            end_date=end_date or "2100-01-01",
+            timeframe=timeframe,
+            limit=limit,
+        ),
     )
     strategy_service = StrategyService(
         repository=context.strategy_repo,

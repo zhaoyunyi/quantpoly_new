@@ -46,7 +46,11 @@ def test_submit_backtest_task_returns_orchestration_task_handle():
         "/backtests/tasks",
         json={
             "strategyId": "s-1",
-            "config": {"symbol": "AAPL"},
+            "config": {
+                "symbol": "AAPL",
+                "prices": [100, 100, 100, 100, 100, 101, 102, 103, 102, 101, 100, 99],
+                "parameters": {"shortWindow": 3, "longWindow": 5},
+            },
             "idempotencyKey": "bk-task-1",
         },
     )
