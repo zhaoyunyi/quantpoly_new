@@ -42,6 +42,12 @@ class CompareRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class RenameBacktestRequest(BaseModel):
+    display_name: str | None = Field(default=None, alias="displayName")
+
+    model_config = {"populate_by_name": True}
+
+
 def _dt(value: datetime) -> str:
     return value.isoformat()
 
@@ -54,6 +60,7 @@ def _serialize_task(task) -> dict[str, Any]:
         "status": task.status,
         "config": task.config,
         "metrics": task.metrics,
+        "displayName": task.display_name,
         "createdAt": _dt(task.created_at),
         "updatedAt": _dt(task.updated_at),
     }
@@ -252,6 +259,40 @@ def create_router(
             )
 
         return success_response(data=result)
+
+    @router.patch("/backtests/{task_id}/name")
+    def rename_backtest(
+        task_id: str,
+        body: RenameBacktestRequest,
+        current_user=Depends(get_current_user),
+    ):
+        task = service.rename_task(
+            user_id=current_user.id,
+            task_id=task_id,
+            display_name=body.display_name,
+        )
+        if task is None:
+            return _access_denied_response()
+        return success_response(data=_serialize_task(task))
+
+    @router.get("/backtests/{task_id}/related")
+    def get_related_backtests(
+        task_id: str,
+        current_user=Depends(get_current_user),
+        limit: int = Query(default=10, ge=1, le=100),
+        status: str | None = Query(default=None),
+    ):
+        try:
+            items = service.related_tasks(
+                user_id=current_user.id,
+                task_id=task_id,
+                status=status,
+                limit=limit,
+            )
+        except BacktestAccessDeniedError:
+            return _access_denied_response()
+
+        return success_response(data=[_serialize_task(item) for item in items])
 
     @router.get("/backtests/{task_id}")
     def get_backtest(task_id: str, current_user=Depends(get_current_user)):

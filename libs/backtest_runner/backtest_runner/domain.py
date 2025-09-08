@@ -29,6 +29,7 @@ class BacktestTask:
     idempotency_key: str | None = None
     status: str = "pending"
     metrics: dict[str, float] | None = None
+    display_name: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -40,6 +41,7 @@ class BacktestTask:
         strategy_id: str,
         config: dict[str, Any],
         idempotency_key: str | None = None,
+        display_name: str | None = None,
     ) -> "BacktestTask":
         return cls(
             id=str(uuid.uuid4()),
@@ -47,6 +49,7 @@ class BacktestTask:
             strategy_id=strategy_id,
             config=config,
             idempotency_key=idempotency_key,
+            display_name=display_name,
         )
 
     def transition_to(self, to_status: str, *, metrics: dict[str, float] | None = None) -> None:
@@ -61,3 +64,8 @@ class BacktestTask:
             self.metrics = metrics or {}
         elif to_status == "pending":
             self.metrics = None
+
+    def rename(self, *, display_name: str | None) -> None:
+        normalized = (display_name or "").strip()
+        self.display_name = normalized or None
+        self.updated_at = datetime.now(timezone.utc)

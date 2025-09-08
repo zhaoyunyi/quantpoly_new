@@ -33,6 +33,7 @@ def _serialize_task(task) -> dict:
         "status": task.status,
         "config": task.config,
         "metrics": task.metrics,
+        "displayName": task.display_name,
     }
 
 
@@ -151,6 +152,41 @@ def _cmd_result(args: argparse.Namespace) -> None:
         return
 
     _output({"success": True, "data": result})
+
+
+def _cmd_rename(args: argparse.Namespace) -> None:
+    task = _service.rename_task(
+        user_id=args.user_id,
+        task_id=args.task_id,
+        display_name=args.display_name,
+    )
+    if task is None:
+        _output({"success": False, "error": {"code": "NOT_FOUND", "message": "task not found"}})
+        return
+    _output({"success": True, "data": _serialize_task(task)})
+
+
+def _cmd_related(args: argparse.Namespace) -> None:
+    try:
+        items = _service.related_tasks(
+            user_id=args.user_id,
+            task_id=args.task_id,
+            status=getattr(args, "status", None),
+            limit=getattr(args, "limit", 10),
+        )
+    except BacktestAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "BACKTEST_ACCESS_DENIED",
+                    "message": "backtest task does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": [_serialize_task(item) for item in items]})
 
 
 def _cmd_list(args: argparse.Namespace) -> None:
@@ -284,6 +320,17 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--user-id", required=True)
     status.add_argument("--task-id", required=True)
 
+    rename = sub.add_parser("rename", help="重命名回测任务")
+    rename.add_argument("--user-id", required=True)
+    rename.add_argument("--task-id", required=True)
+    rename.add_argument("--display-name", required=False, default=None)
+
+    related = sub.add_parser("related", help="查询相关回测任务")
+    related.add_argument("--user-id", required=True)
+    related.add_argument("--task-id", required=True)
+    related.add_argument("--status", default=None)
+    related.add_argument("--limit", type=int, default=10)
+
     run_task = sub.add_parser("run-task", help="创建并执行回测任务")
     run_task.add_argument("--user-id", required=True)
     run_task.add_argument("--strategy-id", required=True)
@@ -333,6 +380,8 @@ def build_parser() -> argparse.ArgumentParser:
 _COMMANDS = {
     "create": _cmd_create,
     "status": _cmd_status,
+    "rename": _cmd_rename,
+    "related": _cmd_related,
     "run-task": _cmd_run_task,
     "result": _cmd_result,
     "list": _cmd_list,

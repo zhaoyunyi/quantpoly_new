@@ -23,6 +23,7 @@ class InMemoryBacktestRepository:
             idempotency_key=task.idempotency_key,
             status=task.status,
             metrics=copy.deepcopy(task.metrics),
+            display_name=task.display_name,
             created_at=task.created_at,
             updated_at=task.updated_at,
         )
@@ -87,3 +88,24 @@ class InMemoryBacktestRepository:
                 and (strategy_id is None or task.strategy_id == strategy_id)
                 and (status is None or task.status == status)
             ]
+
+    def list_related_by_strategy(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        exclude_task_id: str,
+        status: str | None = None,
+        limit: int = 10,
+    ) -> list[BacktestTask]:
+        normalized_limit = max(1, limit)
+        with self._lock:
+            items = [
+                self._clone(task)
+                for task in sorted(self._tasks.values(), key=lambda item: item.created_at)
+                if task.user_id == user_id
+                and task.strategy_id == strategy_id
+                and task.id != exclude_task_id
+                and (status is None or task.status == status)
+            ]
+        return items[:normalized_limit]

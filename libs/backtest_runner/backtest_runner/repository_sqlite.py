@@ -29,11 +29,19 @@ class SQLiteBacktestRepository:
                     idempotency_key TEXT,
                     status TEXT NOT NULL,
                     metrics_json TEXT,
+                    display_name TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
                 """
             )
+            columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(backtest_runner_task)").fetchall()
+            }
+            if "display_name" not in columns:
+                conn.execute("ALTER TABLE backtest_runner_task ADD COLUMN display_name TEXT")
+
             conn.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_backtest_user_idempotency
@@ -57,8 +65,9 @@ class SQLiteBacktestRepository:
             idempotency_key=row[4],
             status=row[5],
             metrics=metrics,
-            created_at=SQLiteBacktestRepository._to_dt(row[7]),
-            updated_at=SQLiteBacktestRepository._to_dt(row[8]),
+            display_name=row[7],
+            created_at=SQLiteBacktestRepository._to_dt(row[8]),
+            updated_at=SQLiteBacktestRepository._to_dt(row[9]),
         )
 
     def save(self, task: BacktestTask) -> None:
@@ -66,8 +75,8 @@ class SQLiteBacktestRepository:
             conn.execute(
                 """
                 INSERT INTO backtest_runner_task
-                    (id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, display_name, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     user_id = excluded.user_id,
                     strategy_id = excluded.strategy_id,
@@ -75,6 +84,7 @@ class SQLiteBacktestRepository:
                     idempotency_key = excluded.idempotency_key,
                     status = excluded.status,
                     metrics_json = excluded.metrics_json,
+                    display_name = excluded.display_name,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at
                 """,
@@ -86,6 +96,7 @@ class SQLiteBacktestRepository:
                     task.idempotency_key,
                     task.status,
                     json.dumps(task.metrics, ensure_ascii=False) if task.metrics is not None else None,
+                    task.display_name,
                     task.created_at.isoformat(),
                     task.updated_at.isoformat(),
                 ),
@@ -97,8 +108,8 @@ class SQLiteBacktestRepository:
                 conn.execute(
                     """
                     INSERT INTO backtest_runner_task
-                        (id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, display_name, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task.id,
@@ -108,6 +119,7 @@ class SQLiteBacktestRepository:
                         task.idempotency_key,
                         task.status,
                         json.dumps(task.metrics, ensure_ascii=False) if task.metrics is not None else None,
+                        task.display_name,
                         task.created_at.isoformat(),
                         task.updated_at.isoformat(),
                     ),
@@ -131,7 +143,7 @@ class SQLiteBacktestRepository:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at
+                SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, display_name, created_at, updated_at
                 FROM backtest_runner_task
                 WHERE user_id = ? AND idempotency_key = ?
                 """,
@@ -146,7 +158,7 @@ class SQLiteBacktestRepository:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at
+                SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, display_name, created_at, updated_at
                 FROM backtest_runner_task
                 WHERE id = ? AND user_id = ?
                 """,
@@ -165,7 +177,7 @@ class SQLiteBacktestRepository:
         status: str | None = None,
     ) -> list[BacktestTask]:
         query = """
-            SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, created_at, updated_at
+            SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, display_name, created_at, updated_at
             FROM backtest_runner_task
             WHERE user_id = ?
         """
@@ -180,6 +192,35 @@ class SQLiteBacktestRepository:
             params.append(status)
 
         query += " ORDER BY created_at ASC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+
+        return [self._from_row(row) for row in rows]
+
+    def list_related_by_strategy(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        exclude_task_id: str,
+        status: str | None = None,
+        limit: int = 10,
+    ) -> list[BacktestTask]:
+        normalized_limit = max(1, limit)
+        query = """
+            SELECT id, user_id, strategy_id, config_json, idempotency_key, status, metrics_json, display_name, created_at, updated_at
+            FROM backtest_runner_task
+            WHERE user_id = ? AND strategy_id = ? AND id != ?
+        """
+        params: list[object] = [user_id, strategy_id, exclude_task_id]
+
+        if status is not None:
+            query += " AND status = ?"
+            params.append(status)
+
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(normalized_limit)
 
         with self._connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()

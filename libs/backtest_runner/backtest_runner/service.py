@@ -648,6 +648,7 @@ class BacktestService:
             strategy_id=strategy_id,
             config=config,
             idempotency_key=idempotency_key,
+            display_name=config.get("displayName") if isinstance(config, dict) else None,
         )
 
         created = self._repository.save_if_absent(task)
@@ -707,6 +708,43 @@ class BacktestService:
 
     def get_task(self, *, user_id: str, task_id: str) -> BacktestTask | None:
         return self._repository.get_by_id(task_id, user_id=user_id)
+
+    def rename_task(self, *, user_id: str, task_id: str, display_name: str | None) -> BacktestTask | None:
+        task = self._repository.get_by_id(task_id, user_id=user_id)
+        if task is None:
+            return None
+        task.rename(display_name=display_name)
+        self._repository.save(task)
+        return task
+
+    def related_tasks(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        status: str | None = None,
+        limit: int = 10,
+    ) -> list[BacktestTask]:
+        task = self._repository.get_by_id(task_id, user_id=user_id)
+        if task is None:
+            raise BacktestAccessDeniedError("backtest task does not belong to current user")
+
+        normalized_limit = max(1, limit)
+        if hasattr(self._repository, "list_related_by_strategy"):
+            return self._repository.list_related_by_strategy(
+                user_id=user_id,
+                strategy_id=task.strategy_id,
+                exclude_task_id=task.id,
+                status=status,
+                limit=normalized_limit,
+            )
+
+        all_items = self._repository.list_by_user(
+            user_id=user_id,
+            strategy_id=task.strategy_id,
+            status=status,
+        )
+        return [item for item in all_items if item.id != task.id][:normalized_limit]
 
     def get_task_result(self, *, user_id: str, task_id: str) -> dict[str, Any] | None:
         task = self._repository.get_by_id(task_id, user_id=user_id)
