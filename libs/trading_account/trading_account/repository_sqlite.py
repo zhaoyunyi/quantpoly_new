@@ -208,6 +208,30 @@ class SQLiteTradingAccountRepository:
             for row in rows
         ]
 
+    def get_position_by_symbol(self, *, account_id: str, user_id: str, symbol: str) -> Position | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, user_id, account_id, symbol, quantity, avg_price, last_price
+                FROM trading_account_position
+                WHERE account_id = ? AND user_id = ? AND symbol = ?
+                """,
+                (account_id, user_id, symbol),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return Position(
+            id=row[0],
+            user_id=row[1],
+            account_id=row[2],
+            symbol=row[3],
+            quantity=row[4],
+            avg_price=row[5],
+            last_price=row[6],
+        )
+
     def save_order(self, order: TradeOrder) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -352,6 +376,69 @@ class SQLiteTradingAccountRepository:
                 WHERE id = ? AND account_id = ? AND user_id = ? AND status = ?
                 """,
                 (to_status, updated_at, order_id, account_id, user_id, from_status),
+            )
+            if cursor.rowcount == 0:
+                return None
+
+            row = conn.execute(
+                """
+                SELECT id, user_id, account_id, symbol, side, quantity, price, status, created_at, updated_at
+                FROM trading_account_order
+                WHERE id = ?
+                """,
+                (order_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return TradeOrder(
+            id=row[0],
+            user_id=row[1],
+            account_id=row[2],
+            symbol=row[3],
+            side=row[4],
+            quantity=row[5],
+            price=row[6],
+            status=row[7],
+            created_at=self._to_dt(row[8]),
+            updated_at=self._to_dt(row[9]),
+        )
+
+    def update_order(
+        self,
+        *,
+        account_id: str,
+        user_id: str,
+        order_id: str,
+        quantity: float | None = None,
+        price: float | None = None,
+        editable_statuses: tuple[str, ...] = ("pending", "open"),
+    ) -> TradeOrder | None:
+        updates: list[str] = []
+        params: list[object] = []
+
+        if quantity is not None:
+            updates.append("quantity = ?")
+            params.append(float(quantity))
+        if price is not None:
+            updates.append("price = ?")
+            params.append(float(price))
+
+        updates.append("updated_at = ?")
+        params.append(datetime.now().astimezone().isoformat())
+
+        placeholders = ",".join("?" for _ in editable_statuses)
+        params.extend([order_id, account_id, user_id, *editable_statuses])
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"""
+                UPDATE trading_account_order
+                SET {', '.join(updates)}
+                WHERE id = ? AND account_id = ? AND user_id = ? AND status IN ({placeholders})
+                """,
+                tuple(params),
             )
             if cursor.rowcount == 0:
                 return None

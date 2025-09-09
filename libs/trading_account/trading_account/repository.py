@@ -135,6 +135,13 @@ class InMemoryTradingAccountRepository:
                 if pos.account_id == account_id and pos.user_id == user_id
             ]
 
+    def get_position_by_symbol(self, *, account_id: str, user_id: str, symbol: str) -> Position | None:
+        with self._lock:
+            position = self._positions.get((account_id, symbol, user_id))
+            if position is None:
+                return None
+            return self._clone_position(position)
+
     def refresh_position_prices(
         self,
         *,
@@ -223,6 +230,34 @@ class InMemoryTradingAccountRepository:
 
             updated = self._clone_order(order)
             updated.status = to_status
+            updated.updated_at = _utc_now()
+            self._orders[order_id] = updated
+            return self._clone_order(updated)
+
+    def update_order(
+        self,
+        *,
+        account_id: str,
+        user_id: str,
+        order_id: str,
+        quantity: float | None = None,
+        price: float | None = None,
+        editable_statuses: tuple[str, ...] = ("pending", "open"),
+    ) -> TradeOrder | None:
+        with self._lock:
+            order = self._orders.get(order_id)
+            if order is None:
+                return None
+            if order.account_id != account_id or order.user_id != user_id:
+                return None
+            if order.status not in editable_statuses:
+                return None
+
+            updated = self._clone_order(order)
+            if quantity is not None:
+                updated.quantity = float(quantity)
+            if price is not None:
+                updated.price = float(price)
             updated.updated_at = _utc_now()
             self._orders[order_id] = updated
             return self._clone_order(updated)

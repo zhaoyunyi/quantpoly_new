@@ -120,6 +120,18 @@ def _serialize_cash_flow(flow) -> dict:
     }
 
 
+def _serialize_position(position) -> dict:
+    return {
+        "id": position.id,
+        "userId": position.user_id,
+        "accountId": position.account_id,
+        "symbol": position.symbol,
+        "quantity": position.quantity,
+        "avgPrice": position.avg_price,
+        "lastPrice": position.last_price,
+    }
+
+
 def _cmd_account_create(args: argparse.Namespace) -> None:
     created = _service.create_account(
         user_id=args.user_id,
@@ -589,6 +601,79 @@ def _cmd_order_cancel(args: argparse.Namespace) -> None:
     _output({"success": True, "data": _serialize_order(order)})
 
 
+def _cmd_order_update(args: argparse.Namespace) -> None:
+    try:
+        order = _service.update_order(
+            user_id=args.user_id,
+            account_id=args.account_id,
+            order_id=args.order_id,
+            quantity=args.quantity,
+            price=args.price,
+        )
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+    except OrderNotFoundError:
+        _error(code="ORDER_NOT_FOUND", message="order not found")
+        return
+    except InvalidTradeOrderTransitionError:
+        _error(code="ORDER_INVALID_TRANSITION", message="order state transition is invalid")
+        return
+    except ValueError as exc:
+        _error(code="INVALID_ARGUMENT", message=str(exc))
+        return
+
+    _output({"success": True, "data": _serialize_order(order)})
+
+
+def _cmd_order_delete(args: argparse.Namespace) -> None:
+    try:
+        order = _service.delete_order(
+            user_id=args.user_id,
+            account_id=args.account_id,
+            order_id=args.order_id,
+        )
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+    except OrderNotFoundError:
+        _error(code="ORDER_NOT_FOUND", message="order not found")
+        return
+    except InvalidTradeOrderTransitionError:
+        _error(code="ORDER_INVALID_TRANSITION", message="order state transition is invalid")
+        return
+
+    _output({"success": True, "data": _serialize_order(order)})
+
+
+def _cmd_trade_pending(args: argparse.Namespace) -> None:
+    try:
+        orders = _service.list_pending_trades(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    _output({"success": True, "data": [_serialize_order(item) for item in orders]})
+
+
+def _cmd_position_get(args: argparse.Namespace) -> None:
+    try:
+        position = _service.get_position_by_symbol(
+            user_id=args.user_id,
+            account_id=args.account_id,
+            symbol=args.symbol,
+        )
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+
+    if position is None:
+        _error(code="POSITION_NOT_FOUND", message="position not found")
+        return
+
+    _output({"success": True, "data": _serialize_position(position)})
+
+
 def _cmd_trade_list(args: argparse.Namespace) -> None:
     try:
         trades = _service.list_trades(user_id=args.user_id, account_id=args.account_id)
@@ -759,6 +844,27 @@ def build_parser() -> argparse.ArgumentParser:
     order_cancel.add_argument("--account-id", required=True)
     order_cancel.add_argument("--order-id", required=True)
 
+    order_update = sub.add_parser("order-update", help="更新订单")
+    order_update.add_argument("--user-id", required=True)
+    order_update.add_argument("--account-id", required=True)
+    order_update.add_argument("--order-id", required=True)
+    order_update.add_argument("--quantity", type=float, default=None)
+    order_update.add_argument("--price", type=float, default=None)
+
+    order_delete = sub.add_parser("order-delete", help="删除订单（撤单）")
+    order_delete.add_argument("--user-id", required=True)
+    order_delete.add_argument("--account-id", required=True)
+    order_delete.add_argument("--order-id", required=True)
+
+    trade_pending = sub.add_parser("trade-pending", help="查询待处理交易")
+    trade_pending.add_argument("--user-id", required=True)
+    trade_pending.add_argument("--account-id", required=True)
+
+    position_get = sub.add_parser("position-get", help="按标的查询仓位")
+    position_get.add_argument("--user-id", required=True)
+    position_get.add_argument("--account-id", required=True)
+    position_get.add_argument("--symbol", required=True)
+
     trade_list = sub.add_parser("trade-list", help="查询成交列表")
     trade_list.add_argument("--user-id", required=True)
     trade_list.add_argument("--account-id", required=True)
@@ -822,6 +928,10 @@ _COMMANDS = {
     "order-list": _cmd_order_list,
     "order-fill": _cmd_order_fill,
     "order-cancel": _cmd_order_cancel,
+    "order-update": _cmd_order_update,
+    "order-delete": _cmd_order_delete,
+    "trade-pending": _cmd_trade_pending,
+    "position-get": _cmd_position_get,
     "trade-list": _cmd_trade_list,
     "cash-flow-list": _cmd_cash_flow_list,
     "deposit": _cmd_deposit,

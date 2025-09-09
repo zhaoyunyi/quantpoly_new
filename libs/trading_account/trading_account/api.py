@@ -151,6 +151,11 @@ class OrderCreateRequest(BaseModel):
     price: float
 
 
+class OrderAmendRequest(BaseModel):
+    quantity: float | None = None
+    price: float | None = None
+
+
 class AmountRequest(BaseModel):
     amount: float
 
@@ -281,6 +286,26 @@ def create_router(
 
         return success_response(data=[_position_to_payload(item) for item in positions])
 
+    @router.get("/trading/accounts/{account_id}/positions/{symbol}")
+    def get_position_by_symbol(account_id: str, symbol: str, current_user=Depends(get_current_user)):
+        try:
+            position = service.get_position_by_symbol(
+                user_id=current_user.id,
+                account_id=account_id,
+                symbol=symbol,
+            )
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+
+        if position is None:
+            return _error(status_code=404, code="POSITION_NOT_FOUND", message="position not found")
+
+        return success_response(data=_position_to_payload(position))
+
     @router.get("/trading/accounts/{account_id}/position-summary")
     def position_summary(account_id: str, current_user=Depends(get_current_user)):
         try:
@@ -399,6 +424,65 @@ def create_router(
 
         return success_response(data=_order_to_payload(order))
 
+    @router.patch("/trading/accounts/{account_id}/orders/{order_id}")
+    def update_order(
+        account_id: str,
+        order_id: str,
+        body: OrderAmendRequest,
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            order = service.update_order(
+                user_id=current_user.id,
+                account_id=account_id,
+                order_id=order_id,
+                quantity=body.quantity,
+                price=body.price,
+            )
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        except OrderNotFoundError:
+            return _error(status_code=404, code="ORDER_NOT_FOUND", message="order not found")
+        except InvalidTradeOrderTransitionError:
+            return _error(
+                status_code=409,
+                code="ORDER_INVALID_TRANSITION",
+                message="order state transition is invalid",
+            )
+        except ValueError as exc:
+            return _error(status_code=400, code="INVALID_ARGUMENT", message=str(exc))
+
+        return success_response(data=_order_to_payload(order))
+
+    @router.delete("/trading/accounts/{account_id}/orders/{order_id}")
+    def delete_order(account_id: str, order_id: str, current_user=Depends(get_current_user)):
+        try:
+            order = service.delete_order(
+                user_id=current_user.id,
+                account_id=account_id,
+                order_id=order_id,
+            )
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        except OrderNotFoundError:
+            return _error(status_code=404, code="ORDER_NOT_FOUND", message="order not found")
+        except InvalidTradeOrderTransitionError:
+            return _error(
+                status_code=409,
+                code="ORDER_INVALID_TRANSITION",
+                message="order state transition is invalid",
+            )
+
+        return success_response(data=_order_to_payload(order))
+
     @router.post("/trading/accounts/{account_id}/orders/{order_id}/fill")
     def fill_order(account_id: str, order_id: str, current_user=Depends(get_current_user)):
         try:
@@ -463,6 +547,19 @@ def create_router(
             )
 
         return success_response(data=[_trade_to_payload(item) for item in trades])
+
+    @router.get("/trading/accounts/{account_id}/trades/pending")
+    def list_pending_trades(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            orders = service.list_pending_trades(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+
+        return success_response(data=[_order_to_payload(item) for item in orders])
 
     @router.get("/trading/accounts/{account_id}/trades/{trade_id}")
     def get_trade(account_id: str, trade_id: str, current_user=Depends(get_current_user)):

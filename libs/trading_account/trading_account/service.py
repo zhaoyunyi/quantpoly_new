@@ -283,6 +283,14 @@ class TradingAccountService:
         self._assert_account_owner(user_id=user_id, account_id=account_id)
         return self._repository.list_positions(account_id=account_id, user_id=user_id)
 
+    def get_position_by_symbol(self, *, user_id: str, account_id: str, symbol: str) -> Position | None:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        return self._repository.get_position_by_symbol(
+            account_id=account_id,
+            user_id=user_id,
+            symbol=symbol,
+        )
+
     def submit_order(
         self,
         *,
@@ -398,6 +406,42 @@ class TradingAccountService:
     def _raise_transition_error(exc: InvalidTradeOrderTransitionError) -> None:
         raise exc
 
+    def update_order(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        order_id: str,
+        quantity: float | None = None,
+        price: float | None = None,
+    ) -> TradeOrder:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+
+        if quantity is None and price is None:
+            raise ValueError("at least one editable field is required")
+
+        existing = self._repository.get_order(account_id=account_id, user_id=user_id, order_id=order_id)
+        if existing is None:
+            raise OrderNotFoundError("order not found")
+        if existing.status not in {"pending", "open"}:
+            raise InvalidTradeOrderTransitionError(
+                f"invalid transition: {existing.status} -> update"
+            )
+
+        updated = self._repository.update_order(
+            account_id=account_id,
+            user_id=user_id,
+            order_id=order_id,
+            quantity=quantity,
+            price=price,
+            editable_statuses=("pending", "open"),
+        )
+        if updated is None:
+            raise InvalidTradeOrderTransitionError(
+                f"invalid transition: {existing.status} -> update"
+            )
+        return updated
+
     def cancel_order(self, *, user_id: str, account_id: str, order_id: str) -> TradeOrder:
         self._assert_account_owner(user_id=user_id, account_id=account_id)
         return self._transition_order_or_raise(
@@ -407,6 +451,30 @@ class TradingAccountService:
             from_status="pending",
             to_status="cancelled",
         )
+
+    def delete_order(self, *, user_id: str, account_id: str, order_id: str) -> TradeOrder:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+
+        existing = self._repository.get_order(account_id=account_id, user_id=user_id, order_id=order_id)
+        if existing is None:
+            raise OrderNotFoundError("order not found")
+        if existing.status not in {"pending", "open"}:
+            raise InvalidTradeOrderTransitionError(
+                f"invalid transition: {existing.status} -> cancelled"
+            )
+
+        deleted = self._repository.transition_order_status(
+            account_id=account_id,
+            user_id=user_id,
+            order_id=order_id,
+            from_status=existing.status,
+            to_status="cancelled",
+        )
+        if deleted is None:
+            raise InvalidTradeOrderTransitionError(
+                f"invalid transition: {existing.status} -> cancelled"
+            )
+        return deleted
 
     def record_trade(
         self,
@@ -440,6 +508,26 @@ class TradingAccountService:
     def list_trades(self, *, user_id: str, account_id: str) -> list[TradeRecord]:
         self._assert_account_owner(user_id=user_id, account_id=account_id)
         return self._repository.list_trades(account_id=account_id, user_id=user_id)
+
+    def list_pending_trades(self, *, user_id: str, account_id: str) -> list[TradeOrder]:
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+
+        pending_orders = self._repository.list_orders_by_status(
+            status="pending",
+            account_id=account_id,
+            user_id=user_id,
+        )
+        open_orders = self._repository.list_orders_by_status(
+            status="open",
+            account_id=account_id,
+            user_id=user_id,
+        )
+
+        items: dict[str, TradeOrder] = {order.id: order for order in pending_orders}
+        for order in open_orders:
+            items[order.id] = order
+
+        return sorted(items.values(), key=lambda item: item.created_at)
 
     def deposit(self, *, user_id: str, account_id: str, amount: float) -> CashFlow:
         self._assert_account_owner(user_id=user_id, account_id=account_id)
