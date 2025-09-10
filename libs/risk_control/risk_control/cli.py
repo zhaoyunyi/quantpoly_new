@@ -31,6 +31,26 @@ def _serialize_assessment(snapshot) -> dict:
     }
 
 
+def _serialize_alert(alert) -> dict:
+    return {
+        "id": alert.id,
+        "userId": alert.user_id,
+        "accountId": alert.account_id,
+        "ruleName": alert.rule_name,
+        "severity": alert.severity,
+        "message": alert.message,
+        "status": alert.status,
+        "createdAt": alert.created_at.isoformat(),
+        "acknowledgedAt": alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
+        "acknowledgedBy": alert.acknowledged_by,
+        "resolvedAt": alert.resolved_at.isoformat() if alert.resolved_at else None,
+        "resolvedBy": alert.resolved_by,
+        "notificationStatus": alert.notification_status,
+        "notifiedAt": alert.notified_at.isoformat() if alert.notified_at else None,
+        "notifiedBy": alert.notified_by,
+    }
+
+
 def _cmd_report_generate(args: argparse.Namespace) -> None:
     report = _service.generate_risk_report(user_id=args.user_id, report_type=args.report_type)
     _output({"success": True, "data": report})
@@ -126,6 +146,84 @@ def _cmd_stats(args: argparse.Namespace) -> None:
     )
 
 
+def _cmd_rule_statistics(args: argparse.Namespace) -> None:
+    try:
+        stats = _service.rule_statistics(user_id=args.user_id, account_id=args.account_id)
+    except AccountAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "RULE_ACCESS_DENIED",
+                    "message": "rule does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output(
+        {
+            "success": True,
+            "data": {
+                "total": stats["total"],
+                "active": stats["active"],
+                "inactive": stats["inactive"],
+                "byState": stats["by_state"],
+            },
+        }
+    )
+
+
+def _cmd_recent_alerts(args: argparse.Namespace) -> None:
+    try:
+        alerts = _service.recent_alerts(
+            user_id=args.user_id,
+            account_id=args.account_id,
+            limit=args.limit,
+        )
+    except AccountAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "ALERT_ACCESS_DENIED",
+                    "message": "alert does not belong to current user",
+                },
+            }
+        )
+        return
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": [_serialize_alert(item) for item in alerts]})
+
+
+def _cmd_unresolved_alerts(args: argparse.Namespace) -> None:
+    try:
+        alerts = _service.unresolved_alerts(
+            user_id=args.user_id,
+            account_id=args.account_id,
+            limit=args.limit,
+        )
+    except AccountAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "ALERT_ACCESS_DENIED",
+                    "message": "alert does not belong to current user",
+                },
+            }
+        )
+        return
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": [_serialize_alert(item) for item in alerts]})
+
+
 def _cmd_batch_acknowledge(args: argparse.Namespace) -> None:
     alert_ids = [item.strip() for item in args.alert_ids.split(",") if item.strip()]
     try:
@@ -216,6 +314,20 @@ def build_parser() -> argparse.ArgumentParser:
     stats.add_argument("--user-id", required=True)
     stats.add_argument("--account-id", default=None)
 
+    rule_statistics = sub.add_parser("rule-statistics", help="统计规则状态")
+    rule_statistics.add_argument("--user-id", required=True)
+    rule_statistics.add_argument("--account-id", default=None)
+
+    recent_alerts = sub.add_parser("recent-alerts", help="查询近期告警")
+    recent_alerts.add_argument("--user-id", required=True)
+    recent_alerts.add_argument("--account-id", default=None)
+    recent_alerts.add_argument("--limit", type=int, default=20)
+
+    unresolved_alerts = sub.add_parser("unresolved-alerts", help="查询未解决告警")
+    unresolved_alerts.add_argument("--user-id", required=True)
+    unresolved_alerts.add_argument("--account-id", default=None)
+    unresolved_alerts.add_argument("--limit", type=int, default=20)
+
     batch = sub.add_parser("batch-acknowledge", help="批量确认告警")
     batch.add_argument("--user-id", required=True)
     batch.add_argument("--alert-ids", required=True)
@@ -244,6 +356,9 @@ _COMMANDS = {
     "assessment-snapshot": _cmd_assessment_snapshot,
     "assessment-evaluate": _cmd_assessment_evaluate,
     "stats": _cmd_stats,
+    "rule-statistics": _cmd_rule_statistics,
+    "recent-alerts": _cmd_recent_alerts,
+    "unresolved-alerts": _cmd_unresolved_alerts,
     "batch-acknowledge": _cmd_batch_acknowledge,
     "applicable-rules": _cmd_applicable_rules,
     "dashboard": _cmd_dashboard,

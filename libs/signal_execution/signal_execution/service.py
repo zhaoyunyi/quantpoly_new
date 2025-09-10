@@ -88,6 +88,10 @@ class SignalExecutionService:
         if not self._account_owner_acl(user_id, account_id):
             raise SignalAccessDeniedError("account does not belong to current user")
 
+    def _assert_account_acl(self, *, user_id: str, account_id: str) -> None:
+        if not self._account_owner_acl(user_id, account_id):
+            raise SignalAccessDeniedError("account does not belong to current user")
+
     def _idempotency_fingerprint(self, *, signal_ids: list[str]) -> str:
         return "|".join(sorted(signal_ids))
 
@@ -633,6 +637,13 @@ class SignalExecutionService:
         result["byAccount"] = by_account
         return result
 
+    def account_statistics(self, *, user_id: str, account_id: str) -> dict[str, Any]:
+        self._assert_account_acl(user_id=user_id, account_id=account_id)
+        signals = self.list_signals(user_id=user_id, account_id=account_id)
+        payload = {"accountId": account_id}
+        payload.update(self._signal_stats(signals))
+        return payload
+
     def execute_signal(
         self,
         *,
@@ -729,6 +740,32 @@ class SignalExecutionService:
                 strategy_id=signal.strategy_id,
                 symbol=signal.symbol,
                 status="cancelled",
+            )
+        )
+        return signal
+
+    def expire_signal(self, *, user_id: str, signal_id: str) -> TradingSignal:
+        signal = self._repository.get_signal(signal_id=signal_id, user_id=user_id)
+        if signal is None:
+            raise SignalAccessDeniedError("signal does not belong to current user")
+
+        self._assert_signal_acl(
+            user_id=user_id,
+            strategy_id=signal.strategy_id,
+            account_id=signal.account_id,
+        )
+        if signal.status != "pending":
+            return signal
+
+        signal.expire()
+        self._repository.save_signal(signal)
+        self._repository.save_execution(
+            ExecutionRecord.create(
+                user_id=user_id,
+                signal_id=signal.id,
+                strategy_id=signal.strategy_id,
+                symbol=signal.symbol,
+                status="expired",
             )
         )
         return signal

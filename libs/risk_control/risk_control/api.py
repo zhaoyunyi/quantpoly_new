@@ -515,6 +515,31 @@ def create_router(
 
         return success_response(data=[_rule_payload(item) for item in rules])
 
+    @router.get("/risk/rules/statistics")
+    def rule_statistics(
+        account_id: str | None = Query(default=None, alias="accountId"),
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            stats = service.rule_statistics(user_id=current_user.id, account_id=account_id)
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="RULE_ACCESS_DENIED",
+                    message="rule does not belong to current user",
+                ),
+            )
+
+        return success_response(
+            data={
+                "total": stats["total"],
+                "active": stats["active"],
+                "inactive": stats["inactive"],
+                "byState": stats["by_state"],
+            }
+        )
+
     @router.get("/risk/rules/{rule_id}")
     def get_rule(rule_id: str, current_user=Depends(get_current_user)):
         rule = service.get_rule(user_id=current_user.id, rule_id=rule_id)
@@ -781,6 +806,62 @@ def create_router(
                 "bySeverity": stats.by_severity,
             }
         )
+
+    @router.get("/risk/alerts/recent")
+    def recent_alerts(
+        account_id: str | None = Query(default=None, alias="accountId"),
+        limit: int = Query(default=20, ge=1),
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            alerts = service.recent_alerts(
+                user_id=current_user.id,
+                account_id=account_id,
+                limit=limit,
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="ALERT_ACCESS_DENIED",
+                    message="alert does not belong to current user",
+                ),
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_response(code="ALERT_INVALID", message=str(exc)),
+            )
+
+        return success_response(data=[_alert_payload(item) for item in alerts])
+
+    @router.get("/risk/alerts/unresolved")
+    def unresolved_alerts(
+        account_id: str | None = Query(default=None, alias="accountId"),
+        limit: int = Query(default=20, ge=1),
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            alerts = service.unresolved_alerts(
+                user_id=current_user.id,
+                account_id=account_id,
+                limit=limit,
+            )
+        except AccountAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="ALERT_ACCESS_DENIED",
+                    message="alert does not belong to current user",
+                ),
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content=error_response(code="ALERT_INVALID", message=str(exc)),
+            )
+
+        return success_response(data=[_alert_payload(item) for item in alerts])
 
     @router.get("/risk/alerts/{alert_id}")
     def get_alert(alert_id: str, current_user=Depends(get_current_user)):

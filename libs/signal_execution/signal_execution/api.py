@@ -538,6 +538,21 @@ def create_router(
 
         return success_response(data=_signal_payload(signal))
 
+    @router.post("/signals/{signal_id}/expire")
+    def expire_signal(signal_id: str, current_user=Depends(get_current_user)):
+        try:
+            signal = service.expire_signal(user_id=current_user.id, signal_id=signal_id)
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        return success_response(data=_signal_payload(signal))
+
     @router.get("/signals/executions")
     def list_executions(
         signal_id: str | None = Query(default=None, alias="signalId"),
@@ -577,6 +592,21 @@ def create_router(
     @router.get("/signals/executions/performance/by-strategy")
     def performance_statistics_by_strategy(current_user=Depends(get_current_user)):
         return success_response(data=service.performance_statistics_by_strategy(user_id=current_user.id))
+
+    @router.get("/signals/statistics/{account_id}")
+    def account_statistics(account_id: str, current_user=Depends(get_current_user)):
+        try:
+            stats = service.account_statistics(user_id=current_user.id, account_id=account_id)
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        return success_response(data=stats)
 
     @router.get("/signals/executions/{execution_id}")
     def get_execution(execution_id: str, current_user=Depends(get_current_user)):

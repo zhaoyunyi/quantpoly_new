@@ -242,6 +242,42 @@ def _cmd_execute(args: argparse.Namespace) -> None:
     _output({"success": True, "data": {"id": signal.id, "status": signal.status}})
 
 
+def _cmd_expire(args: argparse.Namespace) -> None:
+    try:
+        signal = _service.expire_signal(user_id=args.user_id, signal_id=args.signal_id)
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": _signal_payload(signal)})
+
+
+def _cmd_account_statistics(args: argparse.Namespace) -> None:
+    try:
+        stats = _service.account_statistics(user_id=args.user_id, account_id=args.account_id)
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": stats})
+
+
 def _cmd_generate(args: argparse.Namespace) -> None:
     try:
         symbols = _parse_csv(args.symbols)
@@ -511,6 +547,14 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument("--user-id", required=True)
     execute.add_argument("--signal-id", required=True)
 
+    expire = sub.add_parser("expire", help="手动过期信号")
+    expire.add_argument("--user-id", required=True)
+    expire.add_argument("--signal-id", required=True)
+
+    account_statistics = sub.add_parser("account-statistics", help="账户维度信号统计")
+    account_statistics.add_argument("--user-id", required=True)
+    account_statistics.add_argument("--account-id", required=True)
+
     generate = sub.add_parser("generate", help="策略触发生成信号")
     generate.add_argument("--user-id", required=True)
     generate.add_argument("--strategy-id", required=True)
@@ -574,6 +618,8 @@ _COMMANDS = {
     "search": _cmd_search,
     "dashboard": _cmd_dashboard,
     "execute": _cmd_execute,
+    "expire": _cmd_expire,
+    "account-statistics": _cmd_account_statistics,
     "generate": _cmd_generate,
     "generate-by-strategy": _cmd_generate_by_strategy,
     "process": _cmd_process,

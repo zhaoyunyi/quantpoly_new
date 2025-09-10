@@ -113,6 +113,20 @@ class RiskControlService:
             is_active=is_active,
         )
 
+    def rule_statistics(self, *, user_id: str, account_id: str | None = None) -> dict[str, int | dict[str, int]]:
+        rules = self.list_rules(user_id=user_id, account_id=account_id)
+        active = sum(1 for item in rules if item.is_active)
+        inactive = len(rules) - active
+        return {
+            "total": len(rules),
+            "active": active,
+            "inactive": inactive,
+            "by_state": {
+                "active": active,
+                "inactive": inactive,
+            },
+        }
+
     def get_rule(self, *, user_id: str, rule_id: str) -> RiskRule | None:
         return self._repository.get_rule(rule_id=rule_id, user_id=user_id)
 
@@ -290,6 +304,32 @@ class RiskControlService:
         if not unresolved_only:
             return alerts
         return [item for item in alerts if item.status != "resolved"]
+
+    def recent_alerts(
+        self,
+        *,
+        user_id: str,
+        account_id: str | None = None,
+        limit: int = 20,
+    ) -> list[RiskAlert]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+
+        alerts = self.list_alerts(user_id=user_id, account_id=account_id, unresolved_only=False)
+        return sorted(alerts, key=lambda item: item.created_at, reverse=True)[:limit]
+
+    def unresolved_alerts(
+        self,
+        *,
+        user_id: str,
+        account_id: str | None = None,
+        limit: int = 20,
+    ) -> list[RiskAlert]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+
+        alerts = self.list_alerts(user_id=user_id, account_id=account_id, unresolved_only=True)
+        return sorted(alerts, key=lambda item: item.created_at, reverse=True)[:limit]
 
     def acknowledge_alert(self, *, user_id: str, alert_id: str) -> RiskAlert | None:
         alert = self._repository.get_alert(alert_id=alert_id, user_id=user_id)
