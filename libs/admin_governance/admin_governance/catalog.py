@@ -77,6 +77,13 @@ def default_action_catalog() -> dict[str, ActionPolicy]:
             requires_confirmation=True,
             high_risk=True,
         ),
+        "admin_create_user": ActionPolicy(
+            action="admin_create_user",
+            min_role="admin",
+            min_level=2,
+            requires_confirmation=False,
+            high_risk=False,
+        ),
         "users.read_all": ActionPolicy(
             action="users.read_all",
             min_role="admin",

@@ -33,6 +33,36 @@ class UserRepository:
     def email_exists(self, email: str) -> bool:
         return email in self._email_index
 
+    def create_admin_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        display_name: str | None = None,
+        role: str | None = "user",
+        level: int | None = 1,
+        is_active: bool = True,
+        email_verified: bool = False,
+    ) -> User:
+        if self.email_exists(email):
+            raise ValueError("email already exists")
+
+        user = User.register(email=email, password=password)
+
+        if display_name is not None:
+            user.update_profile(display_name=display_name)
+        if role is not None:
+            user.set_role(role)
+        if level is not None:
+            user.set_level(level)
+        if email_verified:
+            user.verify_email()
+        if not is_active:
+            user.disable()
+
+        self.save(user)
+        return user
+
     def list_users(
         self,
         *,

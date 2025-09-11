@@ -170,6 +170,35 @@ def _cmd_change_password(args: argparse.Namespace) -> None:
     _output({"success": True, "data": {"revokedSessions": revoked}})
 
 
+def _cmd_admin_create_user(args: argparse.Namespace) -> None:
+    _admin, _ = _require_admin(args.token)
+    if _admin is None:
+        return
+
+    try:
+        user = _repo.create_admin_user(
+            email=args.email,
+            password=args.password,
+            display_name=args.display_name,
+            role=args.role,
+            level=args.level,
+            is_active=args.is_active,
+            email_verified=args.email_verified,
+        )
+    except PasswordTooWeakError as exc:
+        _output({"success": False, "error": {"code": "WEAK_PASSWORD", "message": str(exc)}})
+        return
+    except ValueError as exc:
+        message = str(exc)
+        if message == "email already exists":
+            _output({"success": False, "error": {"code": "DUPLICATE_EMAIL", "message": message}})
+            return
+        _output({"success": False, "error": {"code": "USER_CREATE_INVALID", "message": message}})
+        return
+
+    _output({"success": True, "data": _user_payload(user)})
+
+
 def _cmd_admin_list_users(args: argparse.Namespace) -> None:
     _admin, _ = _require_admin(args.token)
     if _admin is None:
@@ -318,6 +347,16 @@ def build_parser() -> argparse.ArgumentParser:
     change_password.add_argument("--no-revoke-all-sessions", action="store_false", dest="revoke_all_sessions")
     change_password.set_defaults(revoke_all_sessions=True)
 
+    admin_create = sub.add_parser("admin-create-user", help="管理员创建用户")
+    admin_create.add_argument("--token", required=True)
+    admin_create.add_argument("--email", required=True)
+    admin_create.add_argument("--password", required=True)
+    admin_create.add_argument("--display-name", default=None)
+    admin_create.add_argument("--role", choices=["user", "admin"], default="user")
+    admin_create.add_argument("--level", type=int, default=1)
+    admin_create.add_argument("--is-active", choices=["true", "false"], default="true")
+    admin_create.add_argument("--email-verified", choices=["true", "false"], default="false")
+
     admin_list = sub.add_parser("admin-list-users", help="管理员查询用户")
     admin_list.add_argument("--token", required=True)
     admin_list.add_argument("--status", choices=["active", "disabled"], default=None)
@@ -355,6 +394,7 @@ _COMMANDS = {
     "logout": _cmd_logout,
     "update-me": _cmd_update_me,
     "change-password": _cmd_change_password,
+    "admin-create-user": _cmd_admin_create_user,
     "admin-list-users": _cmd_admin_list_users,
     "admin-update-user": _cmd_admin_update_user,
     "delete-me": _cmd_delete_me,
@@ -366,6 +406,8 @@ _COMMANDS = {
 def _normalize_args(args: argparse.Namespace) -> argparse.Namespace:
     if hasattr(args, "is_active") and isinstance(args.is_active, str):
         args.is_active = args.is_active == "true"
+    if hasattr(args, "email_verified") and isinstance(args.email_verified, str):
+        args.email_verified = args.email_verified == "true"
     if hasattr(args, "revoke_all_sessions") and args.command == "change-password":
         args.revoke_all_sessions = bool(args.revoke_all_sessions)
     return args

@@ -73,6 +73,18 @@ class AdminUserUpdateRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class AdminUserCreateRequest(BaseModel):
+    email: str
+    password: str
+    display_name: str | None = Field(default=None, alias="displayName")
+    role: str | None = Field(default="user")
+    level: int | None = Field(default=1)
+    is_active: bool = Field(default=True, alias="isActive")
+    email_verified: bool = Field(default=False, alias="emailVerified")
+
+    model_config = {"populate_by_name": True}
+
+
 def _error(status_code: int, *, code: str, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -319,6 +331,44 @@ def _register_routes(
                 "revokedSessions": revoked,
             },
             "message": "User deleted",
+        }
+
+    @app.post("/admin/users")
+    def admin_create_user(
+        body: AdminUserCreateRequest,
+        request: Request,
+        current_user: User = Depends(get_current_user),
+    ):
+        denied = _authorize_admin_action(
+            request=request,
+            current_user=current_user,
+            action="admin_create_user",
+            target=body.email,
+        )
+        if denied is not None:
+            return denied
+
+        try:
+            user = repo.create_admin_user(
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name,
+                role=body.role,
+                level=body.level,
+                is_active=body.is_active,
+                email_verified=body.email_verified,
+            )
+        except PasswordTooWeakError as exc:
+            return _error(400, code="WEAK_PASSWORD", message=str(exc))
+        except ValueError as exc:
+            message = str(exc)
+            if message == "email already exists":
+                return _error(409, code="DUPLICATE_EMAIL", message=message)
+            return _error(400, code="USER_CREATE_INVALID", message=message)
+
+        return {
+            "success": True,
+            "data": _user_payload(user),
         }
 
     @app.get("/admin/users")
