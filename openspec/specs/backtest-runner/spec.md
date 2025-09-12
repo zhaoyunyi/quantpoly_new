@@ -88,3 +88,33 @@ TBD - created by archiving change add-strategy-backtest-migration. Update Purpos
 - **THEN** 返回 403
 - **AND** 不泄露任务是否存在
 
+### Requirement: 回测任务必须支持用户级重命名管理
+回测系统 MUST 支持用户对本人回测任务进行重命名，以便在策略研究过程中标注实验意图。
+
+#### Scenario: 用户重命名自己的回测任务
+- **GIVEN** 当前用户拥有一个已创建的回测任务
+- **WHEN** 调用回测重命名接口并提交 `displayName`
+- **THEN** 回测任务名称被更新
+- **AND** 更新时间戳发生变化
+
+#### Scenario: 越权重命名被拒绝
+- **GIVEN** 回测任务不属于当前用户
+- **WHEN** 用户调用重命名接口
+- **THEN** 返回 403
+- **AND** 不泄露任务详细信息
+
+### Requirement: 回测任务必须支持同策略相关结果聚合查询
+回测系统 MUST 提供“相关回测”查询能力，用于按同一策略聚合同用户历史任务并支持过滤。
+
+#### Scenario: 查询同策略相关回测
+- **GIVEN** 用户在同一策略下存在多个回测任务
+- **WHEN** 调用相关回测查询接口并传入 `limit/status`
+- **THEN** 返回同策略的回测列表
+- **AND** 结果排除当前任务
+
+#### Scenario: 相关回测查询仅返回当前用户数据
+- **GIVEN** 不同用户在同一策略 ID 下均有回测任务
+- **WHEN** 当前用户调用相关回测查询
+- **THEN** 仅返回当前用户任务
+- **AND** 不返回其他用户任务
+
