@@ -18,6 +18,6 @@
 
 ## 4. CLI 与验证
 
-- [ ] 4.1 为新增配置能力补齐 CLI 入口（JSON 输入输出）
+- [x] 4.1 为新增配置能力补齐 CLI 入口（JSON 输入输出）
 - [x] 4.2 增加 Given/When/Then 测试覆盖配置装配与重启后数据保持
 - [x] 4.3 运行 `openspec validate update-runtime-persistence-provider-baseline --strict`
