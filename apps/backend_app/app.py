@@ -20,6 +20,7 @@ from apps.backend_app.router_registry import (
 from apps.backend_app.settings import (
     CompositionSettings,
     normalize_enabled_contexts,
+    normalize_market_data_provider,
     normalize_storage_backend,
 )
 from platform_core.logging import mask_sensitive
@@ -48,16 +49,19 @@ def create_app(
     enabled_contexts: set[str] | None = None,
     storage_backend: str | None = None,
     sqlite_db_path: str | None = None,
+    market_data_provider: str | None = None,
 ) -> FastAPI:
     env_settings = CompositionSettings.from_env()
     settings = CompositionSettings(
         enabled_contexts=normalize_enabled_contexts(enabled_contexts),
         storage_backend=normalize_storage_backend(storage_backend or env_settings.storage_backend),
         sqlite_db_path=sqlite_db_path or env_settings.sqlite_db_path,
+        market_data_provider=normalize_market_data_provider(market_data_provider or env_settings.market_data_provider),
     )
     context = build_context(
         storage_backend=settings.storage_backend,
         sqlite_db_path=settings.sqlite_db_path,
+        market_data_provider=settings.market_data_provider,
     )
 
     app = create_user_auth_app(user_repo=context.user_repo, session_store=context.session_store)

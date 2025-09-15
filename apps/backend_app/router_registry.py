@@ -22,6 +22,7 @@ from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.repository_sqlite import SQLiteJobRepository
 from job_orchestration.scheduler import InMemoryScheduler
 from job_orchestration.service import JobOrchestrationService
+from market_data.alpaca_provider import AlpacaProvider
 from market_data.api import create_router as create_market_router
 from market_data.domain import MarketAsset, MarketCandle, MarketQuote
 from market_data.service import MarketDataService
@@ -30,9 +31,11 @@ from platform_core.logging import mask_sensitive
 from platform_core.response import error_response
 from risk_control.api import create_router as create_risk_router
 from risk_control.repository import InMemoryRiskRepository
+from risk_control.repository_sqlite import SQLiteRiskRepository
 from risk_control.service import RiskControlService
 from signal_execution.api import create_router as create_signal_router
 from signal_execution.repository import InMemorySignalRepository
+from signal_execution.repository_sqlite import SQLiteSignalRepository
 from signal_execution.service import SignalExecutionService
 from strategy_management.api import create_router as create_strategy_router
 from strategy_management.repository import InMemoryStrategyRepository
@@ -51,6 +54,7 @@ from user_auth.session_sqlite import SQLiteSessionStore
 from user_auth.token import extract_session_token
 from user_preferences.api import create_router as create_preferences_router
 from user_preferences.store import InMemoryPreferencesStore
+from user_preferences.store_sqlite import SQLitePreferencesStore
 
 
 AuthUserFn = Callable[[Request], User]
@@ -86,24 +90,41 @@ class _InMemoryMarketProvider:
 
     def health(self):
         return {
-            "provider": "in-memory",
+            "provider": "inmemory",
             "healthy": True,
             "status": "ok",
             "message": "",
         }
 
 
+def _default_alpaca_transport(_operation: str, **_kwargs):
+    raise RuntimeError("alpaca transport is not configured")
+
+
+def _build_market_service(*, market_data_provider: str) -> MarketDataService:
+    provider_name = (market_data_provider or "inmemory").strip().lower()
+
+    if provider_name == "inmemory":
+        provider = _InMemoryMarketProvider()
+    elif provider_name == "alpaca":
+        provider = AlpacaProvider(transport=_default_alpaca_transport)
+    else:
+        raise ValueError("market_data_provider must be one of: inmemory, alpaca")
+
+    return MarketDataService(provider=provider)
+
+
 @dataclass
 class CompositionContext:
     user_repo: UserRepository
     session_store: SessionStore
-    strategy_repo: InMemoryStrategyRepository
-    backtest_repo: InMemoryBacktestRepository
-    trading_repo: InMemoryTradingAccountRepository
-    job_repo: InMemoryJobRepository
-    risk_repo: InMemoryRiskRepository
-    signal_repo: InMemorySignalRepository
-    preferences_store: InMemoryPreferencesStore
+    strategy_repo: InMemoryStrategyRepository | SQLiteStrategyRepository
+    backtest_repo: InMemoryBacktestRepository | SQLiteBacktestRepository
+    trading_repo: InMemoryTradingAccountRepository | SQLiteTradingAccountRepository
+    job_repo: InMemoryJobRepository | SQLiteJobRepository
+    risk_repo: InMemoryRiskRepository | SQLiteRiskRepository
+    signal_repo: InMemorySignalRepository | SQLiteSignalRepository
+    preferences_store: InMemoryPreferencesStore | SQLitePreferencesStore
     market_service: MarketDataService
     backtest_result_store: InMemoryBacktestResultStore | SQLiteBacktestResultStore
 
@@ -135,6 +156,7 @@ def build_context(
     *,
     storage_backend: str = "sqlite",
     sqlite_db_path: str | None = None,
+    market_data_provider: str = "inmemory",
 ) -> CompositionContext:
     normalized_backend = storage_backend.strip().lower()
     if normalized_backend not in {"sqlite", "memory"}:
@@ -154,6 +176,9 @@ def build_context(
         trading_repo = SQLiteTradingAccountRepository(db_path=sqlite_db_path)
         job_repo = SQLiteJobRepository(db_path=sqlite_db_path)
         backtest_result_store = SQLiteBacktestResultStore(db_path=sqlite_db_path)
+        risk_repo = SQLiteRiskRepository(db_path=sqlite_db_path)
+        signal_repo = SQLiteSignalRepository(db_path=sqlite_db_path)
+        preferences_store = SQLitePreferencesStore(db_path=sqlite_db_path)
     else:
         user_repo = UserRepository()
         session_store = SessionStore()
@@ -162,12 +187,11 @@ def build_context(
         trading_repo = InMemoryTradingAccountRepository()
         job_repo = InMemoryJobRepository()
         backtest_result_store = InMemoryBacktestResultStore()
+        risk_repo = InMemoryRiskRepository()
+        signal_repo = InMemorySignalRepository()
+        preferences_store = InMemoryPreferencesStore()
 
-    risk_repo = InMemoryRiskRepository()
-    signal_repo = InMemorySignalRepository()
-    preferences_store = InMemoryPreferencesStore()
-
-    market_service = MarketDataService(provider=_InMemoryMarketProvider())
+    market_service = _build_market_service(market_data_provider=market_data_provider)
 
     return CompositionContext(
         user_repo=user_repo,
