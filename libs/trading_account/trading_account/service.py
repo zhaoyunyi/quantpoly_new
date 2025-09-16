@@ -36,6 +36,10 @@ class InsufficientFundsError(ValueError):
     """可用资金不足。"""
 
 
+class InsufficientPositionError(ValueError):
+    """可用持仓不足。"""
+
+
 class LedgerTransactionError(RuntimeError):
     """账本事务失败。"""
 
@@ -312,6 +316,193 @@ class TradingAccountService:
         )
         self._repository.save_order(order)
         return order
+
+    @staticmethod
+    def _assert_trade_inputs(*, quantity: float, price: float) -> None:
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
+        if price <= 0:
+            raise ValueError("price must be positive")
+
+    def _apply_trade_position_change(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        symbol: str,
+        side: str,
+        quantity: float,
+        price: float,
+    ) -> Position:
+        normalized_symbol = symbol.upper()
+        current = self._repository.get_position_by_symbol(
+            account_id=account_id,
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
+
+        if side == "BUY":
+            if current is None:
+                updated = Position.create(
+                    user_id=user_id,
+                    account_id=account_id,
+                    symbol=normalized_symbol,
+                    quantity=quantity,
+                    avg_price=price,
+                    last_price=price,
+                )
+            else:
+                existing_qty = float(current.quantity)
+                new_qty = existing_qty + float(quantity)
+                if new_qty <= 0:
+                    raise ValueError("position quantity must remain positive")
+                weighted_cost = existing_qty * float(current.avg_price) + float(quantity) * float(price)
+                current.quantity = new_qty
+                current.avg_price = weighted_cost / new_qty
+                current.last_price = float(price)
+                updated = current
+        else:
+            if current is None or float(current.quantity) < float(quantity):
+                raise InsufficientPositionError("insufficient position")
+
+            current.quantity = max(0.0, float(current.quantity) - float(quantity))
+            current.last_price = float(price)
+            updated = current
+
+        self._repository.save_position(updated)
+        return updated
+
+    def _execute_trade_command(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        symbol: str,
+        side: str,
+        quantity: float,
+        price: float,
+    ) -> dict[str, Any]:
+        normalized_side = side.upper()
+        normalized_symbol = symbol.upper()
+        if normalized_side not in {"BUY", "SELL"}:
+            raise ValueError("side must be BUY or SELL")
+
+        self._assert_account_owner(user_id=user_id, account_id=account_id)
+        self._assert_trade_inputs(quantity=quantity, price=price)
+
+        notional = float(quantity) * float(price)
+        if normalized_side == "BUY":
+            if self.cash_balance(user_id=user_id, account_id=account_id) < notional:
+                raise InsufficientFundsError("insufficient funds")
+        else:
+            position = self._repository.get_position_by_symbol(
+                account_id=account_id,
+                user_id=user_id,
+                symbol=normalized_symbol,
+            )
+            if position is None or float(position.quantity) < float(quantity):
+                raise InsufficientPositionError("insufficient position")
+
+        try:
+            with self._uow_factory():
+                order = self.submit_order(
+                    user_id=user_id,
+                    account_id=account_id,
+                    symbol=normalized_symbol,
+                    side=normalized_side,
+                    quantity=quantity,
+                    price=price,
+                )
+                filled_order = self._transition_order_or_raise(
+                    user_id=user_id,
+                    account_id=account_id,
+                    order_id=order.id,
+                    from_status="pending",
+                    to_status="filled",
+                )
+
+                trade = TradeRecord.create(
+                    user_id=user_id,
+                    account_id=account_id,
+                    symbol=normalized_symbol,
+                    side=normalized_side,
+                    quantity=quantity,
+                    price=price,
+                    order_id=filled_order.id,
+                )
+                signed_amount = -notional if normalized_side == "BUY" else notional
+                flow = CashFlow.create(
+                    user_id=user_id,
+                    account_id=account_id,
+                    amount=signed_amount,
+                    flow_type=f"trade_{normalized_side.lower()}",
+                    related_trade_id=trade.id,
+                )
+
+                self._repository.save_trade(trade)
+                self._repository.save_cash_flow(flow)
+                position = self._apply_trade_position_change(
+                    user_id=user_id,
+                    account_id=account_id,
+                    symbol=normalized_symbol,
+                    side=normalized_side,
+                    quantity=quantity,
+                    price=price,
+                )
+
+            return {
+                "order": filled_order,
+                "trade": trade,
+                "cashFlow": flow,
+                "position": position,
+            }
+        except (
+            AccountAccessDeniedError,
+            InsufficientFundsError,
+            InsufficientPositionError,
+            InvalidTradeOrderTransitionError,
+            OrderNotFoundError,
+            ValueError,
+        ):
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise LedgerTransactionError("ledger transaction failed") from exc
+
+    def execute_buy_command(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        symbol: str,
+        quantity: float,
+        price: float,
+    ) -> dict[str, Any]:
+        return self._execute_trade_command(
+            user_id=user_id,
+            account_id=account_id,
+            symbol=symbol,
+            side="BUY",
+            quantity=quantity,
+            price=price,
+        )
+
+    def execute_sell_command(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        symbol: str,
+        quantity: float,
+        price: float,
+    ) -> dict[str, Any]:
+        return self._execute_trade_command(
+            user_id=user_id,
+            account_id=account_id,
+            symbol=symbol,
+            side="SELL",
+            quantity=quantity,
+            price=price,
+        )
 
     def get_order(self, *, user_id: str, account_id: str, order_id: str) -> TradeOrder | None:
         self._assert_account_owner(user_id=user_id, account_id=account_id)

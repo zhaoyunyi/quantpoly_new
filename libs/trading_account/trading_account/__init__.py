@@ -13,6 +13,7 @@ from trading_account.repository_sqlite import SQLiteTradingAccountRepository
 from trading_account.service import (
     AccountAccessDeniedError,
     InsufficientFundsError,
+    InsufficientPositionError,
     LedgerTransactionError,
     OrderNotFoundError,
     PriceRefreshConflictError,
@@ -32,6 +33,7 @@ __all__ = [
     "SQLiteTradingAccountRepository",
     "AccountAccessDeniedError",
     "InsufficientFundsError",
+    "InsufficientPositionError",
     "LedgerTransactionError",
     "OrderNotFoundError",
     "TradeNotFoundError",

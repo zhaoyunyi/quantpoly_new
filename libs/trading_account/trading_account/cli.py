@@ -16,6 +16,7 @@ from trading_account.repository import InMemoryTradingAccountRepository
 from trading_account.service import (
     AccountAccessDeniedError,
     InsufficientFundsError,
+    InsufficientPositionError,
     LedgerTransactionError,
     OrderNotFoundError,
     PriceRefreshConflictError,
@@ -131,6 +132,16 @@ def _serialize_position(position) -> dict:
         "lastPrice": position.last_price,
     }
 
+
+
+
+def _trade_command_payload(result: dict) -> dict:
+    return {
+        "order": _serialize_order(result["order"]),
+        "trade": _serialize_trade(result["trade"]),
+        "cashFlow": _serialize_cash_flow(result["cashFlow"]),
+        "position": _serialize_position(result["position"]),
+    }
 
 def _cmd_account_create(args: argparse.Namespace) -> None:
     created = _service.create_account(
@@ -531,6 +542,57 @@ def _cmd_ops_account_cleanup_task(args: argparse.Namespace) -> None:
     _output({"success": True, "data": _job_payload(job)})
 
 
+
+
+def _cmd_buy(args: argparse.Namespace) -> None:
+    try:
+        result = _service.execute_buy_command(
+            user_id=args.user_id,
+            account_id=args.account_id,
+            symbol=args.symbol,
+            quantity=args.quantity,
+            price=args.price,
+        )
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+    except InsufficientFundsError:
+        _error(code="INSUFFICIENT_FUNDS", message="insufficient funds")
+        return
+    except ValueError as exc:
+        _error(code="INVALID_ARGUMENT", message=str(exc))
+        return
+    except LedgerTransactionError:
+        _error(code="LEDGER_TRANSACTION_FAILED", message="ledger transaction failed")
+        return
+
+    _output({"success": True, "data": _trade_command_payload(result)})
+
+
+def _cmd_sell(args: argparse.Namespace) -> None:
+    try:
+        result = _service.execute_sell_command(
+            user_id=args.user_id,
+            account_id=args.account_id,
+            symbol=args.symbol,
+            quantity=args.quantity,
+            price=args.price,
+        )
+    except AccountAccessDeniedError:
+        _error(code="ACCOUNT_ACCESS_DENIED", message="account does not belong to current user")
+        return
+    except InsufficientPositionError:
+        _error(code="INSUFFICIENT_POSITION", message="insufficient position")
+        return
+    except ValueError as exc:
+        _error(code="INVALID_ARGUMENT", message=str(exc))
+        return
+    except LedgerTransactionError:
+        _error(code="LEDGER_TRANSACTION_FAILED", message="ledger transaction failed")
+        return
+
+    _output({"success": True, "data": _trade_command_payload(result)})
+
 def _cmd_order_create(args: argparse.Namespace) -> None:
     try:
         order = _service.submit_order(
@@ -822,6 +884,21 @@ def build_parser() -> argparse.ArgumentParser:
     ops_account_cleanup.add_argument("--idempotency-key", default=None)
     ops_account_cleanup.add_argument("--audit-id", default="cli")
 
+
+    buy = sub.add_parser("buy", help="业务买入指令")
+    buy.add_argument("--user-id", required=True)
+    buy.add_argument("--account-id", required=True)
+    buy.add_argument("--symbol", required=True)
+    buy.add_argument("--quantity", required=True, type=float)
+    buy.add_argument("--price", required=True, type=float)
+
+    sell = sub.add_parser("sell", help="业务卖出指令")
+    sell.add_argument("--user-id", required=True)
+    sell.add_argument("--account-id", required=True)
+    sell.add_argument("--symbol", required=True)
+    sell.add_argument("--quantity", required=True, type=float)
+    sell.add_argument("--price", required=True, type=float)
+
     order_create = sub.add_parser("order-create", help="创建订单")
     order_create.add_argument("--user-id", required=True)
     order_create.add_argument("--account-id", required=True)
@@ -924,6 +1001,8 @@ _COMMANDS = {
     "ops-daily-stats-task": _cmd_ops_daily_stats_task,
     "stats-daily-get": _cmd_stats_daily_get,
     "ops-account-cleanup-task": _cmd_ops_account_cleanup_task,
+    "buy": _cmd_buy,
+    "sell": _cmd_sell,
     "order-create": _cmd_order_create,
     "order-list": _cmd_order_list,
     "order-fill": _cmd_order_fill,

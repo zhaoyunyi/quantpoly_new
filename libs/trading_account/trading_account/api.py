@@ -19,6 +19,7 @@ from trading_account.domain import InvalidTradeOrderTransitionError
 from trading_account.service import (
     AccountAccessDeniedError,
     InsufficientFundsError,
+    InsufficientPositionError,
     LedgerTransactionError,
     OrderNotFoundError,
     PriceRefreshConflictError,
@@ -131,6 +132,15 @@ def _cash_flow_to_payload(flow) -> dict[str, Any]:
 
 
 
+def _trade_command_payload(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "order": _order_to_payload(result["order"]),
+        "trade": _trade_to_payload(result["trade"]),
+        "cashFlow": _cash_flow_to_payload(result["cashFlow"]),
+        "position": _position_to_payload(result["position"]),
+    }
+
+
 class AccountCreateRequest(BaseModel):
     account_name: str = Field(alias="accountName")
     initial_capital: float = Field(default=0.0, alias="initialCapital")
@@ -143,6 +153,12 @@ class AccountUpdateRequest(BaseModel):
     is_active: bool | None = Field(default=None, alias="isActive")
 
     model_config = {"populate_by_name": True}
+
+class TradeCommandRequest(BaseModel):
+    symbol: str
+    quantity: float
+    price: float
+
 
 class OrderCreateRequest(BaseModel):
     symbol: str
@@ -370,6 +386,80 @@ def create_router(
             )
 
         return success_response(data=analysis)
+
+    @router.post("/trading/accounts/{account_id}/buy")
+    def buy(account_id: str, body: TradeCommandRequest, current_user=Depends(get_current_user)):
+        try:
+            result = service.execute_buy_command(
+                user_id=current_user.id,
+                account_id=account_id,
+                symbol=body.symbol,
+                quantity=body.quantity,
+                price=body.price,
+            )
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        except InsufficientFundsError:
+            return _error(
+                status_code=409,
+                code="INSUFFICIENT_FUNDS",
+                message="insufficient funds",
+            )
+        except ValueError as exc:
+            return _error(
+                status_code=400,
+                code="INVALID_ARGUMENT",
+                message=str(exc),
+            )
+        except LedgerTransactionError:
+            return _error(
+                status_code=500,
+                code="LEDGER_TRANSACTION_FAILED",
+                message="ledger transaction failed",
+            )
+
+        return success_response(data=_trade_command_payload(result))
+
+    @router.post("/trading/accounts/{account_id}/sell")
+    def sell(account_id: str, body: TradeCommandRequest, current_user=Depends(get_current_user)):
+        try:
+            result = service.execute_sell_command(
+                user_id=current_user.id,
+                account_id=account_id,
+                symbol=body.symbol,
+                quantity=body.quantity,
+                price=body.price,
+            )
+        except AccountAccessDeniedError:
+            return _error(
+                status_code=403,
+                code="ACCOUNT_ACCESS_DENIED",
+                message="account does not belong to current user",
+            )
+        except InsufficientPositionError:
+            return _error(
+                status_code=409,
+                code="INSUFFICIENT_POSITION",
+                message="insufficient position",
+            )
+        except ValueError as exc:
+            return _error(
+                status_code=400,
+                code="INVALID_ARGUMENT",
+                message=str(exc),
+            )
+        except LedgerTransactionError:
+            return _error(
+                status_code=500,
+                code="LEDGER_TRANSACTION_FAILED",
+                message="ledger transaction failed",
+            )
+
+        return success_response(data=_trade_command_payload(result))
 
     @router.post("/trading/accounts/{account_id}/orders")
     def create_order(account_id: str, body: OrderCreateRequest, current_user=Depends(get_current_user)):
