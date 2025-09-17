@@ -89,6 +89,57 @@ def _cmd_trend(args: argparse.Namespace) -> None:
     _output({"success": True, "data": _service.execution_trend(user_id=args.user_id)})
 
 
+def _cmd_templates(args: argparse.Namespace) -> None:
+    data = _service.list_execution_templates(strategy_type=args.strategy_type)
+    _output({"success": True, "data": data})
+
+
+def _cmd_strategy_statistics(args: argparse.Namespace) -> None:
+    try:
+        data = _service.strategy_execution_statistics(
+            user_id=args.user_id,
+            strategy_id=args.strategy_id,
+        )
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+
+    _output({"success": True, "data": data})
+
+
+def _cmd_strategy_trend(args: argparse.Namespace) -> None:
+    try:
+        data = _service.strategy_execution_trend(
+            user_id=args.user_id,
+            strategy_id=args.strategy_id,
+            days=args.days,
+        )
+    except SignalAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "SIGNAL_ACCESS_DENIED",
+                    "message": "signal does not belong to current user",
+                },
+            }
+        )
+        return
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_DAYS", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": data})
+
+
 def _cmd_validate_parameters(args: argparse.Namespace) -> None:
     try:
         parameters = _parse_json(args.parameters)
@@ -500,6 +551,18 @@ def build_parser() -> argparse.ArgumentParser:
     trend = sub.add_parser("trend", help="查询执行趋势")
     trend.add_argument("--user-id", required=True)
 
+    templates = sub.add_parser("templates", help="按策略类型查询执行模板")
+    templates.add_argument("--strategy-type", default=None)
+
+    strategy_statistics = sub.add_parser("strategy-statistics", help="按策略查询执行统计")
+    strategy_statistics.add_argument("--user-id", required=True)
+    strategy_statistics.add_argument("--strategy-id", required=True)
+
+    strategy_trend = sub.add_parser("strategy-trend", help="按策略查询执行趋势")
+    strategy_trend.add_argument("--user-id", required=True)
+    strategy_trend.add_argument("--strategy-id", required=True)
+    strategy_trend.add_argument("--days", type=int, default=7)
+
     validate_parameters = sub.add_parser("validate-parameters", help="执行前参数校验")
     validate_parameters.add_argument("--user-id", required=True)
     validate_parameters.add_argument("--strategy-id", required=True)
@@ -609,6 +672,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 _COMMANDS = {
     "trend": _cmd_trend,
+    "templates": _cmd_templates,
+    "strategy-statistics": _cmd_strategy_statistics,
+    "strategy-trend": _cmd_strategy_trend,
     "validate-parameters": _cmd_validate_parameters,
     "cleanup-all": _cmd_cleanup_all,
     "cleanup-executions": _cmd_cleanup_executions,

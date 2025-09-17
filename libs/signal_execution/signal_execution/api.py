@@ -216,6 +216,55 @@ def create_router(
         }
         return success_response(data=payload)
 
+    @router.get("/signals/execution-readmodel/templates")
+    def list_execution_templates(
+        strategy_type: str | None = Query(default=None, alias="strategyType"),
+        current_user=Depends(get_current_user),
+    ):
+        del current_user
+        return success_response(data=service.list_execution_templates(strategy_type=strategy_type))
+
+    @router.get("/signals/execution-readmodel/strategies/{strategy_id}/statistics")
+    def strategy_execution_statistics(strategy_id: str, current_user=Depends(get_current_user)):
+        try:
+            data = service.strategy_execution_statistics(
+                user_id=current_user.id,
+                strategy_id=strategy_id,
+            )
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        return success_response(data=data)
+
+    @router.get("/signals/execution-readmodel/strategies/{strategy_id}/trend")
+    def strategy_execution_trend(
+        strategy_id: str,
+        days: int = Query(default=7, ge=1),
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            data = service.strategy_execution_trend(
+                user_id=current_user.id,
+                strategy_id=strategy_id,
+                days=days,
+            )
+        except SignalAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content=error_response(
+                    code="SIGNAL_ACCESS_DENIED",
+                    message="signal does not belong to current user",
+                ),
+            )
+
+        return success_response(data=data)
+
     @router.post("/signals/{signal_id}/process")
     def process_signal(signal_id: str, current_user=Depends(get_current_user)):
         try:

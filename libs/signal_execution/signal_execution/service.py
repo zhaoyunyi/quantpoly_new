@@ -27,6 +27,29 @@ class InvalidSignalParametersError(ValueError):
     """信号参数校验失败。"""
 
 
+_EXECUTION_TEMPLATE_CATALOG: tuple[dict[str, Any], ...] = (
+    {
+        "strategyType": "moving_average",
+        "name": "双均线策略",
+        "description": "基于短期与长期移动平均线交叉触发买卖信号。",
+        "parameters": {
+            "shortWindow": {"type": "integer", "required": True, "minimum": 1},
+            "longWindow": {"type": "integer", "required": True, "minimum": 2},
+        },
+    },
+    {
+        "strategyType": "mean_reversion",
+        "name": "均值回归策略",
+        "description": "基于价格偏离均值程度（Z-Score）触发反转信号。",
+        "parameters": {
+            "window": {"type": "integer", "required": True, "minimum": 2},
+            "entryZ": {"type": "number", "required": True, "exclusiveMinimum": 0},
+            "exitZ": {"type": "number", "required": True, "exclusiveMinimum": 0},
+        },
+    },
+)
+
+
 class SignalExecutionService:
     def __init__(
         self,
@@ -82,11 +105,13 @@ class SignalExecutionService:
         if not is_admin:
             raise AdminRequiredError("admin role required")
 
-    def _assert_signal_acl(self, *, user_id: str, strategy_id: str, account_id: str) -> None:
+    def _assert_strategy_acl(self, *, user_id: str, strategy_id: str) -> None:
         if not self._strategy_owner_acl(user_id, strategy_id):
             raise SignalAccessDeniedError("strategy does not belong to current user")
-        if not self._account_owner_acl(user_id, account_id):
-            raise SignalAccessDeniedError("account does not belong to current user")
+
+    def _assert_signal_acl(self, *, user_id: str, strategy_id: str, account_id: str) -> None:
+        self._assert_strategy_acl(user_id=user_id, strategy_id=strategy_id)
+        self._assert_account_acl(user_id=user_id, account_id=account_id)
 
     def _assert_account_acl(self, *, user_id: str, account_id: str) -> None:
         if not self._account_owner_acl(user_id, account_id):
@@ -104,6 +129,33 @@ class SignalExecutionService:
             "executed": sum(1 for item in signals if item.status == "executed"),
             "cancelled": sum(1 for item in signals if item.status == "cancelled"),
         }
+
+    @staticmethod
+    def _average(values: list[float]) -> float:
+        if not values:
+            return 0.0
+        return round(sum(values) / len(values), 4)
+
+    def list_execution_templates(self, *, strategy_type: str | None = None) -> list[dict[str, Any]]:
+        normalized = strategy_type.strip().lower() if strategy_type is not None else None
+
+        templates: list[dict[str, Any]] = []
+        for template in _EXECUTION_TEMPLATE_CATALOG:
+            if normalized is not None and template["strategyType"] != normalized:
+                continue
+            templates.append(
+                {
+                    "strategyType": template["strategyType"],
+                    "name": template["name"],
+                    "description": template["description"],
+                    "parameters": {
+                        key: dict(value)
+                        for key, value in dict(template.get("parameters", {})).items()
+                    },
+                }
+            )
+
+        return templates
 
     @staticmethod
     def _strategy_field(strategy: Any, key: str, default: Any = None) -> Any:
@@ -975,15 +1027,10 @@ class SignalExecutionService:
             float(item.metrics.get("latencyMs", 0.0)) for item in executions if "latencyMs" in item.metrics
         ]
 
-        def _avg(values: list[float]) -> float:
-            if not values:
-                return 0.0
-            return round(sum(values) / len(values), 4)
-
         return {
             "totalExecutions": len(executions),
-            "averagePnl": _avg(pnls),
-            "averageLatencyMs": _avg(latencies),
+            "averagePnl": self._average(pnls),
+            "averageLatencyMs": self._average(latencies),
         }
 
     def performance_statistics_by_strategy(self, *, user_id: str) -> list[dict[str, Any]]:
@@ -1001,6 +1048,77 @@ class SignalExecutionService:
             result.append(metrics_payload)
 
         return result
+
+    def strategy_execution_statistics(self, *, user_id: str, strategy_id: str) -> dict[str, Any]:
+        self._assert_strategy_acl(user_id=user_id, strategy_id=strategy_id)
+
+        executions = [
+            item
+            for item in self._repository.list_executions(user_id=user_id)
+            if item.strategy_id == strategy_id
+        ]
+        executed_items = [item for item in executions if item.status == "executed"]
+
+        pnls = [float(item.metrics.get("pnl", 0.0)) for item in executed_items if "pnl" in item.metrics]
+        latencies = [
+            float(item.metrics.get("latencyMs", 0.0))
+            for item in executed_items
+            if "latencyMs" in item.metrics
+        ]
+
+        return {
+            "strategyId": strategy_id,
+            "totalExecutions": len(executions),
+            "pending": sum(1 for item in executions if item.status == "pending"),
+            "executed": sum(1 for item in executions if item.status == "executed"),
+            "cancelled": sum(1 for item in executions if item.status == "cancelled"),
+            "expired": sum(1 for item in executions if item.status == "expired"),
+            "averagePnl": self._average(pnls),
+            "averageLatencyMs": self._average(latencies),
+        }
+
+    def strategy_execution_trend(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        days: int,
+        now: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        if days <= 0:
+            raise ValueError("days must be positive")
+
+        self._assert_strategy_acl(user_id=user_id, strategy_id=strategy_id)
+        now_ts = now or datetime.now(timezone.utc)
+        start_date = now_ts.date() - timedelta(days=days - 1)
+
+        executions = self._repository.list_executions(user_id=user_id)
+        buckets: dict[str, list[ExecutionRecord]] = {}
+
+        for record in executions:
+            if record.strategy_id != strategy_id:
+                continue
+            day = record.created_at.date()
+            if day < start_date:
+                continue
+            key = day.isoformat()
+            buckets.setdefault(key, []).append(record)
+
+        series: list[dict[str, Any]] = []
+        for key in sorted(buckets.keys()):
+            items = buckets[key]
+            series.append(
+                {
+                    "date": key,
+                    "total": len(items),
+                    "pending": sum(1 for item in items if item.status == "pending"),
+                    "executed": sum(1 for item in items if item.status == "executed"),
+                    "cancelled": sum(1 for item in items if item.status == "cancelled"),
+                    "expired": sum(1 for item in items if item.status == "expired"),
+                }
+            )
+
+        return series
 
     def signal_performance(self, *, user_id: str, signal_id: str) -> dict[str, Any]:
         signal = self._repository.get_signal(signal_id=signal_id, user_id=user_id)
