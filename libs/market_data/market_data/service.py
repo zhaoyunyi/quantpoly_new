@@ -247,13 +247,16 @@ class MarketDataService:
         limit: int | None = None,
     ) -> list[MarketCandle]:
         del user_id
-        return self._provider.history(
-            symbol=symbol,
-            start_date=start_date,
-            end_date=end_date,
-            timeframe=timeframe,
-            limit=limit,
-        )
+        try:
+            return self._provider.history(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                timeframe=timeframe,
+                limit=limit,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise self._map_provider_error(exc) from exc
 
     def sync_market_data(
         self,

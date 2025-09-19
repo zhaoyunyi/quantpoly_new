@@ -101,3 +101,54 @@ def test_cli_history_outputs_items(capsys, monkeypatch):
     assert data["data"]["symbol"] == "AAPL"
     assert len(data["data"]["items"]) == 1
 
+
+
+
+def test_cli_history_provider_timeout_outputs_standard_error(capsys, monkeypatch):
+    class _TimeoutProvider:
+        def search(self, *, keyword: str, limit: int):
+            del keyword, limit
+            return []
+
+        def quote(self, *, symbol: str):
+            return MarketQuote(
+                symbol=symbol,
+                name=f"{symbol} Inc.",
+                price=1.0,
+                previous_close=1.0,
+                open_price=1.0,
+                high_price=1.0,
+                low_price=1.0,
+                volume=1.0,
+                timestamp=datetime.now(timezone.utc),
+            )
+
+        def history(
+            self,
+            *,
+            symbol: str,
+            start_date: str,
+            end_date: str,
+            timeframe: str,
+            limit: int | None,
+        ):
+            del symbol, start_date, end_date, timeframe, limit
+            raise TimeoutError("provider timeout")
+
+    service = MarketDataService(provider=_TimeoutProvider())
+    monkeypatch.setattr(cli, "_service", service)
+
+    payload = _run(
+        cli._cmd_history,
+        capsys=capsys,
+        user_id="u-1",
+        symbol="AAPL",
+        start_date="2026-01-01",
+        end_date="2026-02-01",
+        timeframe="1Day",
+        limit=10,
+    )
+
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "UPSTREAM_TIMEOUT"
+    assert payload["error"]["retryable"] is True

@@ -132,3 +132,36 @@ def test_quote_endpoint_rate_limit_returns_standard_error():
     assert payload["success"] is False
     assert payload["error"]["code"] == "RATE_LIMIT_EXCEEDED"
 
+
+
+def test_history_endpoint_provider_timeout_returns_standard_error():
+    class _Provider:
+        def search(self, *, keyword: str, limit: int):
+            del keyword, limit
+            return []
+
+        def quote(self, *, symbol: str):
+            del symbol
+            raise RuntimeError("unused")
+
+        def history(self, *, symbol: str, start_date: str, end_date: str, timeframe: str, limit: int | None):
+            del symbol, start_date, end_date, timeframe, limit
+            raise TimeoutError("provider timeout")
+
+    app = _build_app(provider=_Provider())
+    client = TestClient(app)
+
+    resp = client.get(
+        "/market/history/AAPL",
+        params={
+            "startDate": "2026-01-01",
+            "endDate": "2026-02-01",
+            "timeframe": "1Day",
+        },
+    )
+
+    assert resp.status_code == 504
+    payload = resp.json()
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "UPSTREAM_TIMEOUT"
+    assert payload["error"]["retryable"] is True
