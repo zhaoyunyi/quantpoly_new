@@ -82,3 +82,33 @@ TBD - created by archiving change add-market-data-context-migration. Update Purp
 - **THEN** 对应指标输出 `status=insufficient_data`
 - **AND** 不返回 `value` 字段
 
+### Requirement: 行情 Provider 必须支持运行时可配置装配
+市场数据上下文 MUST 支持通过运行时配置选择 provider（至少支持 `inmemory` 与 `alpaca`），并向上层暴露一致错误语义。
+
+#### Scenario: 选择 alpaca provider 并成功装配
+- **GIVEN** 运行时配置 `market_data.provider=alpaca`
+- **WHEN** 组合入口启动并创建市场数据服务
+- **THEN** 市场数据服务使用 alpaca provider
+- **AND** `provider-health` 能返回对应 provider 标识
+
+#### Scenario: provider 装配失败返回统一错误
+- **GIVEN** provider 初始化失败（如配置缺失）
+- **WHEN** 服务处理市场数据请求
+- **THEN** 返回统一错误 envelope
+- **AND** 错误码可用于区分配置错误与上游错误
+
+### Requirement: 市场数据运行时必须支持真实 Provider 装配
+市场数据上下文 MUST 支持在运行时装配真实行情 provider（如 alpaca），并保持与 inmemory provider 一致的接口契约。
+
+#### Scenario: 运行时切换到 alpaca provider
+- **GIVEN** 配置 `market_data.provider=alpaca`
+- **WHEN** 服务启动并提供行情查询
+- **THEN** 查询链路使用 alpaca provider
+- **AND** 返回结构与 inmemory provider 保持一致契约
+
+#### Scenario: provider 配置非法时拒绝启动
+- **GIVEN** 配置了不支持的 provider 名称
+- **WHEN** 服务启动
+- **THEN** 服务启动失败并返回可识别错误
+- **AND** 不得静默回退到其他 provider
+
