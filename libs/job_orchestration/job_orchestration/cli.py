@@ -48,6 +48,16 @@ def _serialize_job(job) -> dict:
         }
         if job.error_code or job.error_message
         else None,
+        "executor": {
+            "name": job.executor_name,
+            "dispatchId": job.dispatch_id,
+        }
+        if job.executor_name or job.dispatch_id
+        else None,
+        "startedAt": _dt(job.started_at),
+        "finishedAt": _dt(job.finished_at),
+        "createdAt": _dt(job.created_at),
+        "updatedAt": _dt(job.updated_at),
     }
 
 
@@ -91,7 +101,7 @@ def _cmd_submit(args: argparse.Namespace) -> None:
         _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
         return
 
-    _output({"success": True, "data": _serialize_job(job)})
+    _output({"success": True, "data": _serialize_job(job), "runtime": _service.runtime_status()})
 
 
 def _cmd_status(args: argparse.Namespace) -> None:
@@ -99,7 +109,20 @@ def _cmd_status(args: argparse.Namespace) -> None:
     if job is None:
         _output({"success": False, "error": {"code": "JOB_NOT_FOUND", "message": "job not found"}})
         return
-    _output({"success": True, "data": _serialize_job(job)})
+    _output({"success": True, "data": _serialize_job(job), "runtime": _service.runtime_status()})
+
+
+def _cmd_transition(args: argparse.Namespace) -> None:
+    try:
+        job = _service.transition_job(user_id=args.user_id, job_id=args.job_id, to_status=args.to_status)
+    except JobAccessDeniedError:
+        _output({"success": False, "error": {"code": "JOB_ACCESS_DENIED", "message": "job access denied"}})
+        return
+    except InvalidJobTransitionError as exc:
+        _output({"success": False, "error": {"code": "INVALID_TRANSITION", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": _serialize_job(job), "runtime": _service.runtime_status()})
 
 
 def _cmd_cancel(args: argparse.Namespace) -> None:
@@ -112,7 +135,7 @@ def _cmd_cancel(args: argparse.Namespace) -> None:
         _output({"success": False, "error": {"code": "INVALID_TRANSITION", "message": str(exc)}})
         return
 
-    _output({"success": True, "data": _serialize_job(job)})
+    _output({"success": True, "data": _serialize_job(job), "runtime": _service.runtime_status()})
 
 
 def _cmd_retry(args: argparse.Namespace) -> None:
@@ -125,11 +148,15 @@ def _cmd_retry(args: argparse.Namespace) -> None:
         _output({"success": False, "error": {"code": "INVALID_TRANSITION", "message": str(exc)}})
         return
 
-    _output({"success": True, "data": _serialize_job(job)})
+    _output({"success": True, "data": _serialize_job(job), "runtime": _service.runtime_status()})
 
 
 def _cmd_types(_args: argparse.Namespace) -> None:
-    _output({"success": True, "data": _service.task_type_registry()})
+    _output({"success": True, "data": _service.task_type_registry(), "runtime": _service.runtime_status()})
+
+
+def _cmd_runtime(_args: argparse.Namespace) -> None:
+    _output({"success": True, "data": _service.runtime_status()})
 
 
 def _cmd_schedule_interval(args: argparse.Namespace) -> None:
@@ -143,7 +170,7 @@ def _cmd_schedule_interval(args: argparse.Namespace) -> None:
         _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
         return
 
-    _output({"success": True, "data": _serialize_schedule(schedule)})
+    _output({"success": True, "data": _serialize_schedule(schedule), "runtime": _service.runtime_status()})
 
 
 def _cmd_schedule_cron(args: argparse.Namespace) -> None:
@@ -157,12 +184,16 @@ def _cmd_schedule_cron(args: argparse.Namespace) -> None:
         _output({"success": False, "error": {"code": "INVALID_ARGUMENT", "message": str(exc)}})
         return
 
-    _output({"success": True, "data": _serialize_schedule(schedule)})
+    _output({"success": True, "data": _serialize_schedule(schedule), "runtime": _service.runtime_status()})
 
 
 def _cmd_schedules(args: argparse.Namespace) -> None:
     schedules = _service.list_schedules(user_id=args.user_id)
-    _output({"success": True, "data": [_serialize_schedule(item) for item in schedules]})
+    _output({
+        "success": True,
+        "data": [_serialize_schedule(item) for item in schedules],
+        "runtime": _service.runtime_status(),
+    })
 
 
 def _cmd_schedule_stop(args: argparse.Namespace) -> None:
@@ -177,7 +208,7 @@ def _cmd_schedule_stop(args: argparse.Namespace) -> None:
         )
         return
 
-    _output({"success": True, "data": _serialize_schedule(schedule)})
+    _output({"success": True, "data": _serialize_schedule(schedule), "runtime": _service.runtime_status()})
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -194,6 +225,11 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--user-id", required=True)
     status.add_argument("--job-id", required=True)
 
+    transition = sub.add_parser("transition", help="任务状态迁移")
+    transition.add_argument("--user-id", required=True)
+    transition.add_argument("--job-id", required=True)
+    transition.add_argument("--to-status", required=True, dest="to_status")
+
     cancel = sub.add_parser("cancel", help="取消任务")
     cancel.add_argument("--user-id", required=True)
     cancel.add_argument("--job-id", required=True)
@@ -203,6 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
     retry.add_argument("--job-id", required=True)
 
     sub.add_parser("types", help="列出任务类型注册表")
+    sub.add_parser("runtime", help="查询执行器与调度恢复状态")
 
     schedule_interval = sub.add_parser("schedule-interval", help="创建 interval 调度")
     schedule_interval.add_argument("--user-id", required=True)
@@ -227,9 +264,11 @@ def build_parser() -> argparse.ArgumentParser:
 _COMMANDS = {
     "submit": _cmd_submit,
     "status": _cmd_status,
+    "transition": _cmd_transition,
     "cancel": _cmd_cancel,
     "retry": _cmd_retry,
     "types": _cmd_types,
+    "runtime": _cmd_runtime,
     "schedule-interval": _cmd_schedule_interval,
     "schedule-cron": _cmd_schedule_cron,
     "schedules": _cmd_schedules,

@@ -47,7 +47,9 @@ class CronScheduleRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-def _dt(value: datetime) -> str:
+def _dt(value: datetime | None) -> str | None:
+    if value is None:
+        return None
     return value.isoformat()
 
 
@@ -67,6 +69,14 @@ def _job_payload(job) -> dict[str, Any]:
         }
         if job.error_code or job.error_message
         else None,
+        "executor": {
+            "name": job.executor_name,
+            "dispatchId": job.dispatch_id,
+        }
+        if job.executor_name or job.dispatch_id
+        else None,
+        "startedAt": _dt(job.started_at),
+        "finishedAt": _dt(job.finished_at),
         "createdAt": _dt(job.created_at),
         "updatedAt": _dt(job.updated_at),
     }
@@ -139,6 +149,11 @@ def create_router(*, service: JobOrchestrationService, get_current_user: Any) ->
         del current_user
         return success_response(data=service.task_type_registry())
 
+    @router.get("/jobs/runtime")
+    def runtime_status(current_user=Depends(get_current_user)):
+        del current_user
+        return success_response(data=service.runtime_status())
+
     @router.post("/jobs/schedules/interval")
     def schedule_interval(body: IntervalScheduleRequest, current_user=Depends(get_current_user)):
         try:
@@ -174,7 +189,12 @@ def create_router(*, service: JobOrchestrationService, get_current_user: Any) ->
     @router.get("/jobs/schedules")
     def list_schedules(current_user=Depends(get_current_user)):
         schedules = service.list_schedules(user_id=current_user.id)
-        return success_response(data=[_schedule_payload(item) for item in schedules])
+        return success_response(
+            data={
+                "items": [_schedule_payload(item) for item in schedules],
+                "runtime": service.runtime_status(),
+            }
+        )
 
     @router.get("/jobs/schedules/{schedule_id}")
     def get_schedule(schedule_id: str, current_user=Depends(get_current_user)):

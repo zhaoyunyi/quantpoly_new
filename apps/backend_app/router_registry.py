@@ -20,7 +20,7 @@ from backtest_runner.service import BacktestService
 from job_orchestration.api import create_router as create_job_router
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.repository_sqlite import SQLiteJobRepository
-from job_orchestration.scheduler import InMemoryScheduler
+from job_orchestration.scheduler import InMemoryScheduler, SQLiteScheduler
 from job_orchestration.service import JobOrchestrationService
 from market_data.alpaca_provider import AlpacaProvider
 from market_data.api import create_router as create_market_router
@@ -122,6 +122,7 @@ class CompositionContext:
     backtest_repo: InMemoryBacktestRepository | SQLiteBacktestRepository
     trading_repo: InMemoryTradingAccountRepository | SQLiteTradingAccountRepository
     job_repo: InMemoryJobRepository | SQLiteJobRepository
+    job_scheduler: InMemoryScheduler | SQLiteScheduler
     risk_repo: InMemoryRiskRepository | SQLiteRiskRepository
     signal_repo: InMemorySignalRepository | SQLiteSignalRepository
     preferences_store: InMemoryPreferencesStore | SQLitePreferencesStore
@@ -175,6 +176,7 @@ def build_context(
         backtest_repo = SQLiteBacktestRepository(db_path=sqlite_db_path)
         trading_repo = SQLiteTradingAccountRepository(db_path=sqlite_db_path)
         job_repo = SQLiteJobRepository(db_path=sqlite_db_path)
+        job_scheduler = SQLiteScheduler(db_path=sqlite_db_path)
         backtest_result_store = SQLiteBacktestResultStore(db_path=sqlite_db_path)
         risk_repo = SQLiteRiskRepository(db_path=sqlite_db_path)
         signal_repo = SQLiteSignalRepository(db_path=sqlite_db_path)
@@ -186,6 +188,7 @@ def build_context(
         backtest_repo = InMemoryBacktestRepository()
         trading_repo = InMemoryTradingAccountRepository()
         job_repo = InMemoryJobRepository()
+        job_scheduler = InMemoryScheduler()
         backtest_result_store = InMemoryBacktestResultStore()
         risk_repo = InMemoryRiskRepository()
         signal_repo = InMemorySignalRepository()
@@ -200,6 +203,7 @@ def build_context(
         backtest_repo=backtest_repo,
         trading_repo=trading_repo,
         job_repo=job_repo,
+        job_scheduler=job_scheduler,
         risk_repo=risk_repo,
         signal_repo=signal_repo,
         preferences_store=preferences_store,
@@ -275,7 +279,7 @@ def register_all_routes(
 ) -> None:
     job_service = JobOrchestrationService(
         repository=context.job_repo,
-        scheduler=InMemoryScheduler(),
+        scheduler=context.job_scheduler,
     )
     backtest_service = BacktestService(
         repository=context.backtest_repo,

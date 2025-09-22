@@ -31,6 +31,10 @@ class Job:
     result: dict[str, Any] | None = None
     error_code: str | None = None
     error_message: str | None = None
+    executor_name: str | None = None
+    dispatch_id: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -58,12 +62,31 @@ class Job:
         allowed = _ALLOWED_TRANSITIONS.get(self.status, set())
         if to_status not in allowed:
             raise InvalidJobTransitionError(f"invalid_transition from={self.status} to={to_status}")
+
+        now = datetime.now(timezone.utc)
         self.status = to_status
-        self.updated_at = datetime.now(timezone.utc)
+
         if to_status == "queued":
             self.result = None
             self.error_code = None
             self.error_message = None
+            self.executor_name = None
+            self.dispatch_id = None
+            self.started_at = None
+            self.finished_at = None
+        elif to_status == "running":
+            if self.started_at is None:
+                self.started_at = now
+            self.finished_at = None
+        elif to_status in {"succeeded", "failed", "cancelled"}:
+            self.finished_at = now
+
+        self.updated_at = now
+
+    def start_execution(self, *, executor_name: str, dispatch_id: str) -> None:
+        self.executor_name = executor_name
+        self.dispatch_id = dispatch_id
+        self.transition_to("running")
 
     def mark_succeeded(self, *, result: dict[str, Any] | None = None) -> None:
         self.transition_to("succeeded")

@@ -100,3 +100,31 @@ def test_cli_schedule_list_and_stop_scoped_by_user(capsys, monkeypatch):
     stopped = _run(cli._cmd_schedule_stop, capsys=capsys, user_id="u-1", schedule_id=schedule_id)
     assert stopped["success"] is True
     assert stopped["data"]["status"] == "stopped"
+
+
+def test_cli_status_includes_runtime_and_execution_observability(capsys, monkeypatch):
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+    monkeypatch.setattr(cli, "_service", service)
+
+    submitted = _run(
+        cli._cmd_submit,
+        capsys=capsys,
+        user_id="u-1",
+        task_type="backtest_run",
+        payload='{"strategyId":"s-1"}',
+        idempotency_key="k-runtime-status-1",
+    )
+    job_id = submitted["data"]["id"]
+
+    _run(cli._cmd_transition, capsys=capsys, user_id="u-1", job_id=job_id, to_status="running")
+
+    status = _run(cli._cmd_status, capsys=capsys, user_id="u-1", job_id=job_id)
+
+    assert status["success"] is True
+    assert status["data"]["startedAt"] is not None
+    assert status["data"]["finishedAt"] is None
+    assert "runtime" in status
+    assert "executor" in status["runtime"]

@@ -28,6 +28,14 @@ class SQLiteJobRepository:
             conn.execute("ALTER TABLE job_orchestration_job ADD COLUMN error_code TEXT")
         if "error_message" not in existing:
             conn.execute("ALTER TABLE job_orchestration_job ADD COLUMN error_message TEXT")
+        if "executor_name" not in existing:
+            conn.execute("ALTER TABLE job_orchestration_job ADD COLUMN executor_name TEXT")
+        if "dispatch_id" not in existing:
+            conn.execute("ALTER TABLE job_orchestration_job ADD COLUMN dispatch_id TEXT")
+        if "started_at" not in existing:
+            conn.execute("ALTER TABLE job_orchestration_job ADD COLUMN started_at TEXT")
+        if "finished_at" not in existing:
+            conn.execute("ALTER TABLE job_orchestration_job ADD COLUMN finished_at TEXT")
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
@@ -43,6 +51,10 @@ class SQLiteJobRepository:
                     result_json TEXT,
                     error_code TEXT,
                     error_message TEXT,
+                    executor_name TEXT,
+                    dispatch_id TEXT,
+                    started_at TEXT,
+                    finished_at TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     UNIQUE(user_id, idempotency_key)
@@ -52,7 +64,9 @@ class SQLiteJobRepository:
             self._ensure_columns(conn)
 
     @staticmethod
-    def _to_dt(value: str) -> datetime:
+    def _to_dt(value: str | None) -> datetime | None:
+        if value is None:
+            return None
         return datetime.fromisoformat(value)
 
     @staticmethod
@@ -68,8 +82,12 @@ class SQLiteJobRepository:
             result=json.loads(result_json) if result_json else None,
             error_code=row[7],
             error_message=row[8],
-            created_at=SQLiteJobRepository._to_dt(row[9]),
-            updated_at=SQLiteJobRepository._to_dt(row[10]),
+            executor_name=row[9],
+            dispatch_id=row[10],
+            started_at=SQLiteJobRepository._to_dt(row[11]),
+            finished_at=SQLiteJobRepository._to_dt(row[12]),
+            created_at=SQLiteJobRepository._to_dt(row[13]) or datetime.now(),
+            updated_at=SQLiteJobRepository._to_dt(row[14]) or datetime.now(),
         )
 
     def save(self, job: Job) -> None:
@@ -77,8 +95,8 @@ class SQLiteJobRepository:
             conn.execute(
                 """
                 INSERT INTO job_orchestration_job
-                    (id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, executor_name, dispatch_id, started_at, finished_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     user_id = excluded.user_id,
                     task_type = excluded.task_type,
@@ -88,6 +106,10 @@ class SQLiteJobRepository:
                     result_json = excluded.result_json,
                     error_code = excluded.error_code,
                     error_message = excluded.error_message,
+                    executor_name = excluded.executor_name,
+                    dispatch_id = excluded.dispatch_id,
+                    started_at = excluded.started_at,
+                    finished_at = excluded.finished_at,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at
                 """,
@@ -101,6 +123,10 @@ class SQLiteJobRepository:
                     json.dumps(job.result, ensure_ascii=False) if job.result is not None else None,
                     job.error_code,
                     job.error_message,
+                    job.executor_name,
+                    job.dispatch_id,
+                    job.started_at.isoformat() if job.started_at else None,
+                    job.finished_at.isoformat() if job.finished_at else None,
                     job.created_at.isoformat(),
                     job.updated_at.isoformat(),
                 ),
@@ -112,8 +138,8 @@ class SQLiteJobRepository:
                 conn.execute(
                     """
                     INSERT INTO job_orchestration_job
-                        (id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, executor_name, dispatch_id, started_at, finished_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         job.id,
@@ -125,6 +151,10 @@ class SQLiteJobRepository:
                         json.dumps(job.result, ensure_ascii=False) if job.result is not None else None,
                         job.error_code,
                         job.error_message,
+                        job.executor_name,
+                        job.dispatch_id,
+                        job.started_at.isoformat() if job.started_at else None,
+                        job.finished_at.isoformat() if job.finished_at else None,
                         job.created_at.isoformat(),
                         job.updated_at.isoformat(),
                     ),
@@ -133,14 +163,17 @@ class SQLiteJobRepository:
         except sqlite3.IntegrityError:
             return False
 
+    def _select_base(self) -> str:
+        return (
+            "SELECT id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, "
+            "executor_name, dispatch_id, started_at, finished_at, created_at, updated_at "
+            "FROM job_orchestration_job"
+        )
+
     def get(self, *, user_id: str, job_id: str) -> Job | None:
         with self._connect() as conn:
             row = conn.execute(
-                """
-                SELECT id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, created_at, updated_at
-                FROM job_orchestration_job
-                WHERE id = ? AND user_id = ?
-                """,
+                f"{self._select_base()} WHERE id = ? AND user_id = ?",
                 (job_id, user_id),
             ).fetchone()
 
@@ -155,10 +188,7 @@ class SQLiteJobRepository:
         status: str | None = None,
         task_type: str | None = None,
     ) -> list[Job]:
-        query = (
-            "SELECT id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, created_at, updated_at "
-            "FROM job_orchestration_job WHERE user_id = ?"
-        )
+        query = f"{self._select_base()} WHERE user_id = ?"
         params: list[str] = [user_id]
 
         if status is not None:
@@ -175,14 +205,23 @@ class SQLiteJobRepository:
 
         return [self._from_row(row) for row in rows]
 
+    def list_all(self, *, status: str | None = None) -> list[Job]:
+        query = self._select_base()
+        params: list[str] = []
+        if status is not None:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY created_at ASC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+
+        return [self._from_row(row) for row in rows]
+
     def find_by_idempotency_key(self, *, user_id: str, idempotency_key: str) -> Job | None:
         with self._connect() as conn:
             row = conn.execute(
-                """
-                SELECT id, user_id, task_type, payload_json, idempotency_key, status, result_json, error_code, error_message, created_at, updated_at
-                FROM job_orchestration_job
-                WHERE user_id = ? AND idempotency_key = ?
-                """,
+                f"{self._select_base()} WHERE user_id = ? AND idempotency_key = ?",
                 (user_id, idempotency_key),
             ).fetchone()
 

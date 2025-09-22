@@ -191,3 +191,37 @@ def test_schedule_query_and_stop_are_isolated_by_user_namespace():
     stopped = client_owner.post(f"/jobs/schedules/{schedule_id}/stop")
     assert stopped.status_code == 200
     assert stopped.json()["data"]["status"] == "stopped"
+
+
+def test_job_payload_exposes_started_and_finished_timestamps():
+    app, _service = _build_app(current_user_id="u-1")
+    client = TestClient(app)
+
+    submitted = client.post(
+        "/jobs",
+        json={
+            "taskType": "backtest_run",
+            "payload": {"strategyId": "s-1"},
+            "idempotencyKey": "job-k-observe-1",
+        },
+    )
+
+    assert submitted.status_code == 200
+    job_id = submitted.json()["data"]["id"]
+
+    running = client.post(f"/jobs/{job_id}/transition", json={"toStatus": "running"})
+    assert running.status_code == 200
+
+    running_status = client.get(f"/jobs/{job_id}")
+    assert running_status.status_code == 200
+    running_data = running_status.json()["data"]
+    assert running_data["startedAt"] is not None
+    assert running_data["finishedAt"] is None
+
+    cancelled = client.post(f"/jobs/{job_id}/cancel")
+    assert cancelled.status_code == 200
+
+    done_status = client.get(f"/jobs/{job_id}")
+    assert done_status.status_code == 200
+    done_data = done_status.json()["data"]
+    assert done_data["finishedAt"] is not None

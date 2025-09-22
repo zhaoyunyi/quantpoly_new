@@ -11,6 +11,7 @@ from backtest_runner.result_store import InMemoryBacktestResultStore
 from backtest_runner.result_store_sqlite import SQLiteBacktestResultStore
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.repository_sqlite import SQLiteJobRepository
+from job_orchestration.scheduler import InMemoryScheduler, SQLiteScheduler
 from risk_control.repository import InMemoryRiskRepository
 from risk_control.repository_sqlite import SQLiteRiskRepository
 from signal_execution.repository import InMemorySignalRepository
@@ -32,6 +33,7 @@ def test_build_context_uses_sqlite_repositories_for_production_mode(tmp_path):
     assert isinstance(context.backtest_repo, SQLiteBacktestRepository)
     assert isinstance(context.trading_repo, SQLiteTradingAccountRepository)
     assert isinstance(context.job_repo, SQLiteJobRepository)
+    assert isinstance(context.job_scheduler, SQLiteScheduler)
     assert isinstance(context.backtest_result_store, SQLiteBacktestResultStore)
     assert isinstance(context.risk_repo, SQLiteRiskRepository)
     assert isinstance(context.signal_repo, SQLiteSignalRepository)
@@ -45,6 +47,7 @@ def test_build_context_uses_inmemory_repositories_for_test_mode():
     assert isinstance(context.backtest_repo, InMemoryBacktestRepository)
     assert isinstance(context.trading_repo, InMemoryTradingAccountRepository)
     assert isinstance(context.job_repo, InMemoryJobRepository)
+    assert isinstance(context.job_scheduler, InMemoryScheduler)
     assert isinstance(context.backtest_result_store, InMemoryBacktestResultStore)
     assert isinstance(context.risk_repo, InMemoryRiskRepository)
     assert isinstance(context.signal_repo, InMemorySignalRepository)
