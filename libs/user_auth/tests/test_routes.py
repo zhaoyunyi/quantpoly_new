@@ -221,7 +221,10 @@ class TestLogout:
 class TestPasswordReset:
     """Test密码找回与重置流程。"""
 
-    def test_reset_password_flow_invalidates_old_password(self, client):
+    def test_reset_password_flow_invalidates_old_password(self):
+        app = create_app(password_reset_test_mode=True)
+        client = TestClient(app)
+
         client.post(
             "/auth/register",
             json={"email": "reset@example.com", "password": "StrongPass123!"},
@@ -236,7 +239,10 @@ class TestPasswordReset:
             json={"email": "reset@example.com"},
         )
         assert issue.status_code == 200
-        reset_token = issue.json()["data"]["resetToken"]
+        payload = issue.json()
+        assert payload["success"] is True
+        assert payload.get("data", {}).get("resetToken")
+        reset_token = payload["data"]["resetToken"]
 
         reset = client.post(
             "/auth/password-reset/confirm",
@@ -256,7 +262,10 @@ class TestPasswordReset:
         )
         assert new_login.status_code == 200
 
-    def test_reset_token_single_use(self, client):
+    def test_reset_token_single_use(self):
+        app = create_app(password_reset_test_mode=True)
+        client = TestClient(app)
+
         client.post(
             "/auth/register",
             json={"email": "singleuse@example.com", "password": "StrongPass123!"},
@@ -283,6 +292,22 @@ class TestPasswordReset:
             json={"token": token, "newPassword": "AnotherStrongPass123!"},
         )
         assert second.status_code == 400
+
+    def test_password_reset_request_uses_enumeration_safe_response(self, client):
+        existing = client.post(
+            "/auth/password-reset/request",
+            json={"email": "exists@example.com"},
+        )
+        missing = client.post(
+            "/auth/password-reset/request",
+            json={"email": "missing@example.com"},
+        )
+
+        assert existing.status_code == 200
+        assert missing.status_code == 200
+        assert existing.json()["message"] == missing.json()["message"]
+        assert "data" not in existing.json() or "resetToken" not in existing.json().get("data", {})
+        assert "data" not in missing.json() or "resetToken" not in missing.json().get("data", {})
 
 
 class TestPersistenceBootstrap:

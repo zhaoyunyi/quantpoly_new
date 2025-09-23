@@ -16,6 +16,10 @@ from user_auth.session import SessionStore
 def _reset_cli_state(monkeypatch):
     monkeypatch.setattr(cli, "_repo", UserRepository())
     monkeypatch.setattr(cli, "_sessions", SessionStore())
+    monkeypatch.setattr(cli, "_TEST_MODE", True, raising=False)
+    if hasattr(cli, "_reset_store"):
+        from user_auth.password_reset import InMemoryPasswordResetStore
+        monkeypatch.setattr(cli, "_reset_store", InMemoryPasswordResetStore())
 
 
 def _run(handler, *, capsys, **kwargs):
@@ -172,3 +176,66 @@ def test_cli_delete_me_removes_current_user(capsys):
     verify_after_delete = _run(cli._cmd_verify, capsys=capsys, token=token)
     assert verify_after_delete["success"] is False
     assert verify_after_delete["error"]["code"] == "INVALID_TOKEN"
+
+
+def test_cli_password_reset_request_and_confirm(capsys):
+    _run(
+        cli._cmd_register,
+        capsys=capsys,
+        email="reset-cli@example.com",
+        password="StrongPass123!",
+    )
+    _run(
+        cli._cmd_verify_email,
+        capsys=capsys,
+        email="reset-cli@example.com",
+    )
+
+    requested = _run(
+        cli._cmd_password_reset_request,
+        capsys=capsys,
+        email="reset-cli@example.com",
+    )
+    assert requested["success"] is True
+    token = requested["data"]["resetToken"]
+
+    confirmed = _run(
+        cli._cmd_password_reset_confirm,
+        capsys=capsys,
+        token=token,
+        new_password="NewStrongPass123!",
+    )
+    assert confirmed["success"] is True
+
+    old_login = _run(
+        cli._cmd_login,
+        capsys=capsys,
+        email="reset-cli@example.com",
+        password="StrongPass123!",
+    )
+    assert old_login["success"] is False
+
+    new_login = _run(
+        cli._cmd_login,
+        capsys=capsys,
+        email="reset-cli@example.com",
+        password="NewStrongPass123!",
+    )
+    assert new_login["success"] is True
+
+
+def test_cli_password_reset_request_is_enumeration_safe(capsys):
+    existing = _run(
+        cli._cmd_password_reset_request,
+        capsys=capsys,
+        email="exists-cli@example.com",
+    )
+    missing = _run(
+        cli._cmd_password_reset_request,
+        capsys=capsys,
+        email="missing-cli@example.com",
+    )
+
+    assert existing["success"] is True
+    assert missing["success"] is True
+    assert existing["message"] == missing["message"]

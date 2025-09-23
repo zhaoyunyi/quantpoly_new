@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -15,7 +16,8 @@ from pydantic import BaseModel, Field
 
 from user_auth.deps import build_get_current_user
 from user_auth.domain import PasswordTooWeakError, User
-from user_auth.password_reset import InMemoryPasswordResetStore
+from user_auth.password_reset import InMemoryPasswordResetStore, PasswordResetRequestRateLimiter, PasswordResetStore
+from user_auth.password_reset_sqlite import SQLitePasswordResetStore
 from user_auth.repository import UserRepository
 from user_auth.repository_sqlite import SQLiteUserRepository
 from user_auth.session import Session, SessionStore
@@ -115,6 +117,10 @@ def create_app(
     session_store: SessionStore | None = None,
     sqlite_db_path: str | None = None,
     governance_checker: Callable[..., Any] | None = None,
+    password_reset_store: PasswordResetStore | None = None,
+    password_reset_test_mode: bool = False,
+    password_reset_request_min_interval_seconds: int = 60,
+    password_reset_audit_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> FastAPI:
     """创建 FastAPI 应用实例。"""
 
@@ -125,7 +131,17 @@ def create_app(
         repo = user_repo or UserRepository()
         sessions = session_store or SessionStore()
     app = FastAPI(title="user-auth")
-    reset_store = InMemoryPasswordResetStore()
+
+    if password_reset_store is not None:
+        reset_store = password_reset_store
+    elif sqlite_db_path:
+        reset_store = SQLitePasswordResetStore(db_path=sqlite_db_path)
+    else:
+        reset_store = InMemoryPasswordResetStore()
+
+    reset_limiter = PasswordResetRequestRateLimiter(
+        min_interval_seconds=max(1, int(password_reset_request_min_interval_seconds)),
+    )
 
     get_current_user = build_get_current_user(
         user_repo=repo,
@@ -137,6 +153,9 @@ def create_app(
         repo=repo,
         sessions=sessions,
         reset_store=reset_store,
+        reset_limiter=reset_limiter,
+        password_reset_test_mode=password_reset_test_mode,
+        password_reset_audit_sink=password_reset_audit_sink,
         get_current_user=get_current_user,
         governance_checker=governance_checker,
     )
@@ -149,10 +168,27 @@ def _register_routes(
     app: FastAPI,
     repo: UserRepository,
     sessions: SessionStore,
-    reset_store: InMemoryPasswordResetStore,
+    reset_store: PasswordResetStore,
+    reset_limiter: PasswordResetRequestRateLimiter,
+    password_reset_test_mode: bool,
+    password_reset_audit_sink: Callable[[dict[str, Any]], None] | None,
     get_current_user,
     governance_checker: Callable[..., Any] | None,
 ):
+    reset_logger = logging.getLogger("user_auth.password_reset")
+
+    def _audit_password_reset(*, email: str, user_id: str | None, outcome: str) -> None:
+        event = {
+            "event": "password_reset",
+            "email": email,
+            "userId": user_id,
+            "outcome": outcome,
+        }
+        if password_reset_audit_sink is not None:
+            password_reset_audit_sink(event)
+            return
+        reset_logger.info("password_reset_event=%s", event)
+
     def _authorize_admin_action(
         *,
         request: Request,
@@ -231,34 +267,55 @@ def _register_routes(
 
     @app.post("/auth/password-reset/request")
     def request_password_reset(body: PasswordResetRequest):
+        message = "If the account exists, password reset instructions have been sent"
+
         user = repo.get_by_email(body.email)
-        if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        issued = reset_store.issue(user_id=user.id)
-        return {
+        issued = None
+        outcome = "user_not_found"
+
+        if user is not None:
+            if reset_limiter.allow(key=user.id):
+                issued = reset_store.issue(user_id=user.id)
+                outcome = "issued"
+            else:
+                outcome = "rate_limited"
+
+        _audit_password_reset(
+            email=body.email,
+            user_id=user.id if user is not None else None,
+            outcome=outcome,
+        )
+
+        payload: dict[str, Any] = {
             "success": True,
-            "data": {"resetToken": issued.token},
-            "message": "Password reset token issued",
+            "message": message,
         }
+        if password_reset_test_mode and issued is not None:
+            payload["data"] = {"resetToken": issued.token}
+        return payload
 
     @app.post("/auth/password-reset/confirm")
     def confirm_password_reset(body: PasswordResetConfirmRequest):
         consumed = reset_store.consume(body.token)
         if consumed is None:
+            _audit_password_reset(email="", user_id=None, outcome="invalid_or_expired_token")
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
         user = repo.get_by_id(consumed.user_id)
         if user is None:
+            _audit_password_reset(email="", user_id=consumed.user_id, outcome="user_not_found")
             raise HTTPException(status_code=404, detail="User not found")
 
         try:
             replacement = User.register(email=user.email, password=body.new_password)
         except PasswordTooWeakError as exc:
+            _audit_password_reset(email=user.email, user_id=user.id, outcome="weak_password")
             raise HTTPException(status_code=400, detail="Password too weak") from exc
 
         user.credential = replacement.credential
         repo.save(user)
         sessions.revoke_by_user(user_id=user.id)
+        _audit_password_reset(email=user.email, user_id=user.id, outcome="password_updated")
         return {"success": True, "message": "Password reset successful"}
 
     @app.get("/auth/me")

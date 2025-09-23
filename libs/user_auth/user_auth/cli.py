@@ -5,7 +5,7 @@
 - stdout 输出
 - 支持 JSON 格式
 
-子命令：register / login / verify / logout / update-me / change-password / admin-list-users / admin-update-user
+子命令：register / login / verify / logout / password-reset-request / password-reset-confirm / update-me / change-password / admin-list-users / admin-update-user
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import json
 import sys
 
 from user_auth.domain import PasswordTooWeakError, User
+from user_auth.password_reset import InMemoryPasswordResetStore, PasswordResetRequestRateLimiter
 from user_auth.repository import UserRepository
 from user_auth.session import Session, SessionStore
 from user_auth.token import extract_session_token
@@ -22,6 +23,10 @@ from user_auth.token import extract_session_token
 # CLI 使用内存存储（每次运行独立）
 _repo = UserRepository()
 _sessions = SessionStore()
+_reset_store = InMemoryPasswordResetStore()
+_reset_limiter = PasswordResetRequestRateLimiter()
+
+_PASSWORD_RESET_ENUMERATION_SAFE_MESSAGE = "If the account exists, password reset instructions have been sent"
 
 
 def _output(data: dict) -> None:
@@ -168,6 +173,61 @@ def _cmd_change_password(args: argparse.Namespace) -> None:
         revoked = _sessions.revoke_by_user(user_id=user.id)
 
     _output({"success": True, "data": {"revokedSessions": revoked}})
+
+
+def _cmd_password_reset_request(args: argparse.Namespace) -> None:
+    user = _repo.get_by_email(args.email)
+    issued = None
+
+    if user is not None and _reset_limiter.allow(key=user.id):
+        issued = _reset_store.issue(user_id=user.id)
+
+    payload = {
+        "success": True,
+        "message": _PASSWORD_RESET_ENUMERATION_SAFE_MESSAGE,
+    }
+    if issued is not None:
+        payload["data"] = {"resetToken": issued.token}
+
+    _output(payload)
+
+
+def _cmd_password_reset_confirm(args: argparse.Namespace) -> None:
+    consumed = _reset_store.consume(args.token)
+    if consumed is None:
+        _output(
+            {
+                "success": False,
+                "error": {
+                    "code": "INVALID_OR_EXPIRED_RESET_TOKEN",
+                    "message": "Invalid or expired reset token",
+                },
+            }
+        )
+        return
+
+    user = _repo.get_by_id(consumed.user_id)
+    if user is None:
+        _output({"success": False, "error": {"code": "USER_NOT_FOUND", "message": "User not found"}})
+        return
+
+    try:
+        replacement = User.register(email=user.email, password=args.new_password)
+    except PasswordTooWeakError as exc:
+        _output({"success": False, "error": {"code": "WEAK_PASSWORD", "message": str(exc)}})
+        return
+
+    user.credential = replacement.credential
+    _repo.save(user)
+    revoked = _sessions.revoke_by_user(user_id=user.id)
+
+    _output(
+        {
+            "success": True,
+            "data": {"revokedSessions": revoked},
+            "message": "Password reset successful",
+        }
+    )
 
 
 def _cmd_admin_create_user(args: argparse.Namespace) -> None:
@@ -325,6 +385,13 @@ def build_parser() -> argparse.ArgumentParser:
     verify_email = sub.add_parser("verify-email", help="验证邮箱")
     verify_email.add_argument("--email", required=True)
 
+    password_reset_request = sub.add_parser("password-reset-request", help="请求密码重置")
+    password_reset_request.add_argument("--email", required=True)
+
+    password_reset_confirm = sub.add_parser("password-reset-confirm", help="确认密码重置")
+    password_reset_confirm.add_argument("--token", required=True)
+    password_reset_confirm.add_argument("--new-password", required=True)
+
     login = sub.add_parser("login", help="登录")
     login.add_argument("--email", required=True)
     login.add_argument("--password", required=True)
@@ -389,6 +456,8 @@ def build_parser() -> argparse.ArgumentParser:
 _COMMANDS = {
     "register": _cmd_register,
     "verify-email": _cmd_verify_email,
+    "password-reset-request": _cmd_password_reset_request,
+    "password-reset-confirm": _cmd_password_reset_confirm,
     "login": _cmd_login,
     "verify": _cmd_verify,
     "logout": _cmd_logout,
