@@ -147,49 +147,154 @@ def _resolve_user(*, headers: Any, cookies: Any, repo: UserRepository, sessions:
     return repo.get_by_id(session.user_id)
 
 
-def _default_summary(*, user_id: str, signal_source: SourceFn, alert_source: SourceFn) -> dict[str, Any]:
-    raw_signals = signal_source(user_id)
-    user_signals = [item for item in raw_signals if _item_user_id(item) == user_id]
+def _status_text(item: dict[str, Any]) -> str:
+    raw = item.get("status")
+    return str(raw).strip().lower() if raw is not None else ""
 
-    raw_alerts = alert_source(user_id)
-    user_alerts = [item for item in raw_alerts if _item_user_id(item) == user_id]
-    open_alerts = [
-        item for item in user_alerts if str(item.get("status", "open")).strip().lower() != "resolved"
+
+def _filter_owned_items(*, user_id: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for item in items:
+        owner = _item_user_id(item)
+        if owner is not None and owner != user_id:
+            continue
+        result.append(item)
+    return result
+
+
+def _count_statuses(items: list[dict[str, Any]], statuses: set[str]) -> int:
+    return sum(1 for item in items if _status_text(item) in statuses)
+
+
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _default_summary(
+    *,
+    user_id: str,
+    account_source: SourceFn,
+    strategy_source: SourceFn,
+    backtest_source: SourceFn,
+    task_source: SourceFn,
+    signal_source: SourceFn,
+    alert_source: SourceFn,
+    latency_ms: int,
+) -> dict[str, Any]:
+    degraded_reasons: list[str] = []
+    source_status: dict[str, str] = {}
+
+    def _collect(name: str, source: SourceFn) -> list[dict[str, Any]]:
+        try:
+            raw = source(user_id)
+        except Exception:  # noqa: BLE001
+            source_status[name] = "degraded"
+            degraded_reasons.append(f"{name}_unavailable")
+            return []
+
+        if not isinstance(raw, list):
+            source_status[name] = "degraded"
+            degraded_reasons.append(f"{name}_invalid")
+            return []
+
+        source_status[name] = "ok"
+        return _filter_owned_items(user_id=user_id, items=[item for item in raw if isinstance(item, dict)])
+
+    user_accounts = _collect("accounts", account_source)
+    user_strategies = _collect("strategies", strategy_source)
+    user_backtests = _collect("backtests", backtest_source)
+    user_tasks = _collect("tasks", task_source)
+    user_signals = _collect("signals", signal_source)
+    user_alerts = _collect("alerts", alert_source)
+
+    active_accounts = [
+        item
+        for item in user_accounts
+        if bool(item.get("isActive", item.get("is_active", _status_text(item) not in {"disabled", "inactive", "closed", "archived"})))
     ]
+    active_strategies = [
+        item
+        for item in user_strategies
+        if _status_text(item) in {"active", "running", "enabled", "live"}
+    ]
+
+    open_alerts = [item for item in user_alerts if _status_text(item) != "resolved"]
     critical_alerts = [
         item
-        for item in user_alerts
+        for item in open_alerts
         if str(item.get("severity", "")).strip().lower() in {"critical", "high"}
     ]
 
-    pending_signals = [
-        item for item in user_signals if str(item.get("status", "pending")).strip().lower() == "pending"
-    ]
-    expired_signals = [
-        item for item in user_signals if str(item.get("status", "")).strip().lower() == "expired"
-    ]
-
-    return {
+    summary = {
         "type": "monitor.summary",
         "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "metadata": {
+            "version": "v2",
+            "latencyMs": max(0, int(latency_ms)),
+            "sources": source_status,
+        },
+        "accounts": {
+            "total": len(user_accounts),
+            "active": len(active_accounts),
+        },
+        "strategies": {
+            "total": len(user_strategies),
+            "active": len(active_strategies),
+        },
+        "backtests": {
+            "total": len(user_backtests),
+            "pending": _count_statuses(user_backtests, {"pending", "queued"}),
+            "running": _count_statuses(user_backtests, {"running"}),
+            "completed": _count_statuses(user_backtests, {"completed", "succeeded"}),
+            "failed": _count_statuses(user_backtests, {"failed"}),
+            "cancelled": _count_statuses(user_backtests, {"cancelled", "canceled"}),
+        },
+        "tasks": {
+            "total": len(user_tasks),
+            "queued": _count_statuses(user_tasks, {"queued", "pending"}),
+            "running": _count_statuses(user_tasks, {"running"}),
+            "succeeded": _count_statuses(user_tasks, {"succeeded", "completed"}),
+            "failed": _count_statuses(user_tasks, {"failed"}),
+            "cancelled": _count_statuses(user_tasks, {"cancelled", "canceled"}),
+        },
         "signals": {
             "total": len(user_signals),
-            "pending": len(pending_signals),
-            "expired": len(expired_signals),
+            "pending": _count_statuses(user_signals, {"pending"}),
+            "expired": _count_statuses(user_signals, {"expired"}),
         },
         "alerts": {
+            "total": len(user_alerts),
             "open": len(open_alerts),
             "critical": len(critical_alerts),
         },
-        "tasks": {
-            "running": 0,
+        "degraded": {
+            "enabled": len(degraded_reasons) > 0,
+            "reasons": degraded_reasons,
         },
     }
+
+    summary["isEmpty"] = (
+        summary["accounts"]["total"]
+        + summary["strategies"]["total"]
+        + summary["backtests"]["total"]
+        + summary["tasks"]["total"]
+        + summary["signals"]["total"]
+        + summary["alerts"]["total"]
+    ) == 0
+
+    return summary
 
 
 def create_app(
     user_repo: UserRepository | None = None,
     session_store: SessionStore | None = None,
+    account_source: SourceFn | None = None,
+    strategy_source: SourceFn | None = None,
+    backtest_source: SourceFn | None = None,
+    task_source: SourceFn | None = None,
     signal_source: SourceFn | None = None,
     alert_source: SourceFn | None = None,
     alert_task_source: SourceFn | None = None,
@@ -202,10 +307,46 @@ def create_app(
     sessions = session_store or SessionStore()
     app = FastAPI(title="monitoring-realtime")
 
+    accounts_source = account_source or (lambda _user_id: [])
+    strategies_source = strategy_source or (lambda _user_id: [])
+    backtests_source = backtest_source or (lambda _user_id: [])
+    tasks_source = task_source or (lambda _user_id: [])
     signals_source = signal_source or (lambda _user_id: [])
     alerts_source = alert_source or (lambda _user_id: [])
     alert_tasks_source = alert_task_source or (lambda _user_id: [])
     auth_logger = logging.getLogger("monitoring_realtime.auth")
+
+    def _summary_payload(*, user_id: str, with_latency: bool) -> dict[str, Any]:
+        started_at = time.perf_counter()
+        if summary_source is not None:
+            payload = summary_source(user_id)
+            if isinstance(payload, dict):
+                cloned = dict(payload)
+            else:
+                cloned = {
+                    "type": "monitor.summary",
+                }
+
+            metadata = cloned.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata.setdefault("version", "v2")
+            if with_latency:
+                metadata.setdefault("latencyMs", max(0, int((time.perf_counter() - started_at) * 1000)))
+            cloned["metadata"] = metadata
+            return cloned
+
+        latency_ms = max(0, int((time.perf_counter() - started_at) * 1000))
+        return _default_summary(
+            user_id=user_id,
+            account_source=accounts_source,
+            strategy_source=strategies_source,
+            backtest_source=backtests_source,
+            task_source=tasks_source,
+            signal_source=signals_source,
+            alert_source=alerts_source,
+            latency_ms=latency_ms,
+        )
 
     @app.get("/monitor/summary")
     def monitor_summary(request: Request):
@@ -216,11 +357,7 @@ def create_app(
                 content=error_response(code="UNAUTHORIZED", message="unauthorized"),
             )
 
-        if summary_source is not None:
-            payload = summary_source(user.id)
-        else:
-            payload = _default_summary(user_id=user.id, signal_source=signals_source, alert_source=alerts_source)
-
+        payload = _summary_payload(user_id=user.id, with_latency=True)
         return success_response(data=payload)
 
     @app.websocket("/ws/monitor")
@@ -267,9 +404,11 @@ def create_app(
         await websocket.send_json(heartbeat)
 
         async def _push_updates(*, incremental: bool) -> None:
+            summary = _summary_payload(user_id=user.id, with_latency=False)
+
             if "signals" in subscriptions:
                 raw_signals = signals_source(user.id)
-                user_signals = [item for item in raw_signals if _item_user_id(item) == user.id]
+                user_signals = _filter_owned_items(user_id=user.id, items=raw_signals)
                 signal_items, signal_truncated = _dedupe_and_truncate(
                     items=user_signals,
                     seen_ids=sent_ids["signals"],
@@ -277,12 +416,18 @@ def create_app(
                     max_items=max_items_per_message,
                 )
                 if signal_items:
+                    signals_summary = summary.get("signals") if isinstance(summary.get("signals"), dict) else {}
                     await websocket.send_json(
                         _envelope(
                             msg_type="signals_update",
                             payload={
                                 "snapshot": not incremental,
                                 "truncated": signal_truncated,
+                                "counts": {
+                                    "total": _as_int(signals_summary.get("total")),
+                                    "pending": _as_int(signals_summary.get("pending")),
+                                    "expired": _as_int(signals_summary.get("expired")),
+                                },
                             },
                             data={"items": signal_items},
                         )
@@ -323,7 +468,18 @@ def create_app(
                                 "snapshot": True,
                                 "truncated": alert_truncated,
                                 "counts": {
-                                    "openAlerts": len(unresolved_alerts),
+                                    "openAlerts": _as_int(
+                                        (summary.get("alerts") or {}).get("open") if isinstance(summary, dict) else None,
+                                        len(unresolved_alerts),
+                                    ),
+                                    "criticalAlerts": _as_int(
+                                        (summary.get("alerts") or {}).get("critical") if isinstance(summary, dict) else None,
+                                        0,
+                                    ),
+                                    "tasksRunning": _as_int(
+                                        (summary.get("tasks") or {}).get("running") if isinstance(summary, dict) else None,
+                                        0,
+                                    ),
                                 },
                                 "taskSummary": task_summary,
                             },

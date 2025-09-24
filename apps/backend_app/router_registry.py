@@ -409,6 +409,41 @@ def register_all_routes(
         monitor_app = create_monitoring_app(
             user_repo=context.user_repo,
             session_store=context.session_store,
+            account_source=lambda user_id: [
+                {
+                    "id": item.id,
+                    "userId": item.user_id,
+                    "isActive": item.is_active,
+                    "status": "active" if item.is_active else "inactive",
+                }
+                for item in context.trading_repo.list_accounts(user_id=user_id)
+            ],
+            strategy_source=lambda user_id: [
+                {
+                    "id": item.id,
+                    "userId": item.user_id,
+                    "status": item.status,
+                }
+                for item in context.strategy_repo.list_by_user(user_id=user_id)
+            ],
+            backtest_source=lambda user_id: [
+                {
+                    "id": item.id,
+                    "userId": item.user_id,
+                    "status": item.status,
+                }
+                for item in context.backtest_repo.list_by_user(user_id=user_id, strategy_id=None, status=None)
+            ],
+            task_source=lambda user_id: [
+                {
+                    "id": job.id,
+                    "taskId": job.id,
+                    "userId": job.user_id,
+                    "taskType": job.task_type,
+                    "status": job.status,
+                }
+                for job in job_service.list_jobs(user_id=user_id)
+            ],
             signal_source=lambda user_id: [
                 {
                     "id": item.id,
