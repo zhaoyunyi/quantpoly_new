@@ -23,6 +23,7 @@ from job_orchestration.repository_sqlite import SQLiteJobRepository
 from job_orchestration.scheduler import InMemoryScheduler, SQLiteScheduler
 from job_orchestration.service import JobOrchestrationService
 from market_data.alpaca_provider import AlpacaProvider
+from market_data.alpaca_transport import AlpacaHTTPTransport, resolve_alpaca_transport_config
 from market_data.api import create_router as create_market_router
 from market_data.domain import MarketAsset, MarketCandle, MarketQuote
 from market_data.service import MarketDataService
@@ -97,21 +98,19 @@ class _InMemoryMarketProvider:
         }
 
 
-def _default_alpaca_transport(_operation: str, **_kwargs):
-    raise RuntimeError("alpaca transport is not configured")
-
-
 def _build_market_service(*, market_data_provider: str) -> MarketDataService:
     provider_name = (market_data_provider or "inmemory").strip().lower()
 
     if provider_name == "inmemory":
         provider = _InMemoryMarketProvider()
     elif provider_name == "alpaca":
-        provider = AlpacaProvider(transport=_default_alpaca_transport)
+        config = resolve_alpaca_transport_config(env_prefixes=("BACKEND_ALPACA",))
+        provider = AlpacaProvider(transport=AlpacaHTTPTransport(config=config))
     else:
         raise ValueError("market_data_provider must be one of: inmemory, alpaca")
 
     return MarketDataService(provider=provider)
+
 
 
 @dataclass

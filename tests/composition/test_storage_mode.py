@@ -54,11 +54,25 @@ def test_build_context_uses_inmemory_repositories_for_test_mode():
     assert isinstance(context.preferences_store, InMemoryPreferencesStore)
 
 
-def test_build_context_supports_market_data_alpaca_provider():
+def test_build_context_supports_market_data_alpaca_provider(monkeypatch):
+    monkeypatch.setenv("BACKEND_ALPACA_API_KEY", "key")
+    monkeypatch.setenv("BACKEND_ALPACA_API_SECRET", "secret")
+    monkeypatch.delenv("BACKEND_ALPACA_BASE_URL", raising=False)
+    monkeypatch.delenv("BACKEND_ALPACA_TIMEOUT_SECONDS", raising=False)
+
     context = build_context(storage_backend="memory", market_data_provider="alpaca")
 
     health = context.market_service.provider_health(user_id="u-1")
     assert health["provider"] == "alpaca"
+    assert health["status"] in {"ok", "degraded"}
+
+
+def test_build_context_alpaca_provider_fail_fast_without_required_config(monkeypatch):
+    monkeypatch.delenv("BACKEND_ALPACA_API_KEY", raising=False)
+    monkeypatch.delenv("BACKEND_ALPACA_API_SECRET", raising=False)
+
+    with pytest.raises(ValueError, match="ALPACA_CONFIG_MISSING"):
+        build_context(storage_backend="memory", market_data_provider="alpaca")
 
 
 def test_build_context_rejects_unknown_market_data_provider():

@@ -15,7 +15,9 @@ from market_data.domain import (
     MarketDataError,
     MarketQuote,
     RateLimitExceededError,
+    UpstreamRateLimitedError,
     UpstreamTimeoutError,
+    UpstreamUnauthorizedError,
     UpstreamUnavailableError,
 )
 from market_data.service import MarketDataService
@@ -96,6 +98,10 @@ def _error_to_response(error: MarketDataError) -> JSONResponse:
         status = 429
     elif isinstance(error, UpstreamTimeoutError):
         status = 504
+    elif isinstance(error, UpstreamRateLimitedError):
+        status = 429
+    elif isinstance(error, UpstreamUnauthorizedError):
+        status = 502
     elif isinstance(error, UpstreamUnavailableError):
         status = 502
     else:

@@ -165,3 +165,60 @@ def test_history_endpoint_provider_timeout_returns_standard_error():
     assert payload["success"] is False
     assert payload["error"]["code"] == "UPSTREAM_TIMEOUT"
     assert payload["error"]["retryable"] is True
+
+
+
+def test_quote_endpoint_provider_auth_failure_returns_standard_error():
+    from market_data.domain import UpstreamUnauthorizedError
+
+    class _Provider:
+        def search(self, *, keyword: str, limit: int):
+            del keyword, limit
+            return []
+
+        def quote(self, *, symbol: str):
+            del symbol
+            raise UpstreamUnauthorizedError()
+
+        def history(self, *, symbol: str, start_date: str, end_date: str, timeframe: str, limit: int | None):
+            del symbol, start_date, end_date, timeframe, limit
+            return []
+
+    app = _build_app(provider=_Provider())
+    client = TestClient(app)
+
+    resp = client.get('/market/quote/AAPL')
+
+    assert resp.status_code == 502
+    payload = resp.json()
+    assert payload['success'] is False
+    assert payload['error']['code'] == 'UPSTREAM_AUTH_FAILED'
+    assert payload['error']['retryable'] is False
+
+
+def test_quote_endpoint_provider_rate_limited_returns_standard_error():
+    from market_data.domain import UpstreamRateLimitedError
+
+    class _Provider:
+        def search(self, *, keyword: str, limit: int):
+            del keyword, limit
+            return []
+
+        def quote(self, *, symbol: str):
+            del symbol
+            raise UpstreamRateLimitedError()
+
+        def history(self, *, symbol: str, start_date: str, end_date: str, timeframe: str, limit: int | None):
+            del symbol, start_date, end_date, timeframe, limit
+            return []
+
+    app = _build_app(provider=_Provider())
+    client = TestClient(app)
+
+    resp = client.get('/market/quote/AAPL')
+
+    assert resp.status_code == 429
+    payload = resp.json()
+    assert payload['success'] is False
+    assert payload['error']['code'] == 'UPSTREAM_RATE_LIMITED'
+    assert payload['error']['retryable'] is True

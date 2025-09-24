@@ -8,6 +8,7 @@ from typing import Any, Callable
 from market_data.domain import (
     MarketAsset,
     MarketCandle,
+    MarketDataError,
     MarketQuote,
     UpstreamTimeoutError,
     UpstreamUnavailableError,
@@ -30,10 +31,12 @@ class AlpacaProvider:
         for attempt in range(self._max_retries + 1):
             try:
                 return self._transport(operation, **kwargs)
+            except MarketDataError:
+                raise
             except TimeoutError as exc:
                 if attempt >= self._max_retries:
                     raise UpstreamTimeoutError() from exc
-            except Exception as exc:  # pragma: no cover
+            except Exception as exc:  # noqa: BLE001
                 raise UpstreamUnavailableError(str(exc)) from exc
 
         raise UpstreamTimeoutError()
@@ -135,6 +138,14 @@ class AlpacaProvider:
         return candles
 
     def health(self) -> dict[str, Any]:
+        if hasattr(self._transport, "health"):
+            try:
+                payload = self._transport.health()
+                if isinstance(payload, dict):
+                    return payload
+            except Exception:  # noqa: BLE001
+                pass
+
         return {
             "provider": "alpaca",
             "healthy": True,

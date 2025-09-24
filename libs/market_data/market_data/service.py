@@ -86,14 +86,20 @@ class MarketDataService:
 
     def search_assets(self, *, user_id: str, keyword: str, limit: int = 10) -> list[MarketAsset]:
         del user_id
-        return self._provider.search(keyword=keyword, limit=limit)
+        try:
+            return self._provider.search(keyword=keyword, limit=limit)
+        except Exception as exc:  # noqa: BLE001
+            raise self._map_provider_error(exc) from exc
 
     def list_catalog(self, *, user_id: str, limit: int = 100) -> list[MarketAsset]:
         del user_id
-        if hasattr(self._provider, "list_assets"):
-            items = self._provider.list_assets(limit=limit)
-        else:
-            items = self._provider.search(keyword="", limit=limit)
+        try:
+            if hasattr(self._provider, "list_assets"):
+                items = self._provider.list_assets(limit=limit)
+            else:
+                items = self._provider.search(keyword="", limit=limit)
+        except Exception as exc:  # noqa: BLE001
+            raise self._map_provider_error(exc) from exc
 
         result: list[MarketAsset] = []
         for item in items:

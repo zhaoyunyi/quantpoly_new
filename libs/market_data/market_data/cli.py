@@ -4,20 +4,58 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
+from typing import Any
 
 from market_data.alpaca_provider import AlpacaProvider
+from market_data.alpaca_transport import AlpacaHTTPTransport, resolve_alpaca_transport_config
 from market_data.domain import BatchQuoteItem, MarketAsset, MarketCandle, MarketDataError, MarketQuote
 from market_data.service import MarketDataService
 
 
-def _default_transport(_operation: str, **_kwargs):
-    raise RuntimeError("provider not configured")
+class _InMemoryProvider:
+    def search(self, *, keyword: str, limit: int):
+        del keyword, limit
+        return []
+
+    def quote(self, *, symbol: str):
+        normalized = symbol.upper()
+        return MarketQuote(symbol=normalized, name=normalized, price=0.0)
+
+    def history(
+        self,
+        *,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        timeframe: str,
+        limit: int | None,
+    ):
+        del symbol, start_date, end_date, timeframe, limit
+        return []
+
+    def list_assets(self, *, limit: int):
+        del limit
+        return []
+
+    def batch_quote(self, *, symbols: list[str]):
+        return {
+            symbol.upper(): MarketQuote(symbol=symbol.upper(), name=symbol.upper(), price=0.0)
+            for symbol in symbols
+        }
+
+    def health(self):
+        return {
+            "provider": "inmemory",
+            "healthy": True,
+            "status": "ok",
+            "message": "",
+        }
 
 
-_provider = AlpacaProvider(transport=_default_transport)
-_service = MarketDataService(provider=_provider)
+_service = MarketDataService(provider=_InMemoryProvider())
 
 
 def _output(payload: dict) -> None:
@@ -86,6 +124,69 @@ def _candle_payload(item: MarketCandle) -> dict:
         "closePrice": item.close_price,
         "volume": item.volume,
     }
+
+
+def _parse_symbols(text: str) -> list[str]:
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _parse_json(text: str) -> object:
+    if not text:
+        return None
+    return json.loads(text)
+
+
+def _runtime_error_payload(exc: ValueError) -> dict[str, Any]:
+    message = str(exc)
+    code = "INVALID_RUNTIME_CONFIG"
+
+    prefix, _sep, _rest = message.partition(":")
+    if prefix.startswith("ALPACA_"):
+        code = prefix
+    elif "provider must be one of" in message:
+        code = "INVALID_PROVIDER"
+
+    return {
+        "success": False,
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    }
+
+
+def _build_service_from_runtime_args(args: argparse.Namespace, *, env: dict[str, str] | None = None) -> MarketDataService:
+    source_env = env if env is not None else os.environ
+    provider_raw = str(getattr(args, "provider", "") or source_env.get("MARKET_DATA_PROVIDER") or "inmemory")
+    provider = provider_raw.strip().lower()
+
+    if provider == "inmemory":
+        return MarketDataService(provider=_InMemoryProvider())
+
+    if provider == "alpaca":
+        config = resolve_alpaca_transport_config(
+            api_key=getattr(args, "alpaca_api_key", None),
+            api_secret=getattr(args, "alpaca_api_secret", None),
+            base_url=getattr(args, "alpaca_base_url", None),
+            timeout_seconds=getattr(args, "alpaca_timeout_seconds", None),
+            env=source_env,
+            env_prefixes=("MARKET_DATA_ALPACA", "BACKEND_ALPACA"),
+        )
+        transport = AlpacaHTTPTransport(config=config)
+        return MarketDataService(provider=AlpacaProvider(transport=transport))
+
+    raise ValueError("provider must be one of: inmemory, alpaca")
+
+
+def _configure_runtime(args: argparse.Namespace) -> dict[str, Any] | None:
+    global _service
+
+    try:
+        _service = _build_service_from_runtime_args(args)
+    except ValueError as exc:
+        return _runtime_error_payload(exc)
+
+    return None
 
 
 def _cmd_search(args: argparse.Namespace) -> None:
@@ -159,10 +260,6 @@ def _cmd_quote(args: argparse.Namespace) -> None:
     _cmd_latest(args)
 
 
-def _parse_symbols(text: str) -> list[str]:
-    return [item.strip() for item in text.split(",") if item.strip()]
-
-
 def _cmd_quotes(args: argparse.Namespace) -> None:
     symbols = _parse_symbols(args.symbols)
     try:
@@ -217,12 +314,6 @@ def _cmd_history(args: argparse.Namespace) -> None:
     )
 
 
-def _parse_json(text: str) -> object:
-    if not text:
-        return None
-    return json.loads(text)
-
-
 def _cmd_sync(args: argparse.Namespace) -> None:
     symbols = _parse_symbols(args.symbols)
     try:
@@ -268,6 +359,14 @@ def _cmd_boundary_check(args: argparse.Namespace) -> None:
     _output({"success": True, "data": report})
 
 
+def _add_runtime_args(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--provider", choices=["inmemory", "alpaca"], default=None)
+    command.add_argument("--alpaca-api-key", default=None)
+    command.add_argument("--alpaca-api-secret", default=None)
+    command.add_argument("--alpaca-base-url", default=None)
+    command.add_argument("--alpaca-timeout-seconds", type=float, default=None)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="market-data", description="QuantPoly 市场数据 CLI")
     sub = parser.add_subparsers(dest="command")
@@ -276,29 +375,36 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--user-id", required=True)
     search.add_argument("--keyword", required=True)
     search.add_argument("--limit", type=int, default=10)
+    _add_runtime_args(search)
 
     catalog = sub.add_parser("catalog", help="查询标的目录")
     catalog.add_argument("--user-id", required=True)
     catalog.add_argument("--limit", type=int, default=100)
+    _add_runtime_args(catalog)
 
     symbols = sub.add_parser("symbols", help="查询可用标的代码")
     symbols.add_argument("--user-id", required=True)
     symbols.add_argument("--limit", type=int, default=100)
+    _add_runtime_args(symbols)
 
     quote = sub.add_parser("quote", help="查询实时行情")
     quote.add_argument("--user-id", required=True)
     quote.add_argument("--symbol", required=True)
+    _add_runtime_args(quote)
 
     latest = sub.add_parser("latest", help="查询最新行情")
     latest.add_argument("--user-id", required=True)
     latest.add_argument("--symbol", required=True)
+    _add_runtime_args(latest)
 
     quotes = sub.add_parser("quotes", help="批量查询实时行情")
     quotes.add_argument("--user-id", required=True)
     quotes.add_argument("--symbols", required=True, help="逗号分隔的 symbol 列表")
+    _add_runtime_args(quotes)
 
     provider_health = sub.add_parser("provider-health", help="查询 provider 健康状态")
     provider_health.add_argument("--user-id", required=True)
+    _add_runtime_args(provider_health)
 
     history = sub.add_parser("history", help="查询历史K线")
     history.add_argument("--user-id", required=True)
@@ -307,6 +413,7 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--end-date", required=True)
     history.add_argument("--timeframe", default="1Day")
     history.add_argument("--limit", type=int, default=None)
+    _add_runtime_args(history)
 
     sync = sub.add_parser("sync", help="同步行情数据")
     sync.add_argument("--user-id", required=True)
@@ -314,6 +421,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--start-date", required=True)
     sync.add_argument("--end-date", required=True)
     sync.add_argument("--timeframe", default="1Day")
+    _add_runtime_args(sync)
 
     indicators = sub.add_parser("indicators", help="技术指标")
     indicators_sub = indicators.add_subparsers(dest="indicators_command")
@@ -324,12 +432,14 @@ def build_parser() -> argparse.ArgumentParser:
     calculate.add_argument("--end-date", required=True)
     calculate.add_argument("--timeframe", default="1Day")
     calculate.add_argument("--indicators", required=True, help='JSON: [{"name":"sma","period":3}]')
+    _add_runtime_args(calculate)
 
     boundary = sub.add_parser("boundary", help="同步后边界一致性")
     boundary_sub = boundary.add_subparsers(dest="boundary_command")
     boundary_check = boundary_sub.add_parser("check", help="执行边界一致性校验")
     boundary_check.add_argument("--user-id", required=True)
     boundary_check.add_argument("--symbols", required=True, help="逗号分隔的 symbol 列表")
+    _add_runtime_args(boundary_check)
 
     return parser
 
@@ -364,6 +474,11 @@ def main() -> None:
     if not args.command:
         parser.print_help()
         sys.exit(1)
+
+    runtime_error = _configure_runtime(args)
+    if runtime_error is not None:
+        _output(runtime_error)
+        return
 
     handler = _COMMANDS.get(args.command)
     if handler is None:

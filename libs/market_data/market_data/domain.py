@@ -24,6 +24,16 @@ class UpstreamUnavailableError(MarketDataError):
         super().__init__(code="UPSTREAM_UNAVAILABLE", message=message, retryable=True)
 
 
+class UpstreamUnauthorizedError(MarketDataError):
+    def __init__(self, message: str = "upstream market data auth failed") -> None:
+        super().__init__(code="UPSTREAM_AUTH_FAILED", message=message, retryable=False)
+
+
+class UpstreamRateLimitedError(MarketDataError):
+    def __init__(self, message: str = "upstream market data rate limited") -> None:
+        super().__init__(code="UPSTREAM_RATE_LIMITED", message=message, retryable=True)
+
+
 class RateLimitExceededError(MarketDataError):
     def __init__(self, message: str = "quote rate limit exceeded") -> None:
         super().__init__(code="RATE_LIMIT_EXCEEDED", message=message, retryable=True)

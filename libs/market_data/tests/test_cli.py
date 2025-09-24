@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+
+import pytest
 from datetime import datetime, timezone
 
 from market_data import cli
@@ -152,3 +154,108 @@ def test_cli_history_provider_timeout_outputs_standard_error(capsys, monkeypatch
     assert payload["success"] is False
     assert payload["error"]["code"] == "UPSTREAM_TIMEOUT"
     assert payload["error"]["retryable"] is True
+
+
+
+def test_cli_quote_provider_auth_failure_outputs_standard_error(capsys, monkeypatch):
+    from market_data.domain import UpstreamUnauthorizedError
+
+    class _AuthFailureProvider:
+        def search(self, *, keyword: str, limit: int):
+            del keyword, limit
+            return []
+
+        def quote(self, *, symbol: str):
+            del symbol
+            raise UpstreamUnauthorizedError()
+
+        def history(
+            self,
+            *,
+            symbol: str,
+            start_date: str,
+            end_date: str,
+            timeframe: str,
+            limit: int | None,
+        ):
+            del symbol, start_date, end_date, timeframe, limit
+            return []
+
+    service = MarketDataService(provider=_AuthFailureProvider())
+    monkeypatch.setattr(cli, '_service', service)
+
+    payload = _run(cli._cmd_quote, capsys=capsys, user_id='u-1', symbol='AAPL')
+
+    assert payload['success'] is False
+    assert payload['error']['code'] == 'UPSTREAM_AUTH_FAILED'
+    assert payload['error']['retryable'] is False
+
+
+def test_cli_quote_provider_rate_limited_outputs_standard_error(capsys, monkeypatch):
+    from market_data.domain import UpstreamRateLimitedError
+
+    class _RateLimitedProvider:
+        def search(self, *, keyword: str, limit: int):
+            del keyword, limit
+            return []
+
+        def quote(self, *, symbol: str):
+            del symbol
+            raise UpstreamRateLimitedError()
+
+        def history(
+            self,
+            *,
+            symbol: str,
+            start_date: str,
+            end_date: str,
+            timeframe: str,
+            limit: int | None,
+        ):
+            del symbol, start_date, end_date, timeframe, limit
+            return []
+
+    service = MarketDataService(provider=_RateLimitedProvider())
+    monkeypatch.setattr(cli, '_service', service)
+
+    payload = _run(cli._cmd_quote, capsys=capsys, user_id='u-1', symbol='AAPL')
+
+    assert payload['success'] is False
+    assert payload['error']['code'] == 'UPSTREAM_RATE_LIMITED'
+    assert payload['error']['retryable'] is True
+
+
+
+def test_cli_runtime_build_service_supports_alpaca_provider():
+    args = argparse.Namespace(
+        provider='alpaca',
+        alpaca_api_key=None,
+        alpaca_api_secret=None,
+        alpaca_base_url=None,
+        alpaca_timeout_seconds=None,
+    )
+    service = cli._build_service_from_runtime_args(
+        args,
+        env={
+            'MARKET_DATA_ALPACA_API_KEY': 'key',
+            'MARKET_DATA_ALPACA_API_SECRET': 'secret',
+        },
+    )
+
+    health = service.provider_health(user_id='u-1')
+    assert health['provider'] == 'alpaca'
+    assert health['transport'] == 'alpaca-http'
+
+
+
+def test_cli_runtime_build_service_rejects_missing_alpaca_config():
+    args = argparse.Namespace(
+        provider='alpaca',
+        alpaca_api_key=None,
+        alpaca_api_secret=None,
+        alpaca_base_url=None,
+        alpaca_timeout_seconds=None,
+    )
+
+    with pytest.raises(ValueError, match='ALPACA_CONFIG_MISSING'):
+        cli._build_service_from_runtime_args(args, env={})
