@@ -18,6 +18,8 @@ from signal_execution.service import SignalExecutionService
 from strategy_management.domain import InvalidStrategyTransitionError, StrategyInUseError
 from strategy_management.repository import InMemoryStrategyRepository
 from strategy_management.service import (
+    InvalidResearchParameterSpaceError,
+    InvalidResearchStatusFilterError,
     InvalidStrategyParametersError,
     StrategyAccessDeniedError,
     StrategyService,
@@ -92,6 +94,21 @@ def _serialize_backtest(task) -> dict:
         "config": task.config,
         "metrics": task.metrics,
     }
+
+
+def _parse_json_object(raw_value: str | None, *, field_name: str) -> dict:
+    if raw_value is None or raw_value == "":
+        return {}
+
+    try:
+        parsed = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid {field_name} json") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{field_name} must be an object")
+
+    return dict(parsed)
 
 
 def _cmd_template_list(args: argparse.Namespace) -> None:
@@ -416,31 +433,104 @@ def _cmd_research_optimization_task(args: argparse.Namespace) -> None:
         )
         return
 
-    metrics = _signal_service.performance_statistics(user_id=args.user_id, strategy_id=args.strategy_id)
-    average_pnl = float(metrics.get("averagePnl", 0.0))
-    suggestion = "保持当前参数" if average_pnl >= 0 else "降低风险敞口"
+    try:
+        objective = _parse_json_object(getattr(args, "objective_json", None), field_name="objective")
+        parameter_space = _parse_json_object(getattr(args, "parameter_space_json", None), field_name="parameterSpace")
+        constraints = _parse_json_object(getattr(args, "constraints_json", None), field_name="constraints")
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_PARAMETERS", "message": str(exc)}})
+        return
 
-    result = {
-        "strategyId": args.strategy_id,
-        "generatedAt": datetime.now().isoformat(),
-        "parameterRange": {"template": strategy.template},
-        "suggestions": [{"code": "OPTIMIZE_PNL", "message": suggestion, "metrics": metrics}],
-    }
+    metrics = _signal_service.performance_statistics(user_id=args.user_id, strategy_id=args.strategy_id)
+
+    try:
+        optimization_result = _service.build_research_optimization_result(
+            user_id=args.user_id,
+            strategy_id=args.strategy_id,
+            metrics=metrics,
+            objective=objective,
+            parameter_space=parameter_space,
+            constraints=constraints,
+        )
+    except StrategyAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {"code": "STRATEGY_ACCESS_DENIED", "message": "strategy does not belong to current user"},
+            }
+        )
+        return
+    except InvalidResearchParameterSpaceError as exc:
+        _output({"success": False, "error": {"code": "RESEARCH_INVALID_PARAMETER_SPACE", "message": str(exc)}})
+        return
+
+    task_started_at = datetime.now()
+    constraints_payload = optimization_result.get("constraints", {})
+    constraints_keys = sorted(constraints_payload.keys()) if isinstance(constraints_payload, dict) else []
 
     try:
         job = _job_service.submit_job(
             user_id=args.user_id,
             task_type="strategy_optimization_suggest",
-            payload={"strategyId": args.strategy_id},
+            payload={
+                "strategyId": args.strategy_id,
+                "objective": optimization_result.get("objective", {}),
+                "parameterSpace": optimization_result.get("parameterSpace", {}),
+                "constraints": optimization_result.get("constraints", {}),
+            },
             idempotency_key=job_idempotency_key,
         )
         _job_service.start_job(user_id=args.user_id, job_id=job.id)
-        job = _job_service.succeed_job(user_id=args.user_id, job_id=job.id, result=result)
+
+        task_latency_ms = max(0, int((datetime.now() - task_started_at).total_seconds() * 1000))
+        optimization_result_with_meta = dict(optimization_result)
+        optimization_result_with_meta["metadata"] = {
+            "taskLatencyMs": task_latency_ms,
+            "constraintsKeys": constraints_keys,
+            "inputEcho": {
+                "objective": optimization_result.get("objective", {}),
+                "parameterSpace": optimization_result.get("parameterSpace", {}),
+            },
+        }
+
+        job = _job_service.succeed_job(
+            user_id=args.user_id,
+            job_id=job.id,
+            result={"optimizationResult": optimization_result_with_meta},
+        )
     except IdempotencyConflictError:
         _output({"success": False, "error": {"code": "IDEMPOTENCY_CONFLICT", "message": "idempotency key already exists"}})
         return
 
     _output({"success": True, "data": {"taskId": job.id, "taskType": job.task_type, "status": job.status, "result": job.result}})
+
+
+def _cmd_research_results(args: argparse.Namespace) -> None:
+    try:
+        jobs = _job_service.list_jobs(
+            user_id=args.user_id,
+            task_type="strategy_optimization_suggest",
+        )
+        listing = _service.list_research_results(
+            user_id=args.user_id,
+            strategy_id=args.strategy_id,
+            jobs=jobs,
+            status=getattr(args, "status", None),
+            limit=getattr(args, "limit", 20),
+        )
+    except StrategyAccessDeniedError:
+        _output(
+            {
+                "success": False,
+                "error": {"code": "STRATEGY_ACCESS_DENIED", "message": "strategy does not belong to current user"},
+            }
+        )
+        return
+    except InvalidResearchStatusFilterError as exc:
+        _output({"success": False, "error": {"code": "RESEARCH_INVALID_STATUS_FILTER", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": listing})
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -519,6 +609,15 @@ def build_parser() -> argparse.ArgumentParser:
     research_opt.add_argument("--user-id", required=True)
     research_opt.add_argument("--strategy-id", required=True)
     research_opt.add_argument("--idempotency-key", default=None)
+    research_opt.add_argument("--objective-json", default=None)
+    research_opt.add_argument("--parameter-space-json", default=None)
+    research_opt.add_argument("--constraints-json", default=None)
+
+    research_results = sub.add_parser("research-results", help="查询策略研究结果")
+    research_results.add_argument("--user-id", required=True)
+    research_results.add_argument("--strategy-id", required=True)
+    research_results.add_argument("--status", default=None)
+    research_results.add_argument("--limit", type=int, default=20)
 
     return parser
 
@@ -539,6 +638,7 @@ _COMMANDS = {
     "delete": _cmd_delete,
     "research-performance-task": _cmd_research_performance_task,
     "research-optimization-task": _cmd_research_optimization_task,
+    "research-results": _cmd_research_results,
 }
 
 

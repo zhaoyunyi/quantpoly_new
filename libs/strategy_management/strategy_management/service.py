@@ -11,6 +11,12 @@ from strategy_management.domain import (
     StrategyInUseError,
 )
 from strategy_management.repository import InMemoryStrategyRepository
+from strategy_management.research import (
+    InvalidResearchParameterSpaceError,
+    InvalidResearchStatusFilterError,
+    build_optimization_result,
+    build_research_results_listing,
+)
 
 _TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
     "moving_average": {
@@ -321,6 +327,43 @@ class StrategyService:
     def get_strategy(self, *, user_id: str, strategy_id: str) -> Strategy | None:
         return self._repository.get_by_id(strategy_id, user_id=user_id)
 
+    def build_research_optimization_result(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        metrics: dict[str, Any],
+        objective: dict[str, Any] | None = None,
+        parameter_space: dict[str, Any] | None = None,
+        constraints: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
+        return build_optimization_result(
+            strategy_id=strategy.id,
+            template=strategy.template,
+            metrics=metrics,
+            objective=objective,
+            parameter_space=parameter_space,
+            constraints=constraints,
+        )
+
+    def list_research_results(
+        self,
+        *,
+        user_id: str,
+        strategy_id: str,
+        jobs: list[Any],
+        status: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
+        return build_research_results_listing(
+            jobs=jobs,
+            strategy_id=strategy.id,
+            status=status,
+            limit=limit,
+        )
+
     def create_backtest_for_strategy(
         self,
         *,
@@ -414,4 +457,6 @@ __all__ = [
     "InvalidStrategyParametersError",
     "StrategyAccessDeniedError",
     "InvalidStrategyTransitionError",
+    "InvalidResearchParameterSpaceError",
+    "InvalidResearchStatusFilterError",
 ]

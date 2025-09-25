@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field
 from platform_core.response import error_response, success_response
 from strategy_management.domain import InvalidStrategyTransitionError, StrategyInUseError
 from strategy_management.service import (
+    InvalidResearchParameterSpaceError,
+    InvalidResearchStatusFilterError,
     InvalidStrategyParametersError,
     StrategyAccessDeniedError,
     StrategyService,
@@ -30,6 +32,9 @@ class ResearchPerformanceTaskRequest(BaseModel):
 
 class ResearchOptimizationTaskRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    objective: dict[str, Any] = Field(default_factory=dict)
+    parameter_space: dict[str, dict[str, Any]] = Field(default_factory=dict, alias="parameterSpace")
+    constraints: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
@@ -452,10 +457,7 @@ def create_router(
                 ),
             )
 
-        try:
-            strategy = service.get_strategy(user_id=current_user.id, strategy_id=strategy_id)
-        except StrategyAccessDeniedError:
-            strategy = None
+        strategy = service.get_strategy(user_id=current_user.id, strategy_id=strategy_id)
         if strategy is None:
             return _access_denied_response()
 
@@ -469,26 +471,35 @@ def create_router(
             )
 
         metrics = signal_service.performance_statistics(user_id=current_user.id, strategy_id=strategy_id)
-        average_pnl = float(metrics.get("averagePnl", 0.0))
-        suggestion = "保持当前参数" if average_pnl >= 0 else "降低风险敞口"
 
-        now = datetime.now().isoformat()
-        result = {
-            "strategyId": strategy_id,
-            "generatedAt": now,
-            "parameterRange": {
-                "template": strategy.template,
-            },
-            "suggestions": [
-                {
-                    "code": "OPTIMIZE_PNL",
-                    "message": suggestion,
-                    "metrics": metrics,
-                }
-            ],
-        }
+        try:
+            optimization_result = service.build_research_optimization_result(
+                user_id=current_user.id,
+                strategy_id=strategy_id,
+                metrics=metrics,
+                objective=(body.objective if body is not None else None),
+                parameter_space=(body.parameter_space if body is not None else None),
+                constraints=(body.constraints if body is not None else None),
+            )
+        except StrategyAccessDeniedError:
+            return _access_denied_response()
+        except InvalidResearchParameterSpaceError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="RESEARCH_INVALID_PARAMETER_SPACE",
+                    message=str(exc),
+                ),
+            )
 
-        job_idempotency_key = ((body.idempotency_key if body is not None else None) or f"strategy-optimization-task:{strategy_id}:{uuid4()}")
+        job_idempotency_key = (
+            (body.idempotency_key if body is not None else None)
+            or f"strategy-optimization-task:{strategy_id}:{uuid4()}"
+        )
+
+        task_started_at = datetime.now()
+        constraints_payload = optimization_result.get("constraints", {})
+        constraints_keys = sorted(constraints_payload.keys()) if isinstance(constraints_payload, dict) else []
 
         try:
             job = job_service.submit_job(
@@ -496,11 +507,30 @@ def create_router(
                 task_type="strategy_optimization_suggest",
                 payload={
                     "strategyId": strategy_id,
+                    "objective": optimization_result.get("objective", {}),
+                    "parameterSpace": optimization_result.get("parameterSpace", {}),
+                    "constraints": optimization_result.get("constraints", {}),
                 },
                 idempotency_key=job_idempotency_key,
             )
             job_service.start_job(user_id=current_user.id, job_id=job.id)
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+
+            task_latency_ms = max(0, int((datetime.now() - task_started_at).total_seconds() * 1000))
+            optimization_result_with_meta = dict(optimization_result)
+            optimization_result_with_meta["metadata"] = {
+                "taskLatencyMs": task_latency_ms,
+                "constraintsKeys": constraints_keys,
+                "inputEcho": {
+                    "objective": optimization_result.get("objective", {}),
+                    "parameterSpace": optimization_result.get("parameterSpace", {}),
+                },
+            }
+
+            job = job_service.succeed_job(
+                user_id=current_user.id,
+                job_id=job.id,
+                result={"optimizationResult": optimization_result_with_meta},
+            )
         except IdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -520,5 +550,47 @@ def create_router(
                 "result": job.result,
             }
         )
+
+    @router.get("/strategies/{strategy_id}/research/results")
+    def list_strategy_research_results(
+        strategy_id: str,
+        status: str | None = Query(default=None),
+        limit: int = Query(default=20, ge=1, le=200),
+        current_user=Depends(get_current_user),
+    ):
+        if job_service is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response(
+                    code="TASK_ORCHESTRATION_UNAVAILABLE",
+                    message="job orchestration is not configured",
+                ),
+            )
+
+        jobs = job_service.list_jobs(
+            user_id=current_user.id,
+            task_type="strategy_optimization_suggest",
+        )
+
+        try:
+            listing = service.list_research_results(
+                user_id=current_user.id,
+                strategy_id=strategy_id,
+                jobs=jobs,
+                status=status,
+                limit=limit,
+            )
+        except StrategyAccessDeniedError:
+            return _access_denied_response()
+        except InvalidResearchStatusFilterError as exc:
+            return JSONResponse(
+                status_code=422,
+                content=error_response(
+                    code="RESEARCH_INVALID_STATUS_FILTER",
+                    message=str(exc),
+                ),
+            )
+
+        return success_response(data=listing)
 
     return router
