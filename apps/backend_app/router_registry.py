@@ -18,6 +18,7 @@ from backtest_runner.result_store import InMemoryBacktestResultStore
 from backtest_runner.result_store_sqlite import SQLiteBacktestResultStore
 from backtest_runner.service import BacktestService
 from job_orchestration.api import create_router as create_job_router
+from job_orchestration.executor import InProcessJobExecutor
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.repository_sqlite import SQLiteJobRepository
 from job_orchestration.scheduler import InMemoryScheduler, SQLiteScheduler
@@ -275,10 +276,13 @@ def register_all_routes(
     context: CompositionContext,
     enabled_contexts: set[str],
     get_current_user: AuthUserFn,
+    job_executor_mode: str = "inprocess",
 ) -> None:
     job_service = JobOrchestrationService(
         repository=context.job_repo,
         scheduler=context.job_scheduler,
+        executor=InProcessJobExecutor(name=job_executor_mode),
+        runtime_mode=job_executor_mode,
     )
     backtest_service = BacktestService(
         repository=context.backtest_repo,

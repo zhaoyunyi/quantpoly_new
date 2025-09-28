@@ -106,3 +106,136 @@ def test_sqlite_scheduler_persists_and_recovers_schedules(tmp_path: Path):
     assert recovered == 1
     assert len(rows) == 1
     assert rows[0].id == created.id
+
+
+
+def test_dispatch_job_with_callable_updates_observability_fields():
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+
+    job = service.submit_job(
+        user_id="u-1",
+        task_type="backtest_run",
+        payload={"strategyId": "s-1"},
+        idempotency_key="k-dispatch-callable-1",
+    )
+
+    dispatched = service.dispatch_job_with_callable(
+        user_id="u-1",
+        job_id=job.id,
+        runner=lambda payload: {"accepted": payload["strategyId"]},
+    )
+
+    assert dispatched.status == "succeeded"
+    assert dispatched.executor_name == "inprocess"
+    assert dispatched.dispatch_id
+    assert dispatched.started_at is not None
+    assert dispatched.finished_at is not None
+    assert dispatched.result == {"accepted": "s-1"}
+
+
+def test_dispatch_job_with_callable_maps_failure_error_code_and_result():
+    from job_orchestration.service import JobExecutionFailure
+
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+
+    job = service.submit_job(
+        user_id="u-1",
+        task_type="market_data_sync",
+        payload={"symbols": ["AAPL"]},
+        idempotency_key="k-dispatch-callable-failed-1",
+    )
+
+    def _runner(_payload: dict):
+        raise JobExecutionFailure(
+            error_code="MARKET_DATA_SYNC_FAILED",
+            error_message="market data sync completed with failures",
+            result={"summary": {"failureCount": 1}},
+        )
+
+    failed = service.dispatch_job_with_callable(
+        user_id="u-1",
+        job_id=job.id,
+        runner=_runner,
+    )
+
+    assert failed.status == "failed"
+    assert failed.error_code == "MARKET_DATA_SYNC_FAILED"
+    assert failed.error_message == "market data sync completed with failures"
+    assert failed.result == {"summary": {"failureCount": 1}}
+    assert failed.executor_name == "inprocess"
+    assert failed.dispatch_id
+
+
+def test_runtime_status_includes_executor_mode_and_execution_metrics():
+    from job_orchestration.service import JobExecutionFailure
+
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+
+    first = service.submit_job(
+        user_id="u-1",
+        task_type="backtest_run",
+        payload={"strategyId": "s-1"},
+        idempotency_key="k-runtime-metrics-1",
+    )
+    service.dispatch_job_with_callable(
+        user_id="u-1",
+        job_id=first.id,
+        runner=lambda _payload: {"ok": True},
+    )
+
+    second = service.submit_job(
+        user_id="u-1",
+        task_type="backtest_run",
+        payload={"strategyId": "s-2"},
+        idempotency_key="k-runtime-metrics-2",
+    )
+
+    def _failed(_payload: dict):
+        raise JobExecutionFailure(
+            error_code="EXECUTION_FAILED",
+            error_message="boom",
+        )
+
+    service.dispatch_job_with_callable(
+        user_id="u-1",
+        job_id=second.id,
+        runner=_failed,
+    )
+
+    runtime = service.runtime_status()
+
+    assert runtime["executor"]["mode"] == "inprocess"
+    assert runtime["execution"]["dispatched"] == 2
+    assert runtime["execution"]["succeeded"] == 1
+    assert runtime["execution"]["failed"] == 1
+
+
+def test_register_and_recover_system_schedule_templates_is_deduplicated():
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+        auto_recover=False,
+    )
+
+    first = service.register_system_schedule_templates()
+    second = service.register_system_schedule_templates()
+    recovered = service.recover_system_schedule_templates()
+
+    assert first["total"] >= 4
+    assert first["created"] >= 4
+    assert second["created"] == 0
+    assert second["deduplicated"] == first["total"]
+    assert recovered["created"] == 0
+
+    runtime = service.runtime_status()
+    assert runtime["systemSchedules"]["total"] >= 4
+    assert runtime["systemSchedules"]["active"] >= 4

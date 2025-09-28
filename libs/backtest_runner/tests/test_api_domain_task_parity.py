@@ -67,6 +67,8 @@ def test_submit_backtest_task_returns_orchestration_task_handle():
     job_id = payload["data"]["taskId"]
     job = job_service.get_job(user_id="u-1", job_id=job_id)
     assert job is not None
+    assert job.executor_name is not None
+    assert job.dispatch_id is not None
 
 
 def test_submit_backtest_task_conflict_returns_409():

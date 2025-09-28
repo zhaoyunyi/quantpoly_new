@@ -63,6 +63,8 @@ def test_batch_risk_check_task_endpoint_returns_job_and_summary():
     job = job_service.get_job(user_id="u-1", job_id=payload["data"]["taskId"])
     assert job is not None
     assert job.status == "succeeded"
+    assert job.executor_name is not None
+    assert job.dispatch_id is not None
 
 
 def test_risk_report_generate_task_endpoint_returns_structured_summary():

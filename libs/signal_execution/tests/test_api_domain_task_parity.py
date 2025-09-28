@@ -70,6 +70,8 @@ def test_batch_execute_task_endpoint_returns_task_handle_and_result():
     job = job_service.get_job(user_id="u-1", job_id=payload["data"]["taskId"])
     assert job is not None
     assert job.status == "succeeded"
+    assert job.executor_name is not None
+    assert job.dispatch_id is not None
 
 
 def test_batch_cancel_task_endpoint_supports_idempotency_conflict():

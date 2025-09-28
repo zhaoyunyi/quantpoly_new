@@ -154,6 +154,28 @@ def create_router(*, service: JobOrchestrationService, get_current_user: Any) ->
         del current_user
         return success_response(data=service.runtime_status())
 
+
+    @router.get("/jobs/system-schedules/templates")
+    def list_system_schedule_templates(current_user=Depends(get_current_user)):
+        del current_user
+        return success_response(
+            data={
+                "items": service.list_system_schedule_templates(),
+                "runtime": service.runtime_status(),
+            }
+        )
+
+    @router.post("/jobs/system-schedules/templates/recover")
+    def recover_system_schedule_templates(current_user=Depends(get_current_user)):
+        del current_user
+        summary = service.recover_system_schedule_templates()
+        return success_response(
+            data={
+                "summary": summary,
+                "runtime": service.runtime_status(),
+            }
+        )
+
     @router.post("/jobs/schedules/interval")
     def schedule_interval(body: IntervalScheduleRequest, current_user=Depends(get_current_user)):
         try:

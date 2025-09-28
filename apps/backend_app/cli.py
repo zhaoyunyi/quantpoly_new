@@ -14,6 +14,7 @@ import sys
 from apps.backend_app.settings import (
     CompositionSettings,
     normalize_enabled_contexts,
+    normalize_job_executor_mode,
     normalize_market_data_provider,
     normalize_storage_backend,
 )
@@ -57,10 +58,12 @@ def _cmd_resolve_settings(args: argparse.Namespace) -> dict:
         market_provider_raw = args.market_data_provider or payload.get("marketDataProvider")
         sqlite_db_path_raw = args.sqlite_db_path or payload.get("sqliteDbPath")
         contexts_raw = args.enabled_contexts or payload.get("enabledContexts")
+        job_executor_mode_raw = args.job_executor_mode or payload.get("jobExecutorMode")
 
         env_settings = CompositionSettings.from_env()
         storage_backend = normalize_storage_backend(storage_backend_raw or env_settings.storage_backend)
         market_data_provider = normalize_market_data_provider(market_provider_raw or env_settings.market_data_provider)
+        job_executor_mode = normalize_job_executor_mode(job_executor_mode_raw or env_settings.job_executor_mode)
 
         contexts = normalize_enabled_contexts(_as_contexts(contexts_raw))
 
@@ -75,6 +78,7 @@ def _cmd_resolve_settings(args: argparse.Namespace) -> dict:
             storage_backend=storage_backend,
             sqlite_db_path=sqlite_db_path,
             market_data_provider=market_data_provider,
+            job_executor_mode=job_executor_mode,
         )
 
         return success_response(
@@ -83,6 +87,7 @@ def _cmd_resolve_settings(args: argparse.Namespace) -> dict:
                 "storageBackend": resolved.storage_backend,
                 "sqliteDbPath": resolved.sqlite_db_path,
                 "marketDataProvider": resolved.market_data_provider,
+                "jobExecutorMode": resolved.job_executor_mode,
             },
             message="settings resolved",
         )
@@ -99,6 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--storage-backend", default=None, help="storage backend: sqlite|memory")
     resolve.add_argument("--sqlite-db-path", default=None, help="sqlite 文件路径")
     resolve.add_argument("--market-data-provider", default=None, help="market provider: inmemory|alpaca")
+    resolve.add_argument("--job-executor-mode", default=None, help="job executor mode: inprocess|celery-adapter")
     resolve.add_argument("--enabled-contexts", nargs="*", default=None, help="上下文列表")
 
     return parser

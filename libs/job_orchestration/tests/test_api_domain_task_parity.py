@@ -225,3 +225,23 @@ def test_job_payload_exposes_started_and_finished_timestamps():
     assert done_status.status_code == 200
     done_data = done_status.json()["data"]
     assert done_data["finishedAt"] is not None
+
+
+
+def test_system_schedule_templates_recover_and_list_expose_runtime_observability():
+    app, _service = _build_app(current_user_id="u-1")
+    client = TestClient(app)
+
+    recovered = client.post("/jobs/system-schedules/templates/recover")
+    assert recovered.status_code == 200
+    recovered_payload = recovered.json()
+    assert recovered_payload["success"] is True
+    assert recovered_payload["data"]["summary"]["total"] >= 4
+    assert "runtime" in recovered_payload["data"]
+
+    listed = client.get("/jobs/system-schedules/templates")
+    assert listed.status_code == 200
+    listed_payload = listed.json()
+    assert listed_payload["success"] is True
+    assert len(listed_payload["data"]["items"]) >= 4
+    assert "runtime" in listed_payload["data"]

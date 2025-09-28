@@ -43,12 +43,14 @@ class InProcessJobExecutor:
         self,
         *,
         handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any] | None]] | None = None,
+        name: str = "inprocess",
     ) -> None:
         self._handlers = dict(handlers or {})
+        self._name = name
 
     @property
     def name(self) -> str:
-        return "inprocess"
+        return self._name
 
     def submit(self, *, job: Job) -> str:
         del job

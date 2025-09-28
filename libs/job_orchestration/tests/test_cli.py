@@ -128,3 +128,23 @@ def test_cli_status_includes_runtime_and_execution_observability(capsys, monkeyp
     assert status["data"]["finishedAt"] is None
     assert "runtime" in status
     assert "executor" in status["runtime"]
+
+
+
+def test_cli_templates_recover_and_list_include_runtime(capsys, monkeypatch):
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+    )
+    monkeypatch.setattr(cli, "_service", service)
+
+    recovered = _run(cli._cmd_templates_recover, capsys=capsys)
+    listed = _run(cli._cmd_templates, capsys=capsys)
+
+    assert recovered["success"] is True
+    assert recovered["data"]["total"] >= 4
+    assert "runtime" in recovered
+
+    assert listed["success"] is True
+    assert len(listed["data"]) >= 4
+    assert "runtime" in listed

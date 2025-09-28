@@ -20,6 +20,7 @@ from apps.backend_app.router_registry import (
 from apps.backend_app.settings import (
     CompositionSettings,
     normalize_enabled_contexts,
+    normalize_job_executor_mode,
     normalize_market_data_provider,
     normalize_storage_backend,
 )
@@ -50,6 +51,7 @@ def create_app(
     storage_backend: str | None = None,
     sqlite_db_path: str | None = None,
     market_data_provider: str | None = None,
+    job_executor_mode: str | None = None,
 ) -> FastAPI:
     env_settings = CompositionSettings.from_env()
     settings = CompositionSettings(
@@ -57,6 +59,7 @@ def create_app(
         storage_backend=normalize_storage_backend(storage_backend or env_settings.storage_backend),
         sqlite_db_path=sqlite_db_path or env_settings.sqlite_db_path,
         market_data_provider=normalize_market_data_provider(market_data_provider or env_settings.market_data_provider),
+        job_executor_mode=normalize_job_executor_mode(job_executor_mode or env_settings.job_executor_mode),
     )
     context = build_context(
         storage_backend=settings.storage_backend,
@@ -143,6 +146,7 @@ def create_app(
         context=context,
         enabled_contexts=settings.enabled_contexts,
         get_current_user=get_current_user,
+        job_executor_mode=settings.job_executor_mode,
     )
 
     @app.get("/internal/metrics")

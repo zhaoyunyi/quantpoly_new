@@ -149,6 +149,8 @@ def test_sync_task_submit_returns_summary_and_status_query_contract():
     job = job_service.get_job(user_id="u-1", job_id=payload["data"]["taskId"])
     assert job is not None
     assert job.status == "succeeded"
+    assert job.executor_name is not None
+    assert job.dispatch_id is not None
 
     status = client.get(f"/market/sync-task/{payload['data']['taskId']}")
     assert status.status_code == 200

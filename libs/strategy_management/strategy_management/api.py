@@ -412,16 +412,23 @@ def create_router(
                 payload={
                     "strategyId": strategy_id,
                     "analysisPeriodDays": body.analysis_period_days,
+                    "metrics": metrics,
                 },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = {
-                "strategyId": strategy_id,
-                "analysisPeriodDays": body.analysis_period_days,
-                "metrics": metrics,
-            }
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+
+            def _performance_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return {
+                    "strategyId": str(payload.get("strategyId") or strategy_id),
+                    "analysisPeriodDays": int(payload.get("analysisPeriodDays") or body.analysis_period_days),
+                    "metrics": dict(payload.get("metrics") or metrics),
+                }
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_performance_runner,
+            )
         except IdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -510,26 +517,28 @@ def create_router(
                     "objective": optimization_result.get("objective", {}),
                     "parameterSpace": optimization_result.get("parameterSpace", {}),
                     "constraints": optimization_result.get("constraints", {}),
+                    "constraintsKeys": constraints_keys,
                 },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
 
-            task_latency_ms = max(0, int((datetime.now() - task_started_at).total_seconds() * 1000))
-            optimization_result_with_meta = dict(optimization_result)
-            optimization_result_with_meta["metadata"] = {
-                "taskLatencyMs": task_latency_ms,
-                "constraintsKeys": constraints_keys,
-                "inputEcho": {
-                    "objective": optimization_result.get("objective", {}),
-                    "parameterSpace": optimization_result.get("parameterSpace", {}),
-                },
-            }
+            def _optimization_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                task_latency_ms = max(0, int((datetime.now() - task_started_at).total_seconds() * 1000))
+                optimization_result_with_meta = dict(optimization_result)
+                optimization_result_with_meta["metadata"] = {
+                    "taskLatencyMs": task_latency_ms,
+                    "constraintsKeys": list(payload.get("constraintsKeys") or constraints_keys),
+                    "inputEcho": {
+                        "objective": optimization_result.get("objective", {}),
+                        "parameterSpace": optimization_result.get("parameterSpace", {}),
+                    },
+                }
+                return {"optimizationResult": optimization_result_with_meta}
 
-            job = job_service.succeed_job(
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
                 job_id=job.id,
-                result={"optimizationResult": optimization_result_with_meta},
+                runner=_optimization_runner,
             )
         except IdempotencyConflictError:
             return JSONResponse(

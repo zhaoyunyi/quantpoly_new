@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from job_orchestration.service import (
     IdempotencyConflictError as JobIdempotencyConflictError,
+    JobOrchestrationService,
 )
-from job_orchestration.service import JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from platform_core.response import error_response, success_response
@@ -177,9 +177,19 @@ def create_router(
                 payload={"accountIds": body.account_ids},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.batch_check_accounts(user_id=current_user.id, account_ids=body.account_ids)
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+
+            def _batch_check_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.batch_check_accounts(
+                    user_id=current_user.id,
+                    account_ids=list(payload.get("accountIds") or []),
+                )
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_batch_check_runner,
+                passthrough_exceptions=(AccountAccessDeniedError,),
+            )
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -218,9 +228,18 @@ def create_router(
                 payload={"reportType": body.report_type},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            report = service.generate_risk_report(user_id=current_user.id, report_type=body.report_type)
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=report)
+
+            def _report_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.generate_risk_report(
+                    user_id=current_user.id,
+                    report_type=str(payload.get("reportType") or ""),
+                )
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_report_runner,
+            )
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -254,9 +273,16 @@ def create_router(
                 payload={},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result, _audit_id = service.notify_pending_alerts(user_id=current_user.id, actor_id=current_user.id)
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+
+            def _notify_runner(_payload: dict[str, Any]) -> dict[str, Any]:
+                result, _audit_id = service.notify_pending_alerts(user_id=current_user.id, actor_id=current_user.id)
+                return result
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_notify_runner,
+            )
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -290,9 +316,19 @@ def create_router(
                 payload={"accountIds": body.account_ids},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.submit_continuous_monitor(user_id=current_user.id, account_ids=body.account_ids)
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+
+            def _continuous_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.submit_continuous_monitor(
+                    user_id=current_user.id,
+                    account_ids=list(payload.get("accountIds") or []),
+                )
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_continuous_runner,
+                passthrough_exceptions=(AccountAccessDeniedError,),
+            )
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -350,9 +386,19 @@ def create_router(
                 payload={"accountIds": body.account_ids},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.generate_all_snapshots(user_id=current_user.id, account_ids=body.account_ids)
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+
+            def _snapshot_all_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.generate_all_snapshots(
+                    user_id=current_user.id,
+                    account_ids=list(payload.get("accountIds") or []),
+                )
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_snapshot_all_runner,
+                passthrough_exceptions=(AccountAccessDeniedError,),
+            )
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -395,9 +441,20 @@ def create_router(
                 payload={"accountId": account_id},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            snapshot = service.generate_account_snapshot(user_id=current_user.id, account_id=account_id)
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=_assessment_payload(snapshot))
+
+            def _snapshot_account_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                snapshot = service.generate_account_snapshot(
+                    user_id=current_user.id,
+                    account_id=str(payload.get("accountId") or ""),
+                )
+                return _assessment_payload(snapshot)
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_snapshot_account_runner,
+                passthrough_exceptions=(AccountAccessDeniedError,),
+            )
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -436,15 +493,19 @@ def create_router(
                 payload={"retentionDays": body.retention_days},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            deleted, audit_id = service.cleanup_resolved_alerts(
-                user_id=current_user.id,
-                retention_days=body.retention_days,
-            )
-            job = job_service.succeed_job(
+
+            def _cleanup_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                deleted, audit_id = service.cleanup_resolved_alerts(
+                    user_id=current_user.id,
+                    retention_days=int(payload.get("retentionDays") or 0),
+                )
+                return {"deleted": deleted, "auditId": audit_id}
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
                 job_id=job.id,
-                result={"deleted": deleted, "auditId": audit_id},
+                runner=_cleanup_runner,
+                passthrough_exceptions=(ValueError,),
             )
         except JobIdempotencyConflictError:
             return JSONResponse(
@@ -704,15 +765,19 @@ def create_router(
                 payload={"accountId": account_id},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            snapshot = service.evaluate_account_risk(
-                user_id=current_user.id,
-                account_id=account_id,
-            )
-            job = job_service.succeed_job(
+
+            def _evaluate_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                snapshot = service.evaluate_account_risk(
+                    user_id=current_user.id,
+                    account_id=str(payload.get("accountId") or ""),
+                )
+                return _assessment_payload(snapshot)
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
                 job_id=job.id,
-                result=_assessment_payload(snapshot),
+                runner=_evaluate_runner,
+                passthrough_exceptions=(AccountAccessDeniedError,),
             )
         except JobIdempotencyConflictError:
             return JSONResponse(

@@ -25,8 +25,9 @@ from platform_core.response import error_response, success_response
 
 from job_orchestration.service import (
     IdempotencyConflictError as JobIdempotencyConflictError,
+    JobExecutionFailure,
+    JobOrchestrationService,
 )
-from job_orchestration.service import JobOrchestrationService
 from pydantic import BaseModel, Field
 
 
@@ -193,25 +194,29 @@ def create_router(
                 },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.sync_market_data(
-                user_id=current_user.id,
-                symbols=body.symbols,
-                start_date=body.start_date,
-                end_date=body.end_date,
-                timeframe=body.timeframe,
-            )
-            service.record_sync_result(user_id=current_user.id, task_id=job.id, result=result)
-            if result["summary"]["failureCount"] > 0:
-                job = job_service.fail_job(
+
+            def _sync_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                result = service.sync_market_data(
                     user_id=current_user.id,
-                    job_id=job.id,
-                    error_code="MARKET_DATA_SYNC_FAILED",
-                    error_message="market data sync completed with failures",
+                    symbols=list(payload.get("symbols") or []),
+                    start_date=str(payload.get("startDate") or ""),
+                    end_date=str(payload.get("endDate") or ""),
+                    timeframe=str(payload.get("timeframe") or "1Day"),
                 )
-                job.result = result
-            else:
-                job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+                service.record_sync_result(user_id=current_user.id, task_id=job.id, result=result)
+                if int(result.get("summary", {}).get("failureCount", 0)) > 0:
+                    raise JobExecutionFailure(
+                        error_code="MARKET_DATA_SYNC_FAILED",
+                        error_message="market data sync completed with failures",
+                        result=result,
+                    )
+                return result
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_sync_runner,
+            )
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -266,26 +271,29 @@ def create_router(
 
         try:
             job_service.retry_job(user_id=current_user.id, job_id=task_id)
-            job_service.start_job(user_id=current_user.id, job_id=task_id)
-            payload = dict(job.payload or {})
-            result = service.sync_market_data(
-                user_id=current_user.id,
-                symbols=list(payload.get("symbols") or []),
-                start_date=str(payload.get("startDate") or ""),
-                end_date=str(payload.get("endDate") or ""),
-                timeframe=str(payload.get("timeframe") or "1Day"),
-            )
-            service.record_sync_result(user_id=current_user.id, task_id=task_id, result=result)
-            if result["summary"]["failureCount"] > 0:
-                job = job_service.fail_job(
+
+            def _retry_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                result = service.sync_market_data(
                     user_id=current_user.id,
-                    job_id=task_id,
-                    error_code="MARKET_DATA_SYNC_FAILED",
-                    error_message="market data sync completed with failures",
+                    symbols=list(payload.get("symbols") or []),
+                    start_date=str(payload.get("startDate") or ""),
+                    end_date=str(payload.get("endDate") or ""),
+                    timeframe=str(payload.get("timeframe") or "1Day"),
                 )
-                job.result = result
-            else:
-                job = job_service.succeed_job(user_id=current_user.id, job_id=task_id, result=result)
+                service.record_sync_result(user_id=current_user.id, task_id=task_id, result=result)
+                if int(result.get("summary", {}).get("failureCount", 0)) > 0:
+                    raise JobExecutionFailure(
+                        error_code="MARKET_DATA_SYNC_FAILED",
+                        error_message="market data sync completed with failures",
+                        result=result,
+                    )
+                return result
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=task_id,
+                runner=_retry_runner,
+            )
         except Exception as exc:  # noqa: BLE001
             return JSONResponse(
                 status_code=500,
@@ -320,16 +328,22 @@ def create_router(
                 },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.calculate_indicators(
+
+            def _indicators_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.calculate_indicators(
+                    user_id=current_user.id,
+                    symbol=str(payload.get("symbol") or ""),
+                    start_date=str(payload.get("startDate") or ""),
+                    end_date=str(payload.get("endDate") or ""),
+                    timeframe=str(payload.get("timeframe") or "1Day"),
+                    indicators=list(payload.get("indicators") or []),
+                )
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                symbol=body.symbol,
-                start_date=body.start_date,
-                end_date=body.end_date,
-                timeframe=body.timeframe,
-                indicators=[spec.model_dump(by_alias=True, exclude_none=True) for spec in body.indicators],
+                job_id=job.id,
+                runner=_indicators_runner,
             )
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,

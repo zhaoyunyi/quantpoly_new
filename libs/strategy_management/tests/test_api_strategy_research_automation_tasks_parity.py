@@ -56,7 +56,7 @@ def _build_app(*, current_user_id: str):
 
 
 def test_submit_strategy_performance_analysis_task_returns_task_id():
-    app, strategy_service, _job_service = _build_app(current_user_id="u-1")
+    app, strategy_service, job_service = _build_app(current_user_id="u-1")
     client = TestClient(app)
 
     strategy = strategy_service.create_strategy_from_template(
@@ -76,6 +76,11 @@ def test_submit_strategy_performance_analysis_task_returns_task_id():
     assert payload["success"] is True
     assert payload["data"]["taskId"]
     assert payload["data"]["taskType"] == "strategy_performance_analyze"
+
+    job = job_service.get_job(user_id="u-1", job_id=payload["data"]["taskId"])
+    assert job is not None
+    assert job.executor_name is not None
+    assert job.dispatch_id is not None
 
 
 def test_submit_strategy_optimization_suggestion_task_returns_task_id():

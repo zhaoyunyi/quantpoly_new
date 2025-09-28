@@ -9,8 +9,9 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from job_orchestration.service import (
     IdempotencyConflictError as JobIdempotencyConflictError,
+    JobExecutionFailure,
+    JobOrchestrationService,
 )
-from job_orchestration.service import JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from platform_core.authz import resolve_admin_decision
@@ -801,22 +802,32 @@ def create_router(
                 payload={
                     "accountId": body.account_id,
                     "priceUpdates": body.price_updates,
+                    "confirmationToken": body.confirmation_token,
+                    "adminDecisionSource": decision.source,
                 },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.refresh_market_prices(
+
+            def _refresh_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                result = service.refresh_market_prices(
+                    user_id=current_user.id,
+                    is_admin=decision.is_admin,
+                    admin_decision_source=str(payload.get("adminDecisionSource") or decision.source),
+                    price_updates=dict(payload.get("priceUpdates") or {}),
+                    idempotency_key=None,
+                    confirmation_token=payload.get("confirmationToken"),
+                    account_id=(str(payload.get("accountId")) if payload.get("accountId") is not None else None),
+                )
+                if "symbols" in result and "updatedSymbols" not in result:
+                    result = {**result, "updatedSymbols": result["symbols"]}
+                return result
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                is_admin=decision.is_admin,
-                admin_decision_source=decision.source,
-                price_updates=body.price_updates,
-                idempotency_key=None,
-                confirmation_token=body.confirmation_token,
-                account_id=body.account_id,
+                job_id=job.id,
+                runner=_refresh_runner,
+                passthrough_exceptions=(TradingAdminRequiredError, ValueError),
             )
-            if "symbols" in result and "updatedSymbols" not in result:
-                result = {**result, "updatedSymbols": result["symbols"]}
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return _error(
                 status_code=409,
@@ -865,20 +876,33 @@ def create_router(
             job = job_service.submit_job(
                 user_id=current_user.id,
                 task_type="trading_pending_process",
-                payload={"maxTrades": body.max_trades},
+                payload={
+                    "maxTrades": body.max_trades,
+                    "idempotencyKey": body.idempotency_key,
+                    "confirmationToken": body.confirmation_token,
+                    "auditId": audit_id,
+                    "adminDecisionSource": decision.source,
+                },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.process_pending_trades(
+
+            def _pending_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.process_pending_trades(
+                    user_id=current_user.id,
+                    is_admin=decision.is_admin,
+                    admin_decision_source=str(payload.get("adminDecisionSource") or decision.source),
+                    max_trades=int(payload.get("maxTrades") or 0),
+                    idempotency_key=(payload.get("idempotencyKey") if payload.get("idempotencyKey") is not None else None),
+                    confirmation_token=(payload.get("confirmationToken") if payload.get("confirmationToken") is not None else None),
+                    audit_id=str(payload.get("auditId") or audit_id),
+                )
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                is_admin=decision.is_admin,
-                admin_decision_source=decision.source,
-                max_trades=body.max_trades,
-                idempotency_key=body.idempotency_key,
-                confirmation_token=body.confirmation_token,
-                audit_id=audit_id,
+                job_id=job.id,
+                runner=_pending_runner,
+                passthrough_exceptions=(TradingAdminRequiredError, ValueError),
             )
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
         except TradingAdminRequiredError:
@@ -911,21 +935,35 @@ def create_router(
             job = job_service.submit_job(
                 user_id=current_user.id,
                 task_type="trading_daily_stats_calculate",
-                payload={"accountIds": body.account_ids, "targetDate": body.target_date},
+                payload={
+                    "accountIds": body.account_ids,
+                    "targetDate": body.target_date,
+                    "idempotencyKey": body.idempotency_key,
+                    "confirmationToken": body.confirmation_token,
+                    "auditId": audit_id,
+                    "adminDecisionSource": decision.source,
+                },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.calculate_daily_stats(
+
+            def _daily_stats_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.calculate_daily_stats(
+                    user_id=current_user.id,
+                    is_admin=decision.is_admin,
+                    admin_decision_source=str(payload.get("adminDecisionSource") or decision.source),
+                    account_ids=list(payload.get("accountIds") or []),
+                    target_date=str(payload.get("targetDate") or body.target_date),
+                    idempotency_key=(payload.get("idempotencyKey") if payload.get("idempotencyKey") is not None else None),
+                    confirmation_token=(payload.get("confirmationToken") if payload.get("confirmationToken") is not None else None),
+                    audit_id=str(payload.get("auditId") or audit_id),
+                )
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                is_admin=decision.is_admin,
-                admin_decision_source=decision.source,
-                account_ids=body.account_ids,
-                target_date=body.target_date,
-                idempotency_key=body.idempotency_key,
-                confirmation_token=body.confirmation_token,
-                audit_id=audit_id,
+                job_id=job.id,
+                runner=_daily_stats_runner,
+                passthrough_exceptions=(TradingAdminRequiredError, ValueError),
             )
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
         except TradingAdminRequiredError:
@@ -970,29 +1008,40 @@ def create_router(
             job = job_service.submit_job(
                 user_id=current_user.id,
                 task_type="trading_batch_execute",
-                payload={"tradeRequests": body.trade_requests},
+                payload={
+                    "tradeRequests": body.trade_requests,
+                    "idempotencyKey": body.idempotency_key,
+                    "confirmationToken": body.confirmation_token,
+                    "auditId": audit_id,
+                    "adminDecisionSource": decision.source,
+                },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.batch_execute_trades(
-                user_id=current_user.id,
-                is_admin=decision.is_admin,
-                admin_decision_source=decision.source,
-                trade_requests=body.trade_requests,
-                idempotency_key=body.idempotency_key,
-                confirmation_token=body.confirmation_token,
-                audit_id=audit_id,
-            )
-            if int(result.get("failed", 0)) > 0:
-                job = job_service.fail_job(
+
+            def _batch_execute_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                result = service.batch_execute_trades(
                     user_id=current_user.id,
-                    job_id=job.id,
-                    error_code="TRADING_BATCH_EXECUTE_FAILED",
-                    error_message="batch execute completed with failures",
+                    is_admin=decision.is_admin,
+                    admin_decision_source=str(payload.get("adminDecisionSource") or decision.source),
+                    trade_requests=list(payload.get("tradeRequests") or []),
+                    idempotency_key=(payload.get("idempotencyKey") if payload.get("idempotencyKey") is not None else None),
+                    confirmation_token=(payload.get("confirmationToken") if payload.get("confirmationToken") is not None else None),
+                    audit_id=str(payload.get("auditId") or audit_id),
                 )
-                job.result = result
-            else:
-                job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
+                if int(result.get("failed", 0)) > 0:
+                    raise JobExecutionFailure(
+                        error_code="TRADING_BATCH_EXECUTE_FAILED",
+                        error_message="batch execute completed with failures",
+                        result=result,
+                    )
+                return result
+
+            job = job_service.dispatch_job_with_callable(
+                user_id=current_user.id,
+                job_id=job.id,
+                runner=_batch_execute_runner,
+                passthrough_exceptions=(TradingAdminRequiredError, ValueError),
+            )
         except JobIdempotencyConflictError:
             return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
         except TradingAdminRequiredError:
@@ -1021,20 +1070,33 @@ def create_router(
             job = job_service.submit_job(
                 user_id=current_user.id,
                 task_type="trading_risk_monitor",
-                payload={"accountIds": body.account_ids},
+                payload={
+                    "accountIds": body.account_ids,
+                    "idempotencyKey": body.idempotency_key,
+                    "confirmationToken": body.confirmation_token,
+                    "auditId": audit_id,
+                    "adminDecisionSource": decision.source,
+                },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.monitor_risk(
+
+            def _risk_monitor_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.monitor_risk(
+                    user_id=current_user.id,
+                    is_admin=decision.is_admin,
+                    admin_decision_source=str(payload.get("adminDecisionSource") or decision.source),
+                    account_ids=list(payload.get("accountIds") or []),
+                    idempotency_key=(payload.get("idempotencyKey") if payload.get("idempotencyKey") is not None else None),
+                    confirmation_token=(payload.get("confirmationToken") if payload.get("confirmationToken") is not None else None),
+                    audit_id=str(payload.get("auditId") or audit_id),
+                )
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                is_admin=decision.is_admin,
-                admin_decision_source=decision.source,
-                account_ids=body.account_ids,
-                idempotency_key=body.idempotency_key,
-                confirmation_token=body.confirmation_token,
-                audit_id=audit_id,
+                job_id=job.id,
+                runner=_risk_monitor_runner,
+                passthrough_exceptions=(TradingAdminRequiredError, ValueError),
             )
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
         except TradingAdminRequiredError:
@@ -1063,21 +1125,35 @@ def create_router(
             job = job_service.submit_job(
                 user_id=current_user.id,
                 task_type="trading_account_cleanup",
-                payload={"accountIds": body.account_ids, "daysThreshold": body.days_threshold},
+                payload={
+                    "accountIds": body.account_ids,
+                    "daysThreshold": body.days_threshold,
+                    "idempotencyKey": body.idempotency_key,
+                    "confirmationToken": body.confirmation_token,
+                    "auditId": audit_id,
+                    "adminDecisionSource": decision.source,
+                },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.cleanup_account_history(
+
+            def _cleanup_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.cleanup_account_history(
+                    user_id=current_user.id,
+                    is_admin=decision.is_admin,
+                    admin_decision_source=str(payload.get("adminDecisionSource") or decision.source),
+                    account_ids=list(payload.get("accountIds") or []),
+                    days_threshold=int(payload.get("daysThreshold") or 0),
+                    idempotency_key=(payload.get("idempotencyKey") if payload.get("idempotencyKey") is not None else None),
+                    confirmation_token=(payload.get("confirmationToken") if payload.get("confirmationToken") is not None else None),
+                    audit_id=str(payload.get("auditId") or audit_id),
+                )
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                is_admin=decision.is_admin,
-                admin_decision_source=decision.source,
-                account_ids=body.account_ids,
-                days_threshold=body.days_threshold,
-                idempotency_key=body.idempotency_key,
-                confirmation_token=body.confirmation_token,
-                audit_id=audit_id,
+                job_id=job.id,
+                runner=_cleanup_runner,
+                passthrough_exceptions=(TradingAdminRequiredError, ValueError),
             )
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return _error(status_code=409, code="IDEMPOTENCY_CONFLICT", message="idempotency key already exists")
         except TradingAdminRequiredError:

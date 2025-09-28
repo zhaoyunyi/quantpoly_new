@@ -7,14 +7,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from job_orchestration.service import IdempotencyConflictError, JobOrchestrationService
+from job_orchestration.service import IdempotencyConflictError, JobExecutionFailure, JobOrchestrationService
 from pydantic import BaseModel, Field
 
 from backtest_runner.domain import InvalidBacktestTransitionError
 from backtest_runner.service import (
     BacktestAccessDeniedError,
     BacktestDeleteInvalidStateError,
-    BacktestExecutionError,
     BacktestIdempotencyConflictError,
     BacktestService,
 )
@@ -162,31 +161,38 @@ def create_router(
                 },
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
 
-            execution = service.execute_task(user_id=current_user.id, task_id=task.id)
-            task = execution["task"]
+            def _execute_runner(_payload: dict[str, Any]) -> dict[str, Any]:
+                try:
+                    execution = service.execute_task(user_id=current_user.id, task_id=task.id)
+                except Exception as exc:  # noqa: BLE001
+                    from backtest_runner.service import BacktestExecutionError
 
-            job = job_service.succeed_job(
+                    if isinstance(exc, BacktestExecutionError):
+                        latest_task = service.get_task(user_id=current_user.id, task_id=task.id) or task
+                        raise JobExecutionFailure(
+                            error_code=exc.code,
+                            error_message=exc.message,
+                            result={
+                                "backtestTaskId": latest_task.id,
+                                "status": latest_task.status,
+                                "metrics": latest_task.metrics,
+                            },
+                        )
+                    raise
+
+                task_after = execution["task"]
+                return {
+                    "backtestTaskId": task_after.id,
+                    "status": task_after.status,
+                    "metrics": task_after.metrics,
+                }
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
                 job_id=job.id,
-                result={
-                    "backtestTaskId": task.id,
-                    "status": task.status,
-                    "metrics": task.metrics,
-                },
+                runner=_execute_runner,
             )
-        except BacktestExecutionError as exc:
-            job = job_service.fail_job(
-                user_id=current_user.id,
-                job_id=job.id,
-                error_code=exc.code,
-                error_message=exc.message,
-            )
-            latest_task = service.get_task(user_id=current_user.id, task_id=task.id)
-            payload = _serialize_job(job)
-            payload["backtestTask"] = _serialize_task(latest_task) if latest_task is not None else _serialize_task(task)
-            return success_response(data=payload)
         except IdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -201,8 +207,9 @@ def create_router(
                 content=error_response(code="TASK_EXECUTION_FAILED", message=str(exc)),
             )
 
+        latest_task = service.get_task(user_id=current_user.id, task_id=task.id) or task
         payload = _serialize_job(job)
-        payload["backtestTask"] = _serialize_task(task)
+        payload["backtestTask"] = _serialize_task(latest_task)
         return success_response(data=payload)
 
     @router.get("/backtests")

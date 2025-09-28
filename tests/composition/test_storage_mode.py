@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.backend_app.router_registry import build_context
+from apps.backend_app.settings import CompositionSettings, normalize_job_executor_mode
 from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.repository_sqlite import SQLiteBacktestRepository
 from backtest_runner.result_store import InMemoryBacktestResultStore
@@ -78,3 +79,17 @@ def test_build_context_alpaca_provider_fail_fast_without_required_config(monkeyp
 def test_build_context_rejects_unknown_market_data_provider():
     with pytest.raises(ValueError, match="market_data_provider"):
         build_context(storage_backend="memory", market_data_provider="unknown")
+
+
+
+def test_normalize_job_executor_mode_supports_inprocess_and_celery_adapter():
+    assert normalize_job_executor_mode("inprocess") == "inprocess"
+    assert normalize_job_executor_mode("celery-adapter") == "celery-adapter"
+
+
+def test_composition_settings_reads_job_executor_mode_from_env(monkeypatch):
+    monkeypatch.setenv("BACKEND_JOB_EXECUTOR_MODE", "celery-adapter")
+
+    settings = CompositionSettings.from_env()
+
+    assert settings.job_executor_mode == "celery-adapter"

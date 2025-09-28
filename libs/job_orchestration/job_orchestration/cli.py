@@ -159,6 +159,26 @@ def _cmd_runtime(_args: argparse.Namespace) -> None:
     _output({"success": True, "data": _service.runtime_status()})
 
 
+def _cmd_templates(_args: argparse.Namespace) -> None:
+    _output(
+        {
+            "success": True,
+            "data": _service.list_system_schedule_templates(),
+            "runtime": _service.runtime_status(),
+        }
+    )
+
+
+def _cmd_templates_recover(_args: argparse.Namespace) -> None:
+    _output(
+        {
+            "success": True,
+            "data": _service.recover_system_schedule_templates(),
+            "runtime": _service.runtime_status(),
+        }
+    )
+
+
 def _cmd_schedule_interval(args: argparse.Namespace) -> None:
     try:
         schedule = _service.schedule_interval(
@@ -240,6 +260,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("types", help="列出任务类型注册表")
     sub.add_parser("runtime", help="查询执行器与调度恢复状态")
+    sub.add_parser("templates", help="列出系统调度模板注册状态")
+    sub.add_parser("templates-recover", help="恢复系统调度模板")
 
     schedule_interval = sub.add_parser("schedule-interval", help="创建 interval 调度")
     schedule_interval.add_argument("--user-id", required=True)
@@ -269,6 +291,8 @@ _COMMANDS = {
     "retry": _cmd_retry,
     "types": _cmd_types,
     "runtime": _cmd_runtime,
+    "templates": _cmd_templates,
+    "templates-recover": _cmd_templates_recover,
     "schedule-interval": _cmd_schedule_interval,
     "schedule-cron": _cmd_schedule_cron,
     "schedules": _cmd_schedules,

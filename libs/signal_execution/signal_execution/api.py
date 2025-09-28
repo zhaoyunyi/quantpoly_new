@@ -497,13 +497,19 @@ def create_router(
                 payload={"signalIds": body.signal_ids},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.batch_execute_signals(
+
+            def _batch_execute_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.batch_execute_signals(
+                    user_id=current_user.id,
+                    signal_ids=list(payload.get("signalIds") or []),
+                    idempotency_key=None,
+                )
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                signal_ids=body.signal_ids,
-                idempotency_key=None,
+                job_id=job.id,
+                runner=_batch_execute_runner,
             )
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
@@ -537,13 +543,19 @@ def create_router(
                 payload={"signalIds": body.signal_ids},
                 idempotency_key=job_idempotency_key,
             )
-            job_service.start_job(user_id=current_user.id, job_id=job.id)
-            result = service.batch_cancel_signals(
+
+            def _batch_cancel_runner(payload: dict[str, Any]) -> dict[str, Any]:
+                return service.batch_cancel_signals(
+                    user_id=current_user.id,
+                    signal_ids=list(payload.get("signalIds") or []),
+                    idempotency_key=None,
+                )
+
+            job = job_service.dispatch_job_with_callable(
                 user_id=current_user.id,
-                signal_ids=body.signal_ids,
-                idempotency_key=None,
+                job_id=job.id,
+                runner=_batch_cancel_runner,
             )
-            job = job_service.succeed_job(user_id=current_user.id, job_id=job.id, result=result)
         except JobIdempotencyConflictError:
             return JSONResponse(
                 status_code=409,
