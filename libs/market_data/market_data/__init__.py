@@ -17,6 +17,7 @@ from market_data.domain import (
 )
 from market_data.rate_limit import SlidingWindowRateLimiter
 from market_data.service import BatchQuoteResult, MarketDataService, QuoteResult
+from market_data.stream_gateway import MarketDataStreamGateway, StreamGatewayError, StreamSubscription
 
 __all__ = [
     "AlpacaProvider",
@@ -38,4 +39,7 @@ __all__ = [
     "UpstreamUnavailableError",
     "UpstreamUnauthorizedError",
     "UpstreamRateLimitedError",
+    "MarketDataStreamGateway",
+    "StreamGatewayError",
+    "StreamSubscription",
 ]

@@ -259,3 +259,63 @@ def test_cli_runtime_build_service_rejects_missing_alpaca_config():
 
     with pytest.raises(ValueError, match='ALPACA_CONFIG_MISSING'):
         cli._build_service_from_runtime_args(args, env={})
+
+
+
+def test_cli_stream_subscribe_poll_status_and_unsubscribe(capsys, monkeypatch):
+    service = MarketDataService(provider=_Provider())
+    monkeypatch.setattr(cli, "_service", service)
+    monkeypatch.setattr(cli, "_stream_gateway", None, raising=False)
+
+    subscribed = _run(
+        cli._cmd_stream_subscribe,
+        capsys=capsys,
+        user_id="u-1",
+        symbols="aapl,msft",
+        channel="quote",
+        timeframe="1Min",
+    )
+
+    assert subscribed["success"] is True
+    subscription_id = subscribed["data"]["subscriptionId"]
+
+    polled = _run(
+        cli._cmd_stream_poll,
+        capsys=capsys,
+        user_id="u-1",
+        subscription_id=subscription_id,
+    )
+    assert polled["success"] is True
+    assert len(polled["data"]["items"]) == 2
+    assert polled["data"]["items"][0]["type"] == "market.quote"
+
+    status = _run(cli._cmd_stream_status, capsys=capsys, user_id="u-1")
+    assert status["success"] is True
+    assert status["data"]["stream"]["activeSubscriptions"] == 1
+
+    unsubscribed = _run(
+        cli._cmd_stream_unsubscribe,
+        capsys=capsys,
+        user_id="u-1",
+        subscription_id=subscription_id,
+    )
+    assert unsubscribed["success"] is True
+    assert unsubscribed["data"]["removed"] is True
+
+
+def test_cli_stream_rejects_illegal_channel(capsys, monkeypatch):
+    service = MarketDataService(provider=_Provider())
+    monkeypatch.setattr(cli, "_service", service)
+    monkeypatch.setattr(cli, "_stream_gateway", None, raising=False)
+
+    payload = _run(
+        cli._cmd_stream_subscribe,
+        capsys=capsys,
+        user_id="u-1",
+        symbols="aapl",
+        channel="illegal",
+        timeframe="1Min",
+    )
+
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "STREAM_INVALID_SUBSCRIPTION"

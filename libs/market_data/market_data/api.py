@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from starlette.requests import Request
 
 from market_data.domain import (
     BatchQuoteItem,
@@ -21,6 +22,7 @@ from market_data.domain import (
     UpstreamUnavailableError,
 )
 from market_data.service import MarketDataService
+from market_data.stream_gateway import MarketDataStreamGateway, StreamGatewayError
 from platform_core.response import error_response, success_response
 
 from job_orchestration.service import (
@@ -168,6 +170,169 @@ def create_router(
     job_service: JobOrchestrationService | None = None,
 ) -> APIRouter:
     router = APIRouter()
+    stream_gateway = MarketDataStreamGateway(
+        quote_reader=lambda user_id, symbols: service.get_quotes(user_id=user_id, symbols=symbols),
+    )
+
+    def _stream_now() -> str:
+        return f"{datetime.utcnow().isoformat()}Z"
+
+    def _stream_error_event(*, code: str, message: str) -> dict[str, Any]:
+        return {
+            "type": "stream.error",
+            "code": code,
+            "message": message,
+            "timestamp": _stream_now(),
+        }
+
+    def _resolve_ws_current_user(*, websocket: WebSocket):
+        try:
+            return get_current_user()
+        except TypeError:
+            pass
+
+        request = Request(websocket.scope)
+        try:
+            return get_current_user(request)
+        except TypeError:
+            return get_current_user(websocket)
+
+    @router.websocket("/market/stream")
+    async def stream_gateway_socket(websocket: WebSocket):
+        try:
+            current_user = _resolve_ws_current_user(websocket=websocket)
+        except PermissionError:
+            await websocket.accept()
+            await websocket.send_json(
+                _stream_error_event(
+                    code="STREAM_AUTH_REQUIRED",
+                    message="stream auth required",
+                )
+            )
+            await websocket.close(code=4401)
+            return
+
+        try:
+            connection_id = stream_gateway.open_connection(user_id=current_user.id)
+        except StreamGatewayError as exc:
+            await websocket.accept()
+            await websocket.send_json(_stream_error_event(code=exc.code, message=exc.message))
+            await websocket.close(code=4408)
+            return
+
+        await websocket.accept()
+        await websocket.send_json(
+            {
+                "type": "stream.ready",
+                "timestamp": _stream_now(),
+                "payload": {
+                    "status": stream_gateway.health(user_id=current_user.id)["status"],
+                },
+            }
+        )
+
+        try:
+            while True:
+                message = await websocket.receive_json()
+                action = str(message.get("action") or "").strip().lower()
+
+                if action == "subscribe":
+                    try:
+                        symbols = [str(item) for item in list(message.get("symbols") or [])]
+                        channel = str(message.get("channel") or "quote")
+                        timeframe = str(message.get("timeframe") or "1Min")
+                        subscription = stream_gateway.subscribe(
+                            user_id=current_user.id,
+                            symbols=symbols,
+                            channel=channel,
+                            timeframe=timeframe,
+                        )
+                    except StreamGatewayError as exc:
+                        await websocket.send_json(_stream_error_event(code=exc.code, message=exc.message))
+                        continue
+
+                    await websocket.send_json(
+                        {
+                            "type": "stream.subscribed",
+                            "subscriptionId": subscription.id,
+                            "symbols": list(subscription.symbols),
+                            "channel": subscription.channel,
+                            "timeframe": subscription.timeframe,
+                            "timestamp": _stream_now(),
+                        }
+                    )
+
+                    events = stream_gateway.poll_events(
+                        user_id=current_user.id,
+                        subscription_id=subscription.id,
+                    )
+                    for event in events:
+                        await websocket.send_json(event)
+                    continue
+
+                if action == "unsubscribe":
+                    subscription_id = str(message.get("subscriptionId") or "")
+                    removed = stream_gateway.unsubscribe(
+                        user_id=current_user.id,
+                        subscription_id=subscription_id,
+                    )
+                    if not removed:
+                        await websocket.send_json(
+                            _stream_error_event(
+                                code="STREAM_SUBSCRIPTION_NOT_FOUND",
+                                message="subscription not found",
+                            )
+                        )
+                        continue
+
+                    await websocket.send_json(
+                        {
+                            "type": "stream.unsubscribed",
+                            "subscriptionId": subscription_id,
+                            "timestamp": _stream_now(),
+                        }
+                    )
+                    continue
+
+                if action == "status":
+                    await websocket.send_json(
+                        {
+                            "type": "stream.status",
+                            "timestamp": _stream_now(),
+                            "payload": {
+                                "stream": stream_gateway.health(user_id=current_user.id),
+                                "subscriptions": [
+                                    row.to_payload()
+                                    for row in stream_gateway.list_subscriptions(user_id=current_user.id)
+                                ],
+                            },
+                        }
+                    )
+                    continue
+
+                await websocket.send_json(
+                    _stream_error_event(
+                        code="STREAM_INVALID_SUBSCRIPTION",
+                        message="invalid stream action",
+                    )
+                )
+        except WebSocketDisconnect:
+            pass
+        finally:
+            stream_gateway.clear_subscriptions(user_id=current_user.id)
+            stream_gateway.close_connection(user_id=current_user.id, connection_id=connection_id)
+
+    @router.get("/market/stream/status")
+    def stream_status(current_user=Depends(get_current_user)):
+        return success_response(
+            data={
+                "stream": stream_gateway.health(user_id=current_user.id),
+                "provider": service.provider_health(user_id=current_user.id),
+                "subscriptions": [
+                    row.to_payload() for row in stream_gateway.list_subscriptions(user_id=current_user.id)
+                ],
+            }
+        )
 
     @router.post("/market/sync-task")
     def submit_sync_task(body: SyncTaskRequest, current_user=Depends(get_current_user)):

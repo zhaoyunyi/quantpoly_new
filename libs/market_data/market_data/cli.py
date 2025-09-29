@@ -13,6 +13,7 @@ from market_data.alpaca_provider import AlpacaProvider
 from market_data.alpaca_transport import AlpacaHTTPTransport, resolve_alpaca_transport_config
 from market_data.domain import BatchQuoteItem, MarketAsset, MarketCandle, MarketDataError, MarketQuote
 from market_data.service import MarketDataService
+from market_data.stream_gateway import MarketDataStreamGateway, StreamGatewayError
 
 
 class _InMemoryProvider:
@@ -56,6 +57,21 @@ class _InMemoryProvider:
 
 
 _service = MarketDataService(provider=_InMemoryProvider())
+_stream_gateway: MarketDataStreamGateway | None = None
+
+
+def _build_stream_gateway() -> MarketDataStreamGateway:
+    return MarketDataStreamGateway(
+        quote_reader=lambda user_id, symbols: _service.get_quotes(user_id=user_id, symbols=symbols),
+    )
+
+
+def _get_stream_gateway() -> MarketDataStreamGateway:
+    global _stream_gateway
+
+    if _stream_gateway is None:
+        _stream_gateway = _build_stream_gateway()
+    return _stream_gateway
 
 
 def _output(payload: dict) -> None:
@@ -179,10 +195,11 @@ def _build_service_from_runtime_args(args: argparse.Namespace, *, env: dict[str,
 
 
 def _configure_runtime(args: argparse.Namespace) -> dict[str, Any] | None:
-    global _service
+    global _service, _stream_gateway
 
     try:
         _service = _build_service_from_runtime_args(args)
+        _stream_gateway = None
     except ValueError as exc:
         return _runtime_error_payload(exc)
 
@@ -359,6 +376,58 @@ def _cmd_boundary_check(args: argparse.Namespace) -> None:
     _output({"success": True, "data": report})
 
 
+def _cmd_stream_subscribe(args: argparse.Namespace) -> None:
+    gateway = _get_stream_gateway()
+    symbols = _parse_symbols(args.symbols)
+
+    try:
+        subscription = gateway.subscribe(
+            user_id=args.user_id,
+            symbols=symbols,
+            channel=args.channel,
+            timeframe=args.timeframe,
+        )
+    except StreamGatewayError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message}})
+        return
+
+    _output({"success": True, "data": subscription.to_payload()})
+
+
+
+def _cmd_stream_unsubscribe(args: argparse.Namespace) -> None:
+    gateway = _get_stream_gateway()
+    removed = gateway.unsubscribe(user_id=args.user_id, subscription_id=args.subscription_id)
+    _output({"success": True, "data": {"subscriptionId": args.subscription_id, "removed": removed}})
+
+
+
+def _cmd_stream_poll(args: argparse.Namespace) -> None:
+    gateway = _get_stream_gateway()
+
+    try:
+        events = gateway.poll_events(user_id=args.user_id, subscription_id=args.subscription_id)
+    except StreamGatewayError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message}})
+        return
+
+    _output({"success": True, "data": {"subscriptionId": args.subscription_id, "items": events}})
+
+
+
+def _cmd_stream_status(args: argparse.Namespace) -> None:
+    gateway = _get_stream_gateway()
+    _output(
+        {
+            "success": True,
+            "data": {
+                "stream": gateway.health(user_id=args.user_id),
+                "subscriptions": [row.to_payload() for row in gateway.list_subscriptions(user_id=args.user_id)],
+            },
+        }
+    )
+
+
 def _add_runtime_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--provider", choices=["inmemory", "alpaca"], default=None)
     command.add_argument("--alpaca-api-key", default=None)
@@ -441,6 +510,30 @@ def build_parser() -> argparse.ArgumentParser:
     boundary_check.add_argument("--symbols", required=True, help="逗号分隔的 symbol 列表")
     _add_runtime_args(boundary_check)
 
+    stream = sub.add_parser("stream", help="实时流网关订阅管理")
+    stream_sub = stream.add_subparsers(dest="stream_command")
+
+    stream_subscribe = stream_sub.add_parser("subscribe", help="创建订阅")
+    stream_subscribe.add_argument("--user-id", required=True)
+    stream_subscribe.add_argument("--symbols", required=True, help="逗号分隔的 symbol 列表")
+    stream_subscribe.add_argument("--channel", default="quote")
+    stream_subscribe.add_argument("--timeframe", default="1Min")
+    _add_runtime_args(stream_subscribe)
+
+    stream_unsubscribe = stream_sub.add_parser("unsubscribe", help="取消订阅")
+    stream_unsubscribe.add_argument("--user-id", required=True)
+    stream_unsubscribe.add_argument("--subscription-id", required=True)
+    _add_runtime_args(stream_unsubscribe)
+
+    stream_poll = stream_sub.add_parser("poll", help="拉取订阅事件")
+    stream_poll.add_argument("--user-id", required=True)
+    stream_poll.add_argument("--subscription-id", required=True)
+    _add_runtime_args(stream_poll)
+
+    stream_status = stream_sub.add_parser("status", help="查看流网关状态")
+    stream_status.add_argument("--user-id", required=True)
+    _add_runtime_args(stream_status)
+
     return parser
 
 
@@ -463,6 +556,12 @@ _NESTED_COMMANDS: dict[str, dict[str, Any]] = {
     },
     "boundary": {
         "check": _cmd_boundary_check,
+    },
+    "stream": {
+        "subscribe": _cmd_stream_subscribe,
+        "unsubscribe": _cmd_stream_unsubscribe,
+        "poll": _cmd_stream_poll,
+        "status": _cmd_stream_status,
     },
 }
 
@@ -492,6 +591,8 @@ def main() -> None:
             nested_key = getattr(args, "indicators_command", None)
         elif args.command == "boundary":
             nested_key = getattr(args, "boundary_command", None)
+        elif args.command == "stream":
+            nested_key = getattr(args, "stream_command", None)
 
         nested_handler = nested.get(str(nested_key or "")) if nested_key else None
         if nested_handler is None:
