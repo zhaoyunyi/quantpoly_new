@@ -32,9 +32,11 @@ class ResearchPerformanceTaskRequest(BaseModel):
 
 class ResearchOptimizationTaskRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, alias="idempotencyKey")
+    method: str = Field(default="grid")
     objective: dict[str, Any] = Field(default_factory=dict)
     parameter_space: dict[str, dict[str, Any]] = Field(default_factory=dict, alias="parameterSpace")
     constraints: dict[str, Any] = Field(default_factory=dict)
+    budget: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
@@ -487,6 +489,8 @@ def create_router(
                 objective=(body.objective if body is not None else None),
                 parameter_space=(body.parameter_space if body is not None else None),
                 constraints=(body.constraints if body is not None else None),
+                method=(body.method if body is not None else None),
+                budget=(body.budget if body is not None else None),
             )
         except StrategyAccessDeniedError:
             return _access_denied_response()
@@ -514,9 +518,12 @@ def create_router(
                 task_type="strategy_optimization_suggest",
                 payload={
                     "strategyId": strategy_id,
+                    "method": optimization_result.get("method", "grid"),
+                    "version": optimization_result.get("version"),
                     "objective": optimization_result.get("objective", {}),
                     "parameterSpace": optimization_result.get("parameterSpace", {}),
                     "constraints": optimization_result.get("constraints", {}),
+                    "budget": optimization_result.get("budget", {}),
                     "constraintsKeys": constraints_keys,
                 },
                 idempotency_key=job_idempotency_key,
@@ -529,8 +536,10 @@ def create_router(
                     "taskLatencyMs": task_latency_ms,
                     "constraintsKeys": list(payload.get("constraintsKeys") or constraints_keys),
                     "inputEcho": {
+                        "method": optimization_result.get("method", "grid"),
                         "objective": optimization_result.get("objective", {}),
                         "parameterSpace": optimization_result.get("parameterSpace", {}),
+                        "budget": optimization_result.get("budget", {}),
                     },
                 }
                 return {"optimizationResult": optimization_result_with_meta}
@@ -564,6 +573,8 @@ def create_router(
     def list_strategy_research_results(
         strategy_id: str,
         status: str | None = Query(default=None),
+        method: str | None = Query(default=None),
+        version: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=200),
         current_user=Depends(get_current_user),
     ):
@@ -587,6 +598,8 @@ def create_router(
                 strategy_id=strategy_id,
                 jobs=jobs,
                 status=status,
+                method=method,
+                version=version,
                 limit=limit,
             )
         except StrategyAccessDeniedError:

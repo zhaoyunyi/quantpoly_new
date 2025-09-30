@@ -336,6 +336,8 @@ class StrategyService:
         objective: dict[str, Any] | None = None,
         parameter_space: dict[str, Any] | None = None,
         constraints: dict[str, Any] | None = None,
+        method: str | None = None,
+        budget: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
         return build_optimization_result(
@@ -345,6 +347,8 @@ class StrategyService:
             objective=objective,
             parameter_space=parameter_space,
             constraints=constraints,
+            method=method,
+            budget=budget,
         )
 
     def list_research_results(
@@ -354,6 +358,8 @@ class StrategyService:
         strategy_id: str,
         jobs: list[Any],
         status: str | None = None,
+        method: str | None = None,
+        version: str | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
         strategy = self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
@@ -361,6 +367,8 @@ class StrategyService:
             jobs=jobs,
             strategy_id=strategy.id,
             status=status,
+            method=method,
+            version=version,
             limit=limit,
         )
 

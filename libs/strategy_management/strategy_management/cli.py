@@ -437,6 +437,7 @@ def _cmd_research_optimization_task(args: argparse.Namespace) -> None:
         objective = _parse_json_object(getattr(args, "objective_json", None), field_name="objective")
         parameter_space = _parse_json_object(getattr(args, "parameter_space_json", None), field_name="parameterSpace")
         constraints = _parse_json_object(getattr(args, "constraints_json", None), field_name="constraints")
+        budget = _parse_json_object(getattr(args, "budget_json", None), field_name="budget")
     except ValueError as exc:
         _output({"success": False, "error": {"code": "INVALID_PARAMETERS", "message": str(exc)}})
         return
@@ -451,6 +452,8 @@ def _cmd_research_optimization_task(args: argparse.Namespace) -> None:
             objective=objective,
             parameter_space=parameter_space,
             constraints=constraints,
+            method=getattr(args, "method", None),
+            budget=budget,
         )
     except StrategyAccessDeniedError:
         _output(
@@ -474,9 +477,12 @@ def _cmd_research_optimization_task(args: argparse.Namespace) -> None:
             task_type="strategy_optimization_suggest",
             payload={
                 "strategyId": args.strategy_id,
+                "method": optimization_result.get("method", "grid"),
+                "version": optimization_result.get("version"),
                 "objective": optimization_result.get("objective", {}),
                 "parameterSpace": optimization_result.get("parameterSpace", {}),
                 "constraints": optimization_result.get("constraints", {}),
+                "budget": optimization_result.get("budget", {}),
             },
             idempotency_key=job_idempotency_key,
         )
@@ -488,8 +494,10 @@ def _cmd_research_optimization_task(args: argparse.Namespace) -> None:
             "taskLatencyMs": task_latency_ms,
             "constraintsKeys": constraints_keys,
             "inputEcho": {
+                "method": optimization_result.get("method", "grid"),
                 "objective": optimization_result.get("objective", {}),
                 "parameterSpace": optimization_result.get("parameterSpace", {}),
+                "budget": optimization_result.get("budget", {}),
             },
         }
 
@@ -516,6 +524,8 @@ def _cmd_research_results(args: argparse.Namespace) -> None:
             strategy_id=args.strategy_id,
             jobs=jobs,
             status=getattr(args, "status", None),
+            method=getattr(args, "method", None),
+            version=getattr(args, "version", None),
             limit=getattr(args, "limit", 20),
         )
     except StrategyAccessDeniedError:
@@ -609,14 +619,18 @@ def build_parser() -> argparse.ArgumentParser:
     research_opt.add_argument("--user-id", required=True)
     research_opt.add_argument("--strategy-id", required=True)
     research_opt.add_argument("--idempotency-key", default=None)
+    research_opt.add_argument("--method", default="grid")
     research_opt.add_argument("--objective-json", default=None)
     research_opt.add_argument("--parameter-space-json", default=None)
     research_opt.add_argument("--constraints-json", default=None)
+    research_opt.add_argument("--budget-json", default=None)
 
     research_results = sub.add_parser("research-results", help="查询策略研究结果")
     research_results.add_argument("--user-id", required=True)
     research_results.add_argument("--strategy-id", required=True)
     research_results.add_argument("--status", default=None)
+    research_results.add_argument("--method", default=None)
+    research_results.add_argument("--version", default=None)
     research_results.add_argument("--limit", type=int, default=20)
 
     return parser

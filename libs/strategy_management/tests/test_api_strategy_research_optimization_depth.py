@@ -52,9 +52,10 @@ def _build_app(*, current_user_id: str):
     return app, strategy_service, job_service
 
 
-def _valid_request(*, idem: str) -> dict:
-    return {
+def _valid_request(*, idem: str, method: str = "grid", budget: dict | None = None) -> dict:
+    payload = {
         "idempotencyKey": idem,
+        "method": method,
         "objective": {
             "metric": "averagePnl",
             "direction": "maximize",
@@ -67,6 +68,9 @@ def _valid_request(*, idem: str) -> dict:
             "maxDrawdown": 0.2,
         },
     }
+    if budget is not None:
+        payload["budget"] = budget
+    return payload
 
 
 def test_submit_strategy_optimization_task_rejects_invalid_parameter_space():
@@ -84,6 +88,7 @@ def test_submit_strategy_optimization_task_rejects_invalid_parameter_space():
         f"/strategies/{strategy.id}/research/optimization-task",
         json={
             "idempotencyKey": "idem-invalid",
+            "method": "grid",
             "objective": {"metric": "averagePnl", "direction": "maximize"},
             "parameterSpace": {
                 "window": {"min": 40, "max": 10, "step": 5},
@@ -129,7 +134,73 @@ def test_submit_strategy_optimization_task_persists_and_query_results():
     first = payload["data"]["items"][0]
     assert first["taskId"] == task_id
     assert first["status"] == "succeeded"
+    assert first["method"] == "grid"
     assert first["optimizationResult"]["objective"]["metric"] == "averagePnl"
+
+
+def test_submit_strategy_optimization_task_returns_grid_trials_and_budget_usage():
+    app, strategy_service, _job_service = _build_app(current_user_id="u-1")
+    client = TestClient(app)
+
+    strategy = strategy_service.create_strategy_from_template(
+        user_id="u-1",
+        name="mr-grid",
+        template_id="mean_reversion",
+        parameters={"window": 20, "entryZ": 1.6, "exitZ": 0.6},
+    )
+
+    submitted = client.post(
+        f"/strategies/{strategy.id}/research/optimization-task",
+        json=_valid_request(
+            idem="idem-grid-budget",
+            method="grid",
+            budget={"maxTrials": 3, "maxDurationSeconds": 60},
+        ),
+    )
+
+    assert submitted.status_code == 200
+    payload = submitted.json()["data"]
+    optimization_result = payload["result"]["optimizationResult"]
+
+    assert optimization_result["method"] == "grid"
+    assert optimization_result["budget"]["maxTrials"] == 3
+    assert 1 <= len(optimization_result["trials"]) <= 3
+    assert optimization_result["budgetUsage"]["usedTrials"] == len(optimization_result["trials"])
+    assert optimization_result["bestCandidate"]["trialId"]
+    assert optimization_result["convergence"]["earlyStopReason"] in {
+        "max_trials_reached",
+        "max_duration_reached",
+        "parameter_space_exhausted",
+        "early_stop_score_reached",
+    }
+
+
+def test_submit_strategy_optimization_task_supports_bayesian_method():
+    app, strategy_service, _job_service = _build_app(current_user_id="u-1")
+    client = TestClient(app)
+
+    strategy = strategy_service.create_strategy_from_template(
+        user_id="u-1",
+        name="mr-bayes",
+        template_id="mean_reversion",
+        parameters={"window": 24, "entryZ": 1.7, "exitZ": 0.6},
+    )
+
+    submitted = client.post(
+        f"/strategies/{strategy.id}/research/optimization-task",
+        json=_valid_request(
+            idem="idem-bayes",
+            method="bayesian",
+            budget={"maxTrials": 4, "maxDurationSeconds": 60},
+        ),
+    )
+
+    assert submitted.status_code == 200
+    optimization_result = submitted.json()["data"]["result"]["optimizationResult"]
+
+    assert optimization_result["method"] == "bayesian"
+    assert 1 <= len(optimization_result["trials"]) <= 4
+    assert optimization_result["bestCandidate"]["score"] >= optimization_result["score"]
 
 
 def test_research_results_query_supports_failed_and_cancelled_statuses():
@@ -146,7 +217,7 @@ def test_research_results_query_supports_failed_and_cancelled_statuses():
     failed = job_service.submit_job(
         user_id="u-1",
         task_type="strategy_optimization_suggest",
-        payload={"strategyId": strategy.id},
+        payload={"strategyId": strategy.id, "method": "grid"},
         idempotency_key="idem-failed",
     )
     job_service.start_job(user_id="u-1", job_id=failed.id)
@@ -160,7 +231,7 @@ def test_research_results_query_supports_failed_and_cancelled_statuses():
     cancelled = job_service.submit_job(
         user_id="u-1",
         task_type="strategy_optimization_suggest",
-        payload={"strategyId": strategy.id},
+        payload={"strategyId": strategy.id, "method": "grid"},
         idempotency_key="idem-cancelled",
     )
     job_service.cancel_job(user_id="u-1", job_id=cancelled.id)
@@ -182,6 +253,47 @@ def test_research_results_query_supports_failed_and_cancelled_statuses():
     cancelled_items = cancelled_resp.json()["data"]["items"]
     assert len(cancelled_items) == 1
     assert cancelled_items[0]["status"] == "cancelled"
+
+
+def test_research_results_query_supports_method_and_version_filters():
+    app, strategy_service, _job_service = _build_app(current_user_id="u-1")
+    client = TestClient(app)
+
+    strategy = strategy_service.create_strategy_from_template(
+        user_id="u-1",
+        name="mr-filter",
+        template_id="mean_reversion",
+        parameters={"window": 28, "entryZ": 1.8, "exitZ": 0.7},
+    )
+
+    resp_grid = client.post(
+        f"/strategies/{strategy.id}/research/optimization-task",
+        json=_valid_request(idem="idem-filter-grid", method="grid", budget={"maxTrials": 2}),
+    )
+    assert resp_grid.status_code == 200
+
+    resp_bayes = client.post(
+        f"/strategies/{strategy.id}/research/optimization-task",
+        json=_valid_request(idem="idem-filter-bayes", method="bayesian", budget={"maxTrials": 3}),
+    )
+    assert resp_bayes.status_code == 200
+
+    queried = client.get(
+        f"/strategies/{strategy.id}/research/results",
+        params={
+            "status": "succeeded",
+            "method": "bayesian",
+            "version": "v3",
+        },
+    )
+
+    assert queried.status_code == 200
+    payload = queried.json()
+    assert payload["success"] is True
+    assert payload["data"]["total"] == 1
+    item = payload["data"]["items"][0]
+    assert item["method"] == "bayesian"
+    assert item["optimizationResult"]["version"] == "v3"
 
 
 def test_non_owner_cannot_query_strategy_research_results():
