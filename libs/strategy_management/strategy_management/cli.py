@@ -18,9 +18,13 @@ from signal_execution.service import SignalExecutionService
 from strategy_management.domain import InvalidStrategyTransitionError, StrategyInUseError
 from strategy_management.repository import InMemoryStrategyRepository
 from strategy_management.service import (
+    InvalidPortfolioConstraintsError,
+    InvalidPortfolioWeightsError,
     InvalidResearchParameterSpaceError,
     InvalidResearchStatusFilterError,
     InvalidStrategyParametersError,
+    PortfolioAccessDeniedError,
+    PortfolioMemberNotFoundError,
     StrategyAccessDeniedError,
     StrategyService,
 )
@@ -93,6 +97,25 @@ def _serialize_backtest(task) -> dict:
         "status": task.status,
         "config": task.config,
         "metrics": task.metrics,
+    }
+
+
+def _serialize_portfolio(portfolio) -> dict:
+    if isinstance(portfolio, dict):
+        return dict(portfolio)
+
+    to_dict = getattr(portfolio, "to_dict", None)
+    if callable(to_dict):
+        return dict(to_dict())
+
+    return {
+        "id": str(getattr(portfolio, "id", "")),
+        "userId": str(getattr(portfolio, "user_id", "")),
+        "name": str(getattr(portfolio, "name", "")),
+        "status": str(getattr(portfolio, "status", "draft")),
+        "version": int(getattr(portfolio, "version", 1)),
+        "constraints": dict(getattr(portfolio, "constraints", {})),
+        "members": list(getattr(portfolio, "members", [])),
     }
 
 
@@ -381,6 +404,233 @@ def _cmd_delete(args: argparse.Namespace) -> None:
     _output({"success": True, "message": "deleted"})
 
 
+
+def _portfolio_strategy_metrics(*, user_id: str, portfolio) -> dict[str, dict]:
+    metrics_by_strategy: dict[str, dict] = {}
+    members = getattr(portfolio, "members", []) or []
+    for member in members:
+        strategy_id = str(getattr(member, "strategy_id", ""))
+        if not strategy_id:
+            continue
+        metrics_by_strategy[strategy_id] = _signal_service.performance_statistics(
+            user_id=user_id,
+            strategy_id=strategy_id,
+        )
+    return metrics_by_strategy
+
+
+def _cmd_portfolio_create(args: argparse.Namespace) -> None:
+    try:
+        constraints = _parse_json_object(getattr(args, "constraints_json", None), field_name="constraints")
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_PARAMETERS", "message": str(exc)}})
+        return
+
+    try:
+        created = _service.create_portfolio(
+            user_id=args.user_id,
+            name=args.name,
+            constraints=constraints,
+        )
+    except InvalidPortfolioConstraintsError as exc:
+        _output({"success": False, "error": {"code": "PORTFOLIO_INVALID_CONSTRAINTS", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": _serialize_portfolio(created)})
+
+
+def _cmd_portfolio_list(args: argparse.Namespace) -> None:
+    items = _service.list_portfolios(user_id=args.user_id)
+    _output({"success": True, "data": [_serialize_portfolio(item) for item in items]})
+
+
+def _cmd_portfolio_get(args: argparse.Namespace) -> None:
+    portfolio = _service.get_portfolio(user_id=args.user_id, portfolio_id=args.portfolio_id)
+    if portfolio is None:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+
+    _output({"success": True, "data": _serialize_portfolio(portfolio)})
+
+
+def _cmd_portfolio_update(args: argparse.Namespace) -> None:
+    constraints = None
+    if getattr(args, "constraints_json", None) is not None:
+        try:
+            constraints = _parse_json_object(getattr(args, "constraints_json", None), field_name="constraints")
+        except ValueError as exc:
+            _output({"success": False, "error": {"code": "INVALID_PARAMETERS", "message": str(exc)}})
+            return
+
+    try:
+        updated = _service.update_portfolio(
+            user_id=args.user_id,
+            portfolio_id=args.portfolio_id,
+            name=getattr(args, "name", None),
+            constraints=constraints,
+        )
+    except PortfolioAccessDeniedError:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+    except InvalidPortfolioConstraintsError as exc:
+        _output({"success": False, "error": {"code": "PORTFOLIO_INVALID_CONSTRAINTS", "message": str(exc)}})
+        return
+    except InvalidPortfolioWeightsError as exc:
+        _output({"success": False, "error": {"code": "PORTFOLIO_INVALID_WEIGHTS", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": _serialize_portfolio(updated)})
+
+
+def _cmd_portfolio_delete(args: argparse.Namespace) -> None:
+    deleted = _service.delete_portfolio(user_id=args.user_id, portfolio_id=args.portfolio_id)
+    if not deleted:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+
+    _output({"success": True, "data": {"deleted": True}})
+
+
+def _cmd_portfolio_add_member(args: argparse.Namespace) -> None:
+    try:
+        portfolio = _service.add_portfolio_member(
+            user_id=args.user_id,
+            portfolio_id=args.portfolio_id,
+            strategy_id=args.strategy_id,
+            weight=float(args.weight),
+        )
+    except PortfolioAccessDeniedError:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+    except StrategyAccessDeniedError:
+        _output({"success": False, "error": {"code": "STRATEGY_ACCESS_DENIED", "message": "strategy does not belong to current user"}})
+        return
+    except InvalidPortfolioWeightsError as exc:
+        _output({"success": False, "error": {"code": "PORTFOLIO_INVALID_WEIGHTS", "message": str(exc)}})
+        return
+
+    _output({"success": True, "data": _serialize_portfolio(portfolio)})
+
+
+def _cmd_portfolio_remove_member(args: argparse.Namespace) -> None:
+    try:
+        portfolio = _service.remove_portfolio_member(
+            user_id=args.user_id,
+            portfolio_id=args.portfolio_id,
+            strategy_id=args.strategy_id,
+        )
+    except PortfolioAccessDeniedError:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+    except PortfolioMemberNotFoundError:
+        _output({"success": False, "error": {"code": "PORTFOLIO_MEMBER_NOT_FOUND", "message": "portfolio member not found"}})
+        return
+
+    _output({"success": True, "data": _serialize_portfolio(portfolio)})
+
+
+def _cmd_portfolio_read_model(args: argparse.Namespace) -> None:
+    portfolio = _service.get_portfolio(user_id=args.user_id, portfolio_id=args.portfolio_id)
+    if portfolio is None:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+
+    strategy_metrics = _portfolio_strategy_metrics(user_id=args.user_id, portfolio=portfolio)
+    read_model = _service.build_portfolio_read_model(
+        user_id=args.user_id,
+        portfolio_id=args.portfolio_id,
+        strategy_metrics=strategy_metrics,
+    )
+    _output({"success": True, "data": read_model})
+
+
+def _cmd_portfolio_evaluation_task(args: argparse.Namespace) -> None:
+    portfolio = _service.get_portfolio(user_id=args.user_id, portfolio_id=args.portfolio_id)
+    if portfolio is None:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+
+    strategy_metrics = _portfolio_strategy_metrics(user_id=args.user_id, portfolio=portfolio)
+    evaluation_result = _service.build_portfolio_evaluation_result(
+        user_id=args.user_id,
+        portfolio_id=args.portfolio_id,
+        strategy_metrics=strategy_metrics,
+    )
+
+    job_idempotency_key = getattr(args, "idempotency_key", None) or f"portfolio-evaluation-cli:{args.portfolio_id}:{uuid4()}"
+
+    try:
+        job = _job_service.submit_job(
+            user_id=args.user_id,
+            task_type="portfolio_evaluate",
+            payload={
+                "portfolioId": args.portfolio_id,
+            },
+            idempotency_key=job_idempotency_key,
+        )
+        _job_service.start_job(user_id=args.user_id, job_id=job.id)
+        job = _job_service.succeed_job(
+            user_id=args.user_id,
+            job_id=job.id,
+            result=evaluation_result,
+        )
+    except IdempotencyConflictError:
+        _output({"success": False, "error": {"code": "IDEMPOTENCY_CONFLICT", "message": "idempotency key already exists"}})
+        return
+
+    _output({"success": True, "data": {"taskId": job.id, "taskType": job.task_type, "status": job.status, "result": job.result}})
+
+
+def _cmd_portfolio_rebalance_task(args: argparse.Namespace) -> None:
+    portfolio = _service.get_portfolio(user_id=args.user_id, portfolio_id=args.portfolio_id)
+    if portfolio is None:
+        _output({"success": False, "error": {"code": "PORTFOLIO_ACCESS_DENIED", "message": "portfolio does not belong to current user"}})
+        return
+
+    try:
+        target_weights = _parse_json_object(getattr(args, "target_weights_json", None), field_name="targetWeights")
+    except ValueError as exc:
+        _output({"success": False, "error": {"code": "INVALID_PARAMETERS", "message": str(exc)}})
+        return
+
+    strategy_metrics = _portfolio_strategy_metrics(user_id=args.user_id, portfolio=portfolio)
+    try:
+        rebalance_result = _service.build_portfolio_rebalance_result(
+            user_id=args.user_id,
+            portfolio_id=args.portfolio_id,
+            strategy_metrics=strategy_metrics,
+            target_weights=target_weights,
+        )
+    except InvalidPortfolioWeightsError as exc:
+        _output({"success": False, "error": {"code": "PORTFOLIO_INVALID_WEIGHTS", "message": str(exc)}})
+        return
+
+    job_idempotency_key = getattr(args, "idempotency_key", None) or f"portfolio-rebalance-cli:{args.portfolio_id}:{uuid4()}"
+
+    try:
+        job = _job_service.submit_job(
+            user_id=args.user_id,
+            task_type="portfolio_rebalance",
+            payload={
+                "portfolioId": args.portfolio_id,
+                "targetWeights": rebalance_result.get("targetWeights", {}),
+            },
+            idempotency_key=job_idempotency_key,
+        )
+        _job_service.start_job(user_id=args.user_id, job_id=job.id)
+        job = _job_service.succeed_job(
+            user_id=args.user_id,
+            job_id=job.id,
+            result=rebalance_result,
+        )
+    except IdempotencyConflictError:
+        _output({"success": False, "error": {"code": "IDEMPOTENCY_CONFLICT", "message": "idempotency key already exists"}})
+        return
+
+    _output({"success": True, "data": {"taskId": job.id, "taskType": job.task_type, "status": job.status, "result": job.result}})
+
+
+
 def _cmd_research_performance_task(args: argparse.Namespace) -> None:
     job_idempotency_key = getattr(args, "idempotency_key", None) or f"strategy-performance-cli:{args.strategy_id}:{uuid4()}"
 
@@ -609,6 +859,55 @@ def build_parser() -> argparse.ArgumentParser:
     delete.add_argument("--user-id", required=True)
     delete.add_argument("--strategy-id", required=True)
 
+    portfolio_create = sub.add_parser("portfolio-create", help="创建策略组合")
+    portfolio_create.add_argument("--user-id", required=True)
+    portfolio_create.add_argument("--name", required=True)
+    portfolio_create.add_argument("--constraints-json", default=None)
+
+    portfolio_list = sub.add_parser("portfolio-list", help="列出策略组合")
+    portfolio_list.add_argument("--user-id", required=True)
+
+    portfolio_get = sub.add_parser("portfolio-get", help="查询策略组合")
+    portfolio_get.add_argument("--user-id", required=True)
+    portfolio_get.add_argument("--portfolio-id", required=True)
+
+    portfolio_update = sub.add_parser("portfolio-update", help="更新策略组合")
+    portfolio_update.add_argument("--user-id", required=True)
+    portfolio_update.add_argument("--portfolio-id", required=True)
+    portfolio_update.add_argument("--name", default=None)
+    portfolio_update.add_argument("--constraints-json", default=None)
+
+    portfolio_delete = sub.add_parser("portfolio-delete", help="删除策略组合")
+    portfolio_delete.add_argument("--user-id", required=True)
+    portfolio_delete.add_argument("--portfolio-id", required=True)
+
+    portfolio_add_member = sub.add_parser("portfolio-add-member", help="添加组合成员策略")
+    portfolio_add_member.add_argument("--user-id", required=True)
+    portfolio_add_member.add_argument("--portfolio-id", required=True)
+    portfolio_add_member.add_argument("--strategy-id", required=True)
+    portfolio_add_member.add_argument("--weight", type=float, required=True)
+
+    portfolio_remove_member = sub.add_parser("portfolio-remove-member", help="移除组合成员策略")
+    portfolio_remove_member.add_argument("--user-id", required=True)
+    portfolio_remove_member.add_argument("--portfolio-id", required=True)
+    portfolio_remove_member.add_argument("--strategy-id", required=True)
+
+    portfolio_read_model = sub.add_parser("portfolio-read-model", help="查询组合读模型")
+    portfolio_read_model.add_argument("--user-id", required=True)
+    portfolio_read_model.add_argument("--portfolio-id", required=True)
+
+    portfolio_eval = sub.add_parser("portfolio-evaluation-task", help="提交组合评估任务")
+    portfolio_eval.add_argument("--user-id", required=True)
+    portfolio_eval.add_argument("--portfolio-id", required=True)
+    portfolio_eval.add_argument("--idempotency-key", default=None)
+
+    portfolio_rebalance = sub.add_parser("portfolio-rebalance-task", help="提交组合再平衡任务")
+    portfolio_rebalance.add_argument("--user-id", required=True)
+    portfolio_rebalance.add_argument("--portfolio-id", required=True)
+    portfolio_rebalance.add_argument("--target-weights-json", default=None)
+    portfolio_rebalance.add_argument("--idempotency-key", default=None)
+
+
     research_perf = sub.add_parser("research-performance-task", help="提交策略绩效分析任务")
     research_perf.add_argument("--user-id", required=True)
     research_perf.add_argument("--strategy-id", required=True)
@@ -637,6 +936,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 _COMMANDS = {
+    "portfolio-create": _cmd_portfolio_create,
+    "portfolio-list": _cmd_portfolio_list,
+    "portfolio-get": _cmd_portfolio_get,
+    "portfolio-update": _cmd_portfolio_update,
+    "portfolio-delete": _cmd_portfolio_delete,
+    "portfolio-add-member": _cmd_portfolio_add_member,
+    "portfolio-remove-member": _cmd_portfolio_remove_member,
+    "portfolio-read-model": _cmd_portfolio_read_model,
+    "portfolio-evaluation-task": _cmd_portfolio_evaluation_task,
+    "portfolio-rebalance-task": _cmd_portfolio_rebalance_task,
     "template-list": _cmd_template_list,
     "create": _cmd_create,
     "update": _cmd_update,

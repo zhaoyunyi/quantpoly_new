@@ -10,7 +10,17 @@ from strategy_management.domain import (
     Strategy,
     StrategyInUseError,
 )
-from strategy_management.repository import InMemoryStrategyRepository
+from strategy_management.portfolio import (
+    InvalidPortfolioConstraintsError,
+    InvalidPortfolioTransitionError,
+    InvalidPortfolioWeightsError,
+    Portfolio,
+    PortfolioMemberNotFoundError,
+    build_portfolio_evaluation_result,
+    build_portfolio_read_model,
+    build_portfolio_rebalance_result,
+)
+from strategy_management.repository import InMemoryPortfolioRepository, InMemoryStrategyRepository
 from strategy_management.research import (
     InvalidResearchParameterSpaceError,
     InvalidResearchStatusFilterError,
@@ -108,6 +118,10 @@ class StrategyAccessDeniedError(PermissionError):
     """策略不属于当前用户或无权访问。"""
 
 
+class PortfolioAccessDeniedError(PermissionError):
+    """组合不属于当前用户或无权访问。"""
+
+
 class StrategyService:
     def __init__(
         self,
@@ -117,12 +131,14 @@ class StrategyService:
         create_backtest_for_strategy: Callable[..., Any] | None = None,
         list_backtests_for_strategy: Callable[..., dict[str, Any]] | None = None,
         stats_backtests_for_strategy: Callable[..., dict[str, Any]] | None = None,
+        portfolio_repository: InMemoryPortfolioRepository | None = None,
     ) -> None:
         self._repository = repository
         self._count_active_backtests = count_active_backtests
         self._create_backtest_for_strategy = create_backtest_for_strategy
         self._list_backtests_for_strategy = list_backtests_for_strategy
         self._stats_backtests_for_strategy = stats_backtests_for_strategy
+        self._portfolio_repository = portfolio_repository or InMemoryPortfolioRepository()
 
     def list_templates(self) -> list[dict[str, Any]]:
         return list(_TEMPLATE_CATALOG.values())
@@ -212,6 +228,12 @@ class StrategyService:
         if strategy is None:
             raise StrategyAccessDeniedError("strategy does not belong to current user")
         return strategy
+
+    def _require_owned_portfolio(self, *, user_id: str, portfolio_id: str) -> Portfolio:
+        portfolio = self._portfolio_repository.get_by_id(portfolio_id, user_id=user_id)
+        if portfolio is None:
+            raise PortfolioAccessDeniedError("portfolio does not belong to current user")
+        return portfolio
 
     @staticmethod
     def _call_maybe_legacy_count(
@@ -326,6 +348,104 @@ class StrategyService:
 
     def get_strategy(self, *, user_id: str, strategy_id: str) -> Strategy | None:
         return self._repository.get_by_id(strategy_id, user_id=user_id)
+
+    def create_portfolio(
+        self,
+        *,
+        user_id: str,
+        name: str,
+        constraints: dict[str, Any] | None = None,
+    ) -> Portfolio:
+        portfolio = Portfolio.create(
+            user_id=user_id,
+            name=name,
+            constraints=constraints,
+        )
+        self._portfolio_repository.save(portfolio)
+        return portfolio
+
+    def list_portfolios(self, *, user_id: str) -> list[Portfolio]:
+        return self._portfolio_repository.list_by_user(user_id=user_id)
+
+    def get_portfolio(self, *, user_id: str, portfolio_id: str) -> Portfolio | None:
+        return self._portfolio_repository.get_by_id(portfolio_id, user_id=user_id)
+
+    def update_portfolio(
+        self,
+        *,
+        user_id: str,
+        portfolio_id: str,
+        name: str | None = None,
+        constraints: dict[str, Any] | None = None,
+    ) -> Portfolio:
+        portfolio = self._require_owned_portfolio(user_id=user_id, portfolio_id=portfolio_id)
+        portfolio.update(name=name, constraints=constraints)
+        self._portfolio_repository.save(portfolio)
+        return portfolio
+
+    def delete_portfolio(self, *, user_id: str, portfolio_id: str) -> bool:
+        return self._portfolio_repository.delete(portfolio_id, user_id=user_id)
+
+    def add_portfolio_member(
+        self,
+        *,
+        user_id: str,
+        portfolio_id: str,
+        strategy_id: str,
+        weight: float,
+    ) -> Portfolio:
+        portfolio = self._require_owned_portfolio(user_id=user_id, portfolio_id=portfolio_id)
+        self._require_owned_strategy(user_id=user_id, strategy_id=strategy_id)
+        portfolio.add_member(strategy_id=strategy_id, weight=weight)
+        self._portfolio_repository.save(portfolio)
+        return portfolio
+
+    def remove_portfolio_member(
+        self,
+        *,
+        user_id: str,
+        portfolio_id: str,
+        strategy_id: str,
+    ) -> Portfolio:
+        portfolio = self._require_owned_portfolio(user_id=user_id, portfolio_id=portfolio_id)
+        portfolio.remove_member(strategy_id=strategy_id)
+        self._portfolio_repository.save(portfolio)
+        return portfolio
+
+    def build_portfolio_read_model(
+        self,
+        *,
+        user_id: str,
+        portfolio_id: str,
+        strategy_metrics: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        portfolio = self._require_owned_portfolio(user_id=user_id, portfolio_id=portfolio_id)
+        return build_portfolio_read_model(portfolio=portfolio, strategy_metrics=strategy_metrics)
+
+    def build_portfolio_evaluation_result(
+        self,
+        *,
+        user_id: str,
+        portfolio_id: str,
+        strategy_metrics: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        portfolio = self._require_owned_portfolio(user_id=user_id, portfolio_id=portfolio_id)
+        return build_portfolio_evaluation_result(portfolio=portfolio, strategy_metrics=strategy_metrics)
+
+    def build_portfolio_rebalance_result(
+        self,
+        *,
+        user_id: str,
+        portfolio_id: str,
+        strategy_metrics: dict[str, dict[str, Any]],
+        target_weights: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        portfolio = self._require_owned_portfolio(user_id=user_id, portfolio_id=portfolio_id)
+        return build_portfolio_rebalance_result(
+            portfolio=portfolio,
+            strategy_metrics=strategy_metrics,
+            target_weights=target_weights,
+        )
 
     def build_research_optimization_result(
         self,
@@ -467,4 +587,9 @@ __all__ = [
     "InvalidStrategyTransitionError",
     "InvalidResearchParameterSpaceError",
     "InvalidResearchStatusFilterError",
+    "PortfolioAccessDeniedError",
+    "InvalidPortfolioConstraintsError",
+    "InvalidPortfolioWeightsError",
+    "InvalidPortfolioTransitionError",
+    "PortfolioMemberNotFoundError",
 ]

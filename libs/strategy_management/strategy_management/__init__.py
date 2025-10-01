@@ -5,12 +5,21 @@ from strategy_management.domain import (
     Strategy,
     StrategyInUseError,
 )
-from strategy_management.repository import InMemoryStrategyRepository
+from strategy_management.portfolio import (
+    InvalidPortfolioConstraintsError,
+    InvalidPortfolioTransitionError,
+    InvalidPortfolioWeightsError,
+    Portfolio,
+    PortfolioMember,
+    PortfolioMemberNotFoundError,
+)
+from strategy_management.repository import InMemoryPortfolioRepository, InMemoryStrategyRepository
 from strategy_management.repository_sqlite import SQLiteStrategyRepository
 from strategy_management.service import (
     InvalidResearchParameterSpaceError,
     InvalidResearchStatusFilterError,
     InvalidStrategyParametersError,
+    PortfolioAccessDeniedError,
     StrategyAccessDeniedError,
     StrategyService,
 )
@@ -19,10 +28,18 @@ __all__ = [
     "Strategy",
     "StrategyInUseError",
     "InvalidStrategyTransitionError",
+    "Portfolio",
+    "PortfolioMember",
+    "InvalidPortfolioConstraintsError",
+    "InvalidPortfolioWeightsError",
+    "InvalidPortfolioTransitionError",
+    "PortfolioMemberNotFoundError",
     "InMemoryStrategyRepository",
+    "InMemoryPortfolioRepository",
     "SQLiteStrategyRepository",
     "InvalidStrategyParametersError",
     "StrategyAccessDeniedError",
+    "PortfolioAccessDeniedError",
     "StrategyService",
     "InvalidResearchParameterSpaceError",
     "InvalidResearchStatusFilterError",

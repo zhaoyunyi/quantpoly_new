@@ -133,6 +133,8 @@ def test_supported_task_types_cover_wave3_worker_tasks():
     assert "risk_report_generate" in supported
     assert "trading_daily_stats_calculate" in supported
     assert "market_indicators_calculate" in supported
+    assert "portfolio_evaluate" in supported
+    assert "portfolio_rebalance" in supported
 
 
 def test_schedule_interval_isolated_by_user_namespace():

@@ -138,6 +138,16 @@ _TASK_REGISTRY: tuple[TaskTypeDefinition, ...] = (
         legacy_names=("strategy.analyze_strategy_performance",),
     ),
     TaskTypeDefinition(
+        task_type="portfolio_evaluate",
+        domain="strategy",
+        legacy_names=("strategy.evaluate_portfolio",),
+    ),
+    TaskTypeDefinition(
+        task_type="portfolio_rebalance",
+        domain="strategy",
+        legacy_names=("strategy.rebalance_portfolio",),
+    ),
+    TaskTypeDefinition(
         task_type="trading_account_cleanup",
         domain="trading",
         legacy_names=("trading.account_cleanup",),
