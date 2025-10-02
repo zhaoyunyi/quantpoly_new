@@ -386,8 +386,24 @@ def _cmd_archive(args: argparse.Namespace) -> None:
 
 
 def _cmd_list(args: argparse.Namespace) -> None:
-    items = _service.list_strategies(user_id=args.user_id)
-    _output({"success": True, "data": [_serialize_strategy(item) for item in items]})
+    listing = _service.query_strategies(
+        user_id=args.user_id,
+        status=getattr(args, "status", None),
+        search=getattr(args, "search", None),
+        page=getattr(args, "page", 1),
+        page_size=getattr(args, "page_size", 20),
+    )
+    _output(
+        {
+            "success": True,
+            "data": {
+                "items": [_serialize_strategy(item) for item in listing["items"]],
+                "total": int(listing["total"]),
+                "page": int(listing["page"]),
+                "pageSize": int(listing["pageSize"]),
+            },
+        }
+    )
 
 
 def _cmd_delete(args: argparse.Namespace) -> None:
@@ -854,6 +870,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_cmd = sub.add_parser("list", help="列表策略")
     list_cmd.add_argument("--user-id", required=True)
+    list_cmd.add_argument("--status", default=None)
+    list_cmd.add_argument("--search", default=None)
+    list_cmd.add_argument("--page", type=int, default=1)
+    list_cmd.add_argument("--page-size", type=int, default=20)
 
     delete = sub.add_parser("delete", help="删除策略")
     delete.add_argument("--user-id", required=True)

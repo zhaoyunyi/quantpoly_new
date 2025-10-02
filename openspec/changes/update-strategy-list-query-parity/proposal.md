@@ -14,3 +14,13 @@
 
 - 影响 capability：`strategy-management`
 - 风险：列表返回结构从数组变为分页对象，前端调用方需同步适配（break update）
+
+## Break Update 迁移说明
+
+- API `GET /strategies` 响应从 `data: Strategy[]` 变更为：
+  - `data.items`
+  - `data.total`
+  - `data.page`
+  - `data.pageSize`
+- API 新增查询参数：`status`、`search`、`page`、`pageSize`
+- CLI `list` 输出从数组变更为分页对象；新增参数：`--status --search --page --page-size`

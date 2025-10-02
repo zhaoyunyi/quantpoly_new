@@ -349,6 +349,46 @@ class StrategyService:
     def get_strategy(self, *, user_id: str, strategy_id: str) -> Strategy | None:
         return self._repository.get_by_id(strategy_id, user_id=user_id)
 
+    def query_strategies(
+        self,
+        *,
+        user_id: str,
+        status: str | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        items = self._repository.list_by_user(user_id=user_id)
+
+        normalized_status = (status or "").strip().lower()
+        if normalized_status:
+            items = [item for item in items if str(item.status).strip().lower() == normalized_status]
+
+        normalized_search = (search or "").strip().lower()
+        if normalized_search:
+            items = [item for item in items if normalized_search in str(item.name).strip().lower()]
+
+        items = sorted(
+            items,
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+
+        safe_page = max(1, int(page))
+        safe_page_size = max(1, int(page_size))
+
+        total = len(items)
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        paged = items[start:end]
+
+        return {
+            "items": paged,
+            "total": total,
+            "page": safe_page,
+            "pageSize": safe_page_size,
+        }
+
     def create_portfolio(
         self,
         *,

@@ -188,9 +188,28 @@ def create_router(
         return success_response(data=service.list_templates())
 
     @router.get("/strategies")
-    def list_strategies(current_user=Depends(get_current_user)):
-        items = service.list_strategies(user_id=current_user.id)
-        return success_response(data=[_serialize_strategy(item) for item in items])
+    def list_strategies(
+        status: str | None = Query(default=None),
+        search: str | None = Query(default=None),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=20, alias="pageSize", ge=1, le=200),
+        current_user=Depends(get_current_user),
+    ):
+        listing = service.query_strategies(
+            user_id=current_user.id,
+            status=status,
+            search=search,
+            page=page,
+            page_size=page_size,
+        )
+        return success_response(
+            data={
+                "items": [_serialize_strategy(item) for item in listing["items"]],
+                "total": int(listing["total"]),
+                "page": int(listing["page"]),
+                "pageSize": int(listing["pageSize"]),
+            }
+        )
 
     @router.get("/strategies/{strategy_id}")
     def get_strategy(strategy_id: str, current_user=Depends(get_current_user)):
