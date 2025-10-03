@@ -92,6 +92,7 @@ def _asset_payload(item: MarketAsset) -> dict:
         "exchange": item.exchange,
         "currency": item.currency,
         "assetClass": item.asset_class,
+        "status": "active" if item.tradable else "inactive",
         "tradable": item.tradable,
         "fractionable": item.fractionable,
     }
@@ -226,7 +227,12 @@ def _cmd_search(args: argparse.Namespace) -> None:
 
 def _cmd_catalog(args: argparse.Namespace) -> None:
     try:
-        items = _service.list_catalog(user_id=args.user_id, limit=args.limit)
+        items = _service.list_catalog(
+            user_id=args.user_id,
+            limit=args.limit,
+            market=getattr(args, "market", None),
+            asset_class=getattr(args, "asset_class", None),
+        )
     except MarketDataError as exc:
         _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
         return
@@ -240,6 +246,21 @@ def _cmd_catalog(args: argparse.Namespace) -> None:
             },
         }
     )
+
+
+def _cmd_catalog_detail(args: argparse.Namespace) -> None:
+    try:
+        asset = _service.get_catalog_asset_detail(
+            user_id=args.user_id,
+            symbol=args.symbol,
+            market=getattr(args, "market", None),
+            asset_class=getattr(args, "asset_class", None),
+        )
+    except MarketDataError as exc:
+        _output({"success": False, "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable}})
+        return
+
+    _output({"success": True, "data": {"asset": _asset_payload(asset)}})
 
 
 def _cmd_symbols(args: argparse.Namespace) -> None:
@@ -449,7 +470,16 @@ def build_parser() -> argparse.ArgumentParser:
     catalog = sub.add_parser("catalog", help="查询标的目录")
     catalog.add_argument("--user-id", required=True)
     catalog.add_argument("--limit", type=int, default=100)
+    catalog.add_argument("--market", default=None)
+    catalog.add_argument("--asset-class", default=None)
     _add_runtime_args(catalog)
+
+    catalog_detail = sub.add_parser("catalog-detail", help="查询单个标的详情")
+    catalog_detail.add_argument("--user-id", required=True)
+    catalog_detail.add_argument("--symbol", required=True)
+    catalog_detail.add_argument("--market", default=None)
+    catalog_detail.add_argument("--asset-class", default=None)
+    _add_runtime_args(catalog_detail)
 
     symbols = sub.add_parser("symbols", help="查询可用标的代码")
     symbols.add_argument("--user-id", required=True)
@@ -540,6 +570,7 @@ def build_parser() -> argparse.ArgumentParser:
 _COMMANDS = {
     "search": _cmd_search,
     "catalog": _cmd_catalog,
+    "catalog-detail": _cmd_catalog_detail,
     "symbols": _cmd_symbols,
     "quote": _cmd_quote,
     "latest": _cmd_latest,

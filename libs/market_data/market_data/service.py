@@ -91,7 +91,14 @@ class MarketDataService:
         except Exception as exc:  # noqa: BLE001
             raise self._map_provider_error(exc) from exc
 
-    def list_catalog(self, *, user_id: str, limit: int = 100) -> list[MarketAsset]:
+    def list_catalog(
+        self,
+        *,
+        user_id: str,
+        limit: int = 100,
+        market: str | None = None,
+        asset_class: str | None = None,
+    ) -> list[MarketAsset]:
         del user_id
         try:
             if hasattr(self._provider, "list_assets"):
@@ -100,6 +107,9 @@ class MarketDataService:
                 items = self._provider.search(keyword="", limit=limit)
         except Exception as exc:  # noqa: BLE001
             raise self._map_provider_error(exc) from exc
+
+        normalized_market = (market or "").strip().upper()
+        normalized_asset_class = (asset_class or "").strip().lower()
 
         result: list[MarketAsset] = []
         for item in items:
@@ -116,12 +126,50 @@ class MarketDataService:
                     tradable=item.tradable,
                     fractionable=item.fractionable,
                 )
+
+            exchange = (item.exchange or "").strip().upper()
+            if normalized_market and exchange != normalized_market:
+                continue
+
+            current_asset_class = str(item.asset_class or "").strip().lower()
+            if normalized_asset_class and current_asset_class != normalized_asset_class:
+                continue
+
             result.append(item)
 
         return result[:limit]
 
-    def list_symbols(self, *, user_id: str, limit: int = 100) -> list[str]:
-        items = self.list_catalog(user_id=user_id, limit=limit)
+    def get_catalog_asset_detail(
+        self,
+        *,
+        user_id: str,
+        symbol: str,
+        market: str | None = None,
+        asset_class: str | None = None,
+    ) -> MarketAsset:
+        normalized_symbol = self._normalize_symbol(symbol)
+        items = self.list_catalog(
+            user_id=user_id,
+            limit=2000,
+            market=market,
+            asset_class=asset_class,
+        )
+
+        for item in items:
+            if item.symbol == normalized_symbol:
+                return item
+
+        raise MarketDataError(code="ASSET_NOT_FOUND", message=f"asset not found: {normalized_symbol}", retryable=False)
+
+    def list_symbols(
+        self,
+        *,
+        user_id: str,
+        limit: int = 100,
+        market: str | None = None,
+        asset_class: str | None = None,
+    ) -> list[str]:
+        items = self.list_catalog(user_id=user_id, limit=limit, market=market, asset_class=asset_class)
         return [item.symbol for item in items]
 
     def get_latest_quote(self, *, user_id: str, symbol: str) -> QuoteResult:

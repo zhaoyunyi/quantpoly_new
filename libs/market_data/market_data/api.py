@@ -46,6 +46,7 @@ def _asset_payload(item: MarketAsset) -> dict[str, Any]:
         "exchange": item.exchange,
         "currency": item.currency,
         "assetClass": item.asset_class,
+        "status": "active" if item.tradable else "inactive",
         "tradable": item.tradable,
         "fractionable": item.fractionable,
     }
@@ -97,7 +98,9 @@ def _candle_payload(item: MarketCandle) -> dict[str, Any]:
 
 
 def _error_to_response(error: MarketDataError) -> JSONResponse:
-    if isinstance(error, RateLimitExceededError):
+    if error.code == "ASSET_NOT_FOUND":
+        status = 404
+    elif isinstance(error, RateLimitExceededError):
         status = 429
     elif isinstance(error, UpstreamTimeoutError):
         status = 504
@@ -557,10 +560,17 @@ def create_router(
     @router.get("/market/catalog")
     def get_catalog(
         limit: int = Query(100, ge=1, le=200),
+        market: str | None = Query(default=None),
+        asset_class: str | None = Query(default=None, alias="assetClass"),
         current_user=Depends(get_current_user),
     ):
         try:
-            items = service.list_catalog(user_id=current_user.id, limit=limit)
+            items = service.list_catalog(
+                user_id=current_user.id,
+                limit=limit,
+                market=market,
+                asset_class=asset_class,
+            )
         except MarketDataError as exc:
             return _error_to_response(exc)
 
@@ -570,6 +580,25 @@ def create_router(
                 "total": len(items),
             }
         )
+
+    @router.get("/market/catalog/{symbol}")
+    def get_catalog_asset_detail(
+        symbol: str,
+        market: str | None = Query(default=None),
+        asset_class: str | None = Query(default=None, alias="assetClass"),
+        current_user=Depends(get_current_user),
+    ):
+        try:
+            asset = service.get_catalog_asset_detail(
+                user_id=current_user.id,
+                symbol=symbol,
+                market=market,
+                asset_class=asset_class,
+            )
+        except MarketDataError as exc:
+            return _error_to_response(exc)
+
+        return success_response(data={"asset": _asset_payload(asset)})
 
     @router.get("/market/symbols")
     def get_symbols(

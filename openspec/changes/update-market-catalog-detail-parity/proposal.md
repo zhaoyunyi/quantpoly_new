@@ -5,11 +5,11 @@
 
 ## What Changes
 
-- 新增市场资产详情端点：按 `symbol` 返回标准化资产读模型。
-- 目录查询支持可选过滤（如 `market`、`assetClass`），用于缩小资产范围。
-- CLI 增加资产详情查询命令，保持 API/CLI 语义一致。
+- 新增市场资产详情端点：按 `symbol` 返回标准化资产读模型（`symbol/name/exchange/assetClass/status`）。
+- 目录查询支持可选过滤（`market`、`assetClass`），用于缩小资产范围。
+- CLI 增加 `catalog-detail` 命令，`catalog` 支持同名过滤参数，保持 API/CLI 语义一致。
 
 ## Impact
 
 - 影响 capability：`market-data`
-- 风险：Provider 不同导致资产字段可用性不一致，需要定义字段缺省策略
+- 风险：Provider 不同导致资产字段可用性不一致，已统一 `status = active|inactive` 映射并保留字段缺省输出。
