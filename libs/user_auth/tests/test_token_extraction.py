@@ -29,23 +29,23 @@ class TestExtractSessionToken:
         token = extract_session_token(headers={}, cookies={})
         assert token is None
 
-    def test_extract_legacy_bearer_token_signature(self):
+    def test_extract_bearer_token_preserves_raw_value(self):
         token = extract_session_token(
             headers={"Authorization": "Bearer legacy-token.signature"},
             cookies={},
         )
-        assert token == "legacy-token"
+        assert token == "legacy-token.signature"
 
-    def test_extract_from_secure_better_auth_cookie(self):
+    def test_extract_rejects_secure_better_auth_cookie(self):
         token = extract_session_token(
             headers={},
             cookies={"__Secure-better-auth.session_token": "secure-token.signature"},
         )
-        assert token == "secure-token"
+        assert token is None
 
-    def test_extract_from_plain_better_auth_cookie(self):
+    def test_extract_rejects_plain_better_auth_cookie(self):
         token = extract_session_token(
             headers={},
             cookies={"better-auth.session_token": "plain-token.signature"},
         )
-        assert token == "plain-token"
+        assert token is None

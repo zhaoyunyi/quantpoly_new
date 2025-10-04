@@ -90,22 +90,26 @@ class TestMonitorWebSocketAuth:
 
         assert exc.value.code == 4401
 
-    def test_accepts_legacy_secure_cookie_token_signature(self):
+    def test_rejects_legacy_secure_cookie_token_signature(self):
         repo, sessions, token = _build_auth_state()
         app = create_app(user_repo=repo, session_store=sessions)
         client = TestClient(app)
         client.cookies.set("__Secure-better-auth.session_token", f"{token}.signature")
 
-        with client.websocket_connect("/ws/monitor") as ws:
-            msg = ws.receive_json()
-            assert msg["type"] == "monitor.heartbeat"
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/monitor") as ws:
+                ws.receive_json()
 
-    def test_accepts_legacy_better_auth_cookie_token_signature(self):
+        assert exc.value.code == 4401
+
+    def test_rejects_legacy_better_auth_cookie_token_signature(self):
         repo, sessions, token = _build_auth_state()
         app = create_app(user_repo=repo, session_store=sessions)
         client = TestClient(app)
         client.cookies.set("better-auth.session_token", f"{token}.signature")
 
-        with client.websocket_connect("/ws/monitor") as ws:
-            msg = ws.receive_json()
-            assert msg["type"] == "monitor.heartbeat"
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/ws/monitor") as ws:
+                ws.receive_json()
+
+        assert exc.value.code == 4401

@@ -65,7 +65,7 @@ def test_cli_register_login_verify_logout_flow(capsys):
     assert verify_after_logout["error"]["code"] == "INVALID_TOKEN"
 
 
-def test_cli_verify_and_logout_accept_legacy_token_signature(capsys):
+def test_cli_verify_and_logout_reject_legacy_token_signature(capsys):
     _run(
         cli._cmd_register,
         capsys=capsys,
@@ -87,14 +87,15 @@ def test_cli_verify_and_logout_accept_legacy_token_signature(capsys):
     legacy_token = f"{token}.signature"
 
     verify = _run(cli._cmd_verify, capsys=capsys, token=legacy_token)
-    assert verify["success"] is True
-    assert verify["data"]["email"] == "legacy-cli@example.com"
+    assert verify["success"] is False
+    assert verify["error"]["code"] == "INVALID_TOKEN"
 
     logout = _run(cli._cmd_logout, capsys=capsys, token=legacy_token)
-    assert logout["success"] is True
+    assert logout["success"] is False
+    assert logout["error"]["code"] == "INVALID_TOKEN"
 
     verify_after_logout = _run(cli._cmd_verify, capsys=capsys, token=token)
-    assert verify_after_logout["success"] is False
+    assert verify_after_logout["success"] is True
 
 
 def test_cli_register_rejects_weak_password(capsys):

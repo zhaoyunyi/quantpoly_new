@@ -9,14 +9,7 @@ from typing import Mapping
 
 
 def _normalize_token(raw_token: str) -> str:
-    token = raw_token.strip()
-    if not token:
-        return ""
-
-    # 兼容 legacy better-auth: token.signature
-    if "." in token:
-        token = token.split(".", 1)[0].strip()
-    return token
+    return raw_token.strip()
 
 
 def extract_session_token(
@@ -40,14 +33,6 @@ def extract_session_token(
 
     if cookies:
         token = _normalize_token(cookies.get("session_token", ""))
-        if token:
-            return token
-
-        token = _normalize_token(cookies.get("__Secure-better-auth.session_token", ""))
-        if token:
-            return token
-
-        token = _normalize_token(cookies.get("better-auth.session_token", ""))
         if token:
             return token
 
