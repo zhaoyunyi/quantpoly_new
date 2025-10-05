@@ -24,7 +24,7 @@
 > 按“可以 break update，但功能不能缺失”的原则复核后，**功能缺口已清零**。
 
 - 之前识别的两项缺口（策略列表查询能力、市场目录详情能力）均已实现并归档。
-- 兼容层清理变更 `remove-legacy-session-token-compat` 已完成并归档（P1，非功能缺口，治理型重构）。
+- 兼容层清理变更 `remove-legacy-session-token-compat`、`remove-legacy-is-admin-compat` 已完成并归档（P1，非功能缺口，治理型重构）。
 
 ## 4. 可选后续工作（非缺口，按收益排序）
 
