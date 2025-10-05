@@ -141,7 +141,7 @@ def test_cleanup_all_accepts_role_admin_without_is_admin_flag():
     assert payload["data"]["deleted"] >= 1
 
 
-def test_cleanup_all_accepts_legacy_is_admin_without_role():
+def test_cleanup_all_rejects_legacy_is_admin_without_role():
     app, service = _build_app(current_user_id="admin-legacy", is_admin=True, role=None)
 
     service.create_signal(
@@ -155,10 +155,10 @@ def test_cleanup_all_accepts_legacy_is_admin_without_role():
     client = TestClient(app)
     resp = client.post("/signals/maintenance/cleanup-all")
 
-    assert resp.status_code == 200
+    assert resp.status_code == 403
     payload = resp.json()
-    assert payload["success"] is True
-    assert payload["data"]["deleted"] >= 1
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "ADMIN_REQUIRED"
 
 
 def test_cleanup_all_rejects_role_user_without_is_admin_flag():

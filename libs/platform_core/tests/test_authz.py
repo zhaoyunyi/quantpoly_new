@@ -22,14 +22,14 @@ def test_role_admin_has_highest_priority():
     assert is_admin_actor(actor) is True
 
 
-def test_legacy_is_admin_true_is_accepted():
+def test_legacy_is_admin_true_is_rejected():
     actor = _Actor()
     actor.is_admin = True
 
     decision = resolve_admin_decision(actor)
 
-    assert decision.is_admin is True
-    assert decision.source == "is_admin"
+    assert decision.is_admin is False
+    assert decision.source == "none"
 
 
 def test_level_based_admin_is_accepted_for_ops_context():

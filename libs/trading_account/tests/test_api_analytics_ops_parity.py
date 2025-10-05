@@ -112,7 +112,7 @@ def test_pending_orders_and_refresh_prices_require_admin():
 
 
 def test_refresh_prices_idempotency_conflict_returns_409_for_admin():
-    app, service = _build_app(current_user_id="admin-1", is_admin=True)
+    app, service = _build_app(current_user_id="admin-1", is_admin=None, role="admin")
     account = service.create_account(user_id="admin-1", account_name="primary")
     service.upsert_position(
         user_id="admin-1",
@@ -166,7 +166,7 @@ def test_ops_endpoints_accept_role_admin_without_is_admin_flag():
     assert refresh.json()["success"] is True
 
 
-def test_ops_endpoints_accept_legacy_is_admin_flag_without_role():
+def test_ops_endpoints_reject_legacy_is_admin_flag_without_role():
     app, service = _build_app(current_user_id="admin-legacy", is_admin=True, role=None)
     account = service.create_account(user_id="admin-legacy", account_name="primary")
     service.submit_order(
@@ -181,8 +181,8 @@ def test_ops_endpoints_accept_legacy_is_admin_flag_without_role():
     client = TestClient(app)
 
     pending = client.get("/trading/ops/pending-orders")
-    assert pending.status_code == 200
-    assert pending.json()["success"] is True
+    assert pending.status_code == 403
+    assert pending.json()["error"]["code"] == "ADMIN_REQUIRED"
 
 
 def test_ops_endpoints_reject_role_user_without_is_admin_flag():

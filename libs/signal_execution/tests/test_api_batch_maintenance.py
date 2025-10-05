@@ -14,7 +14,7 @@ def _build_app(*, current_user_id: str, is_admin: bool = False):
     class _User:
         def __init__(self, user_id: str, admin: bool):
             self.id = user_id
-            self.is_admin = admin
+            self.role = "admin" if admin else "user"
 
     def _get_current_user():
         return _User(current_user_id, is_admin)

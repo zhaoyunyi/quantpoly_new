@@ -17,9 +17,6 @@ def resolve_admin_decision(actor: Any) -> AdminDecision:
     if isinstance(role, str) and role.strip().lower() == "admin":
         return AdminDecision(is_admin=True, source="role")
 
-    is_admin = getattr(actor, "is_admin", None)
-    if isinstance(is_admin, bool) and is_admin:
-        return AdminDecision(is_admin=True, source="is_admin")
 
     level = getattr(actor, "level", None)
     if isinstance(level, int) and level >= 10:

@@ -45,7 +45,7 @@ def _build_app(
 
 
 def test_refresh_prices_task_endpoint_returns_task_result_for_admin():
-    app, service, job_service = _build_app(current_user_id="admin-1", is_admin=True)
+    app, service, job_service = _build_app(current_user_id="admin-1", is_admin=None, role="admin")
     client = TestClient(app)
 
     account = service.create_account(user_id="admin-1", account_name="primary")

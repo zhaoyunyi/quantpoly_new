@@ -49,7 +49,7 @@ def test_api_should_query_templates_by_strategy_type():
 
 def test_api_should_return_strategy_statistics_and_trend():
     client, repo = _build_app(current_user_id="u-1")
-    now = datetime(2026, 2, 11, 10, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
 
     repo.save_execution(
         ExecutionRecord(
