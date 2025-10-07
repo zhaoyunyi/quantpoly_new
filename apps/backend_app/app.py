@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Request
 
 from apps.backend_app.router_registry import (
     MetricsCollector,
@@ -26,6 +23,7 @@ from apps.backend_app.settings import (
 )
 from platform_core.logging import mask_sensitive
 from platform_core.response import error_response
+from platform_core.fastapi import install_exception_handlers
 from user_auth.app import create_app as create_user_auth_app
 
 
@@ -70,6 +68,8 @@ def create_app(
     app = create_user_auth_app(user_repo=context.user_repo, session_store=context.session_store)
     app.title = "quantpoly-backend-app"
 
+    install_exception_handlers(app)
+
     metrics = MetricsCollector()
 
     @app.middleware("http")
@@ -109,35 +109,8 @@ def create_app(
     async def _permission_error_handler(_request: Request, _exc: PermissionError):
         return permission_error_to_response()
 
-    @app.exception_handler(HTTPException)
-    async def _http_exception_handler(_request: Request, exc: HTTPException):
-        detail: Any = exc.detail
-        if isinstance(detail, dict):
-            code = str(detail.get("code") or _http_error_code(exc.status_code))
-            message = str(detail.get("message") or detail)
-        else:
-            code = _http_error_code(exc.status_code)
-            message = str(detail)
-
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=error_response(code=code, message=message),
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def _validation_exception_handler(_request: Request, exc: RequestValidationError):
-        return JSONResponse(
-            status_code=422,
-            content=error_response(code="VALIDATION_ERROR", message=str(exc)),
-        )
-
-    @app.exception_handler(Exception)
-    async def _unknown_exception_handler(_request: Request, exc: Exception):
-        logging.getLogger("backend_app.error").exception("unhandled_exception=%s", exc)
-        return JSONResponse(
-            status_code=500,
-            content=error_response(code="INTERNAL_ERROR", message="internal server error"),
-        )
+    # install_exception_handlers 已覆盖 HTTPException/ValidationError/Exception
+    # backend_app 仅保留 PermissionError 的映射，确保缺少 token 等场景返回稳定错误。
 
     get_current_user = build_current_user_dependency(context=context)
 

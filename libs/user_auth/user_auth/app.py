@@ -14,6 +14,8 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from platform_core.fastapi import install_exception_handlers
+
 from user_auth.deps import build_get_current_user
 from user_auth.domain import PasswordTooWeakError, User
 from user_auth.password_reset import InMemoryPasswordResetStore, PasswordResetRequestRateLimiter, PasswordResetStore
@@ -132,6 +134,8 @@ def create_app(
         sessions = session_store or SessionStore()
     app = FastAPI(title="user-auth")
 
+    install_exception_handlers(app)
+
     if password_reset_store is not None:
         reset_store = password_reset_store
     elif sqlite_db_path:
@@ -240,9 +244,21 @@ def _register_routes(
         if user is None or not user.authenticate(body.password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         if not user.email_verified:
-            raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "EMAIL_NOT_VERIFIED",
+                    "message": "EMAIL_NOT_VERIFIED",
+                },
+            )
         if not user.is_active:
-            raise HTTPException(status_code=403, detail="USER_DISABLED")
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "USER_DISABLED",
+                    "message": "USER_DISABLED",
+                },
+            )
 
         session = Session.create(user_id=user.id)
         sessions.save(session)

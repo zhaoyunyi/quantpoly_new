@@ -66,7 +66,9 @@ def test_admin_can_create_user_with_initial_role_level_and_status():
         json={"email": "seeded-user@example.com", "password": "SeededPass123!"},
     )
     assert disabled_login.status_code == 403
-    assert disabled_login.json()["detail"] == "USER_DISABLED"
+    payload = disabled_login.json()
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "USER_DISABLED"
 
 
 def test_non_admin_cannot_create_user_and_repo_keeps_clean():

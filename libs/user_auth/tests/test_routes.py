@@ -112,7 +112,9 @@ class TestLogin:
             json={"email": "unverified@example.com", "password": "StrongPass123!"},
         )
         assert resp.status_code == 403
-        assert resp.json()["detail"] == "EMAIL_NOT_VERIFIED"
+        payload = resp.json()
+        assert payload["success"] is False
+        assert payload["error"]["code"] == "EMAIL_NOT_VERIFIED"
 
     def test_login_allows_after_email_verification(self, client):
         client.post(
@@ -182,6 +184,9 @@ class TestMe:
     def test_me_without_token(self, client):
         resp = client.get("/auth/me")
         assert resp.status_code == 401
+        payload = resp.json()
+        assert payload["success"] is False
+        assert payload["error"]["code"] == "MISSING_TOKEN"
 
     def test_me_with_invalid_token(self, client):
         resp = client.get("/auth/me", headers={"Authorization": "Bearer invalid-token"})
