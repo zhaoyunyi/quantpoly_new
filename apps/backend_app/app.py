@@ -24,6 +24,7 @@ from apps.backend_app.settings import (
 from platform_core.logging import mask_sensitive
 from platform_core.response import error_response
 from platform_core.fastapi import install_exception_handlers
+from platform_core.response import success_response
 from user_auth.app import create_app as create_user_auth_app
 
 
@@ -124,24 +125,20 @@ def create_app(
 
     @app.get("/internal/metrics")
     def get_metrics():
-        return {
-            "success": True,
-            "data": metrics.snapshot(),
-        }
+        return success_response(data=metrics.snapshot())
 
     @app.get("/health")
     def health():
-        return {
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "status": "ok",
                 "enabledContexts": sorted(settings.enabled_contexts),
-            },
-        }
+            }
+        )
 
     @app.post("/internal/bootstrap-demo")
     def bootstrap_demo(current_user=Depends(get_current_user)):
         ensure_demo_account(context=context, user_id=current_user.id)
-        return {"success": True, "message": "bootstrap complete"}
+        return success_response(message="bootstrap complete")
 
     return app

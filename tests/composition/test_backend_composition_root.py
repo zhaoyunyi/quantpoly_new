@@ -152,7 +152,12 @@ def test_composition_metrics_endpoint_collects_http_totals():
     app = create_app(enabled_contexts={"user-auth", "strategy-management"}, storage_backend="memory")
     client = TestClient(app)
 
-    client.get("/health")
+    health = client.get("/health")
+    assert health.status_code == 200
+    health_payload = health.json()
+    assert health_payload["success"] is True
+    assert health_payload["message"] == "ok"
+
     client.get("/strategies")
 
     metrics = client.get("/internal/metrics")
@@ -160,5 +165,6 @@ def test_composition_metrics_endpoint_collects_http_totals():
     assert metrics.status_code == 200
     payload = metrics.json()
     assert payload["success"] is True
+    assert payload["message"] == "ok"
     assert payload["data"]["httpRequestsTotal"] >= 2
     assert payload["data"]["httpErrorsTotal"] >= 1

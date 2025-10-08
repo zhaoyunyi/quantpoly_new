@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from platform_core.fastapi import install_exception_handlers
+from platform_core.response import success_response
 
 from user_auth.deps import build_get_current_user
 from user_auth.domain import PasswordTooWeakError, User
@@ -236,7 +237,7 @@ def _register_routes(
             raise HTTPException(status_code=400, detail="Password too weak") from exc
 
         repo.save(user)
-        return {"success": True, "message": "User registered"}
+        return success_response(message="User registered")
 
     @app.post("/auth/login")
     def login(body: LoginRequest, response: Response):
@@ -270,7 +271,7 @@ def _register_routes(
             samesite="lax",
         )
 
-        return {"success": True, "data": {"token": session.token}}
+        return success_response(data={"token": session.token})
 
     @app.post("/auth/verify-email")
     def verify_email(body: VerifyEmailRequest):
@@ -279,7 +280,7 @@ def _register_routes(
             raise HTTPException(status_code=404, detail="User not found")
         user.verify_email()
         repo.save(user)
-        return {"success": True, "message": "Email verified"}
+        return success_response(message="Email verified")
 
     @app.post("/auth/password-reset/request")
     def request_password_reset(body: PasswordResetRequest):
@@ -302,13 +303,11 @@ def _register_routes(
             outcome=outcome,
         )
 
-        payload: dict[str, Any] = {
-            "success": True,
-            "message": message,
-        }
+        data = None
         if password_reset_test_mode and issued is not None:
-            payload["data"] = {"resetToken": issued.token}
-        return payload
+            data = {"resetToken": issued.token}
+
+        return success_response(data=data, message=message)
 
     @app.post("/auth/password-reset/confirm")
     def confirm_password_reset(body: PasswordResetConfirmRequest):
@@ -332,11 +331,11 @@ def _register_routes(
         repo.save(user)
         sessions.revoke_by_user(user_id=user.id)
         _audit_password_reset(email=user.email, user_id=user.id, outcome="password_updated")
-        return {"success": True, "message": "Password reset successful"}
+        return success_response(message="Password reset successful")
 
     @app.get("/auth/me")
     def me(current_user: User = Depends(get_current_user)):
-        return {"success": True, "data": _user_payload(current_user)}
+        return success_response(data=_user_payload(current_user))
 
     @app.post("/auth/logout")
     def logout(request: Request, response: Response, _: User = Depends(get_current_user)):
@@ -345,7 +344,7 @@ def _register_routes(
             sessions.revoke(token)
 
         response.delete_cookie("session_token")
-        return {"success": True, "message": "Logged out"}
+        return success_response(message="Logged out")
 
     @app.patch("/users/me")
     def update_me(body: UpdateMeRequest, current_user: User = Depends(get_current_user)):
@@ -356,7 +355,7 @@ def _register_routes(
 
         current_user.update_profile(email=body.email, display_name=body.display_name)
         repo.save(current_user)
-        return {"success": True, "data": _user_payload(current_user)}
+        return success_response(data=_user_payload(current_user))
 
     @app.patch("/users/me/password")
     def update_my_password(
@@ -380,11 +379,12 @@ def _register_routes(
             revoked = sessions.revoke_by_user(user_id=current_user.id)
 
         return {
-            "success": True,
-            "data": {
-                "revokedSessions": revoked,
-            },
-            "message": "Password updated",
+            **success_response(
+                data={
+                    "revokedSessions": revoked,
+                },
+                message="Password updated",
+            ),
         }
 
     @app.delete("/users/me")
@@ -398,13 +398,12 @@ def _register_routes(
         if not deleted:
             return _error(404, code="USER_NOT_FOUND", message="user not found")
 
-        return {
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "revokedSessions": revoked,
             },
-            "message": "User deleted",
-        }
+            message="User deleted",
+        )
 
     @app.post("/admin/users")
     def admin_create_user(
@@ -439,10 +438,7 @@ def _register_routes(
                 return _error(409, code="DUPLICATE_EMAIL", message=message)
             return _error(400, code="USER_CREATE_INVALID", message=message)
 
-        return {
-            "success": True,
-            "data": _user_payload(user),
-        }
+        return success_response(data=_user_payload(user))
 
     @app.get("/admin/users")
     def admin_list_users(
@@ -462,15 +458,14 @@ def _register_routes(
             return denied
 
         result = repo.list_users(status=status, page=page, page_size=page_size)
-        return {
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "items": [_user_payload(item) for item in result["items"]],
                 "total": result["total"],
                 "page": result["page"],
                 "pageSize": result["pageSize"],
-            },
-        }
+            }
+        )
 
     @app.patch("/admin/users/{user_id}")
     def admin_update_user(
@@ -517,7 +512,7 @@ def _register_routes(
         if body.is_active is False:
             sessions.revoke_by_user(user_id=target.id)
 
-        return {"success": True, "data": _user_payload(target)}
+        return success_response(data=_user_payload(target))
 
     @app.get("/admin/users/{user_id}")
     def admin_get_user(
@@ -538,7 +533,7 @@ def _register_routes(
         if target is None:
             return _error(404, code="USER_NOT_FOUND", message="user not found")
 
-        return {"success": True, "data": _user_payload(target)}
+        return success_response(data=_user_payload(target))
 
     @app.delete("/admin/users/{user_id}")
     def admin_delete_user(
@@ -562,11 +557,10 @@ def _register_routes(
         repo.delete(user_id)
         revoked = sessions.revoke_by_user(user_id=user_id)
 
-        return {
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "userId": user_id,
                 "revokedSessions": revoked,
             },
-            "message": "User deleted",
-        }
+            message="User deleted",
+        )

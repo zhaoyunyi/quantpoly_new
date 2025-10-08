@@ -10,11 +10,13 @@ def success_response(
     message: str = "ok",
 ) -> dict:
     """构建成功响应。"""
-    return {
+    payload: dict[str, Any] = {
         "success": True,
         "message": message,
-        "data": data,
     }
+    if data is not None:
+        payload["data"] = data
+    return payload
 
 
 def error_response(
