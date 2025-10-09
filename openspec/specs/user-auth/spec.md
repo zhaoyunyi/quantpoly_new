@@ -198,3 +198,37 @@
 - **THEN** 返回 `401/INVALID_TOKEN`
 - **AND** 不得回退读取 legacy cookie key
 
+### Requirement: user-auth 错误必须返回统一 error_response 且保留业务错误码
+
+`user-auth` 对外 API 在发生认证/权限/业务失败时 MUST 返回 `platform_core.error_response` 结构，且业务错误码 MUST 出现在 `error.code` 字段中（不得依赖 FastAPI 默认 `detail`）。
+
+#### Scenario: 未验证邮箱登录返回 EMAIL_NOT_VERIFIED
+
+- **GIVEN** 用户已注册但邮箱未验证
+- **WHEN** 用户尝试登录
+- **THEN** 返回 403
+- **AND** 响应 `error.code=EMAIL_NOT_VERIFIED`
+
+#### Scenario: 缺少 token 访问受保护接口返回 MISSING_TOKEN
+
+- **GIVEN** 用户未提供 Bearer token 且无 session_token cookie
+- **WHEN** 调用受保护接口（如 `GET /users/me` 或等价端点）
+- **THEN** 返回 401
+- **AND** 响应 `error.code=MISSING_TOKEN`
+
+### Requirement: 当前用户资料读写必须统一使用 /users/me
+
+系统 MUST 提供单一路由语义来表示“当前用户资源（me）”，并将读取与写入统一收敛在 `/users/me` 路径下，避免 `/auth` 与 `/users` 同时承载同一资源语义。
+
+#### Scenario: 读取当前用户使用 GET /users/me
+
+- **GIVEN** 用户已认证
+- **WHEN** 调用 `GET /users/me`
+- **THEN** 返回当前用户资料
+
+#### Scenario: 更新当前用户使用 PATCH /users/me
+
+- **GIVEN** 用户已认证
+- **WHEN** 调用 `PATCH /users/me`
+- **THEN** 返回更新后的用户资料
+
