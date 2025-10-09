@@ -333,9 +333,19 @@ def _register_routes(
         _audit_password_reset(email=user.email, user_id=user.id, outcome="password_updated")
         return success_response(message="Password reset successful")
 
-    @app.get("/auth/me")
+    @app.get("/users/me")
     def me(current_user: User = Depends(get_current_user)):
         return success_response(data=_user_payload(current_user))
+
+    @app.get("/auth/me")
+    def removed_auth_me():
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "ROUTE_REMOVED",
+                "message": "GET /auth/me has been removed; use GET /users/me",
+            },
+        )
 
     @app.post("/auth/logout")
     def logout(request: Request, response: Response, _: User = Depends(get_current_user)):

@@ -53,7 +53,7 @@ def test_patch_users_me_password_invalidates_old_session(client: TestClient):
     )
     assert change.status_code == 200
 
-    me_with_old = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    me_with_old = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert me_with_old.status_code == 401
 
     login_new = client.post(
@@ -82,7 +82,7 @@ def test_delete_users_me_revokes_sessions_and_removes_user(client: TestClient):
     assert deleted.status_code == 200
     assert deleted.json()["success"] is True
 
-    me_after_delete = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    me_after_delete = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert me_after_delete.status_code == 401
 
     re_register = client.post(

@@ -157,7 +157,7 @@ class TestMe:
 
     def test_me_with_bearer_token(self, client):
         token = _register_and_login(client)
-        resp = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        resp = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
@@ -166,7 +166,7 @@ class TestMe:
     def test_me_with_cookie_token(self, client):
         token = _register_and_login(client)
         client.cookies.set("session_token", token)
-        resp = client.get("/auth/me")
+        resp = client.get("/users/me")
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
@@ -176,27 +176,27 @@ class TestMe:
         valid_token = _register_and_login(client)
         client.cookies.set("session_token", valid_token)
         resp = client.get(
-            "/auth/me",
+            "/users/me",
             headers={"Authorization": "Bearer invalid-token"},
         )
         assert resp.status_code == 401
 
     def test_me_without_token(self, client):
-        resp = client.get("/auth/me")
+        resp = client.get("/users/me")
         assert resp.status_code == 401
         payload = resp.json()
         assert payload["success"] is False
         assert payload["error"]["code"] == "MISSING_TOKEN"
 
     def test_me_with_invalid_token(self, client):
-        resp = client.get("/auth/me", headers={"Authorization": "Bearer invalid-token"})
+        resp = client.get("/users/me", headers={"Authorization": "Bearer invalid-token"})
         assert resp.status_code == 401
 
     def test_me_invalid_token_log_is_masked(self, client, caplog):
         raw_token = "very-secret-token-123456"
         with caplog.at_level("WARNING", logger="user_auth.auth"):
             resp = client.get(
-                "/auth/me",
+                "/users/me",
                 headers={"Authorization": f"Bearer {raw_token}"},
             )
 
@@ -217,10 +217,19 @@ class TestLogout:
         assert resp.status_code == 200
 
         me_resp = client.get(
-            "/auth/me",
+            "/users/me",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert me_resp.status_code == 401
+
+
+class TestRouteNormalization:
+    def test_auth_me_is_removed_in_breaking_change(self, client):
+        resp = client.get("/auth/me")
+        assert resp.status_code == 410
+        payload = resp.json()
+        assert payload["success"] is False
+        assert payload["error"]["code"] == "ROUTE_REMOVED"
 
 
 class TestPasswordReset:
@@ -340,7 +349,7 @@ class TestPersistenceBootstrap:
 
         app2 = create_app(sqlite_db_path=str(db_path))
         client2 = TestClient(app2)
-        me = client2.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        me = client2.get("/users/me", headers={"Authorization": f"Bearer {token}"})
 
         assert me.status_code == 200
         assert me.json()["data"]["email"] == "persist@app.com"
@@ -392,7 +401,7 @@ class TestPersistenceBootstrap:
         assert deleted.status_code == 200
 
         me = client.get(
-            "/auth/me",
+            "/users/me",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert me.status_code == 401
