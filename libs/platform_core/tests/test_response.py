@@ -2,6 +2,7 @@
 
 BDD Scenarios from spec:
 - success_response 返回一致结构
+- success_response 在无 data 时省略 data 字段
 - error_response 返回一致结构
 - 响应字段自动序列化为 camelCase
 """
@@ -28,6 +29,12 @@ class TestSuccessResponse:
         result = success_response(data={"id": 1})
         assert result["success"] is True
         assert "message" in result
+
+    def test_success_response_omits_data_when_none(self):
+        result = success_response(message="done")
+        assert result["success"] is True
+        assert result["message"] == "done"
+        assert "data" not in result
 
 
 class TestErrorResponse:
