@@ -144,7 +144,7 @@ def test_task_types_endpoint_returns_registry_metadata():
     strategy_item = next(item for item in rows if item["taskType"] == "strategy_batch_execute")
     assert strategy_item["domain"] == "strategy"
     assert strategy_item["schedulable"] is True
-    assert "strategy.batch_execute_strategies" in strategy_item["legacyNames"]
+    assert "legacyNames" not in strategy_item
 
 
 def test_schedule_query_and_stop_are_isolated_by_user_namespace():
