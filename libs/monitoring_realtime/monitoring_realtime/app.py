@@ -24,6 +24,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from platform_core.logging import mask_sensitive
 from platform_core.response import error_response, success_response
+from monitoring_realtime.read_model import build_operational_summary
 from user_auth.repository import UserRepository
 from user_auth.session import SessionStore
 from user_auth.token import extract_session_token
@@ -147,11 +148,6 @@ def _resolve_user(*, headers: Any, cookies: Any, repo: UserRepository, sessions:
     return repo.get_by_id(session.user_id)
 
 
-def _status_text(item: dict[str, Any]) -> str:
-    raw = item.get("status")
-    return str(raw).strip().lower() if raw is not None else ""
-
-
 def _filter_owned_items(*, user_id: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for item in items:
@@ -162,130 +158,11 @@ def _filter_owned_items(*, user_id: str, items: list[dict[str, Any]]) -> list[di
     return result
 
 
-def _count_statuses(items: list[dict[str, Any]], statuses: set[str]) -> int:
-    return sum(1 for item in items if _status_text(item) in statuses)
-
-
 def _as_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
         return default
-
-
-def _default_summary(
-    *,
-    user_id: str,
-    account_source: SourceFn,
-    strategy_source: SourceFn,
-    backtest_source: SourceFn,
-    task_source: SourceFn,
-    signal_source: SourceFn,
-    alert_source: SourceFn,
-    latency_ms: int,
-) -> dict[str, Any]:
-    degraded_reasons: list[str] = []
-    source_status: dict[str, str] = {}
-
-    def _collect(name: str, source: SourceFn) -> list[dict[str, Any]]:
-        try:
-            raw = source(user_id)
-        except Exception:  # noqa: BLE001
-            source_status[name] = "degraded"
-            degraded_reasons.append(f"{name}_unavailable")
-            return []
-
-        if not isinstance(raw, list):
-            source_status[name] = "degraded"
-            degraded_reasons.append(f"{name}_invalid")
-            return []
-
-        source_status[name] = "ok"
-        return _filter_owned_items(user_id=user_id, items=[item for item in raw if isinstance(item, dict)])
-
-    user_accounts = _collect("accounts", account_source)
-    user_strategies = _collect("strategies", strategy_source)
-    user_backtests = _collect("backtests", backtest_source)
-    user_tasks = _collect("tasks", task_source)
-    user_signals = _collect("signals", signal_source)
-    user_alerts = _collect("alerts", alert_source)
-
-    active_accounts = [
-        item
-        for item in user_accounts
-        if bool(item.get("isActive", item.get("is_active", _status_text(item) not in {"disabled", "inactive", "closed", "archived"})))
-    ]
-    active_strategies = [
-        item
-        for item in user_strategies
-        if _status_text(item) in {"active", "running", "enabled", "live"}
-    ]
-
-    open_alerts = [item for item in user_alerts if _status_text(item) != "resolved"]
-    critical_alerts = [
-        item
-        for item in open_alerts
-        if str(item.get("severity", "")).strip().lower() in {"critical", "high"}
-    ]
-
-    summary = {
-        "type": "monitor.summary",
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "metadata": {
-            "version": "v2",
-            "latencyMs": max(0, int(latency_ms)),
-            "sources": source_status,
-        },
-        "accounts": {
-            "total": len(user_accounts),
-            "active": len(active_accounts),
-        },
-        "strategies": {
-            "total": len(user_strategies),
-            "active": len(active_strategies),
-        },
-        "backtests": {
-            "total": len(user_backtests),
-            "pending": _count_statuses(user_backtests, {"pending", "queued"}),
-            "running": _count_statuses(user_backtests, {"running"}),
-            "completed": _count_statuses(user_backtests, {"completed", "succeeded"}),
-            "failed": _count_statuses(user_backtests, {"failed"}),
-            "cancelled": _count_statuses(user_backtests, {"cancelled", "canceled"}),
-        },
-        "tasks": {
-            "total": len(user_tasks),
-            "queued": _count_statuses(user_tasks, {"queued", "pending"}),
-            "running": _count_statuses(user_tasks, {"running"}),
-            "succeeded": _count_statuses(user_tasks, {"succeeded", "completed"}),
-            "failed": _count_statuses(user_tasks, {"failed"}),
-            "cancelled": _count_statuses(user_tasks, {"cancelled", "canceled"}),
-        },
-        "signals": {
-            "total": len(user_signals),
-            "pending": _count_statuses(user_signals, {"pending"}),
-            "expired": _count_statuses(user_signals, {"expired"}),
-        },
-        "alerts": {
-            "total": len(user_alerts),
-            "open": len(open_alerts),
-            "critical": len(critical_alerts),
-        },
-        "degraded": {
-            "enabled": len(degraded_reasons) > 0,
-            "reasons": degraded_reasons,
-        },
-    }
-
-    summary["isEmpty"] = (
-        summary["accounts"]["total"]
-        + summary["strategies"]["total"]
-        + summary["backtests"]["total"]
-        + summary["tasks"]["total"]
-        + summary["signals"]["total"]
-        + summary["alerts"]["total"]
-    ) == 0
-
-    return summary
 
 
 def create_app(
@@ -337,7 +214,7 @@ def create_app(
             return cloned
 
         latency_ms = max(0, int((time.perf_counter() - started_at) * 1000))
-        return _default_summary(
+        return build_operational_summary(
             user_id=user_id,
             account_source=accounts_source,
             strategy_source=strategies_source,
