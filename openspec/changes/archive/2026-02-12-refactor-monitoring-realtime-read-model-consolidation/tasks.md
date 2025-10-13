@@ -5,4 +5,4 @@
 - [x] 1.3 实现 Read Model 模块并接入 app/cli（Green）
 - [x] 1.4 运行 `openspec validate refactor-monitoring-realtime-read-model-consolidation --strict`
 - [x] 1.5 运行 `pytest`（至少覆盖 monitoring_realtime）
-- [ ] 1.6 使用 `git cnd` 提交，并归档 change
+- [x] 1.6 使用 `git cnd` 提交，并归档 change
