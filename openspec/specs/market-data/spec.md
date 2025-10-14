@@ -1,7 +1,7 @@
 # market-data Specification
 
 ## Purpose
-TBD - created by archiving change add-market-data-context-migration. Update Purpose after archive.
+为策略研究、回测与交易执行提供统一的市场数据能力：标的搜索、报价、历史 K 线、指标计算与实时订阅，并对上游 provider 做缓存、限流与降级语义收敛。
 ## Requirements
 ### Requirement: 市场数据查询必须提供统一接口与错误语义
 后端 MUST 提供统一的股票检索、行情与历史数据接口，并返回一致错误语义。

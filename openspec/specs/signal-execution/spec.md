@@ -1,7 +1,7 @@
 # signal-execution Specification
 
 ## Purpose
-TBD - created by archiving change add-risk-signal-context-migration. Update Purpose after archive.
+承载策略信号的生成、筛选查询、批量执行与执行历史治理能力：确保信号/执行记录按用户隔离，并提供留存、清理与审计等治理接口，作为交易执行链路的信号入口。
 ## Requirements
 ### Requirement: 信号与执行记录接口必须强制用户范围
 信号查询、批处理、执行记录查询与取消 MUST 在服务端强制按当前用户过滤。

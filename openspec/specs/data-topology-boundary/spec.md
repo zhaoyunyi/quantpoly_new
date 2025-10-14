@@ -1,7 +1,7 @@
 # data-topology-boundary Specification
 
 ## Purpose
-TBD - created by archiving change add-data-topology-boundary-migration. Update Purpose after archive.
+定义并强制各 bounded context 的数据归属与存储边界：避免跨上下文直接读写他人存储，通过防腐层/开放主机服务进行交互，为迁移与持久化适配提供一致约束。
 ## Requirements
 ### Requirement: 数据模型必须归属单一存储边界
 每个领域模型 MUST 明确归属单一存储边界（用户域库或业务域库），并禁止运行时隐式跨库路由。

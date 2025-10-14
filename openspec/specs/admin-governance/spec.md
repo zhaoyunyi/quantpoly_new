@@ -1,7 +1,7 @@
 # admin-governance Specification
 
 ## Purpose
-TBD - created by archiving change add-admin-governance-context-migration. Update Purpose after archive.
+集中承载系统级治理能力：管理员身份与策略授权、高风险操作的审计与脱敏日志、跨上下文维护动作的统一入口，确保生产运维与安全治理可追踪、可控。
 ## Requirements
 ### Requirement: 管理员动作必须集中治理
 高风险动作（全局清理、批量维护、系统级开关） MUST 通过统一治理层授权，不得在业务路由中临时拼接权限逻辑。

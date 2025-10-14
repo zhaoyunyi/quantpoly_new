@@ -1,7 +1,7 @@
 # job-orchestration Specification
 
 ## Purpose
-TBD - created by archiving change add-job-orchestration-context-migration. Update Purpose after archive.
+为后端长任务提供统一的提交、派发、调度与状态机追踪能力（submit/dispatch/callback），确保任务幂等、用户隔离、可恢复与可观测，并作为各业务上下文异步任务的唯一入口。
 ## Requirements
 ### Requirement: 后端长任务必须通过统一任务编排能力提交
 回测、行情同步、交易批处理、风险巡检、信号批处理等长任务 MUST 通过统一任务编排层提交与追踪，不得由 API 直接执行阻塞流程。

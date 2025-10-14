@@ -1,7 +1,7 @@
 # trading-account Specification
 
 ## Purpose
-TBD - created by archiving change add-trading-account-context-migration. Update Purpose after archive.
+提供模拟/交易账户的领域能力：账户生命周期、订单与成交状态机、持仓与资金流水账本，以及聚合统计与审计治理；所有读写通过持久化仓储与事务单元保证一致性。
 ## Requirements
 ### Requirement: 交易账户数据访问必须按用户隔离
 交易账户、持仓、交易记录、资金流水相关接口 MUST 仅返回当前用户数据。

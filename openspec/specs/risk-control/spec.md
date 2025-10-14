@@ -1,7 +1,7 @@
 # risk-control Specification
 
 ## Purpose
-TBD - created by archiving change add-risk-signal-context-migration. Update Purpose after archive.
+提供风险规则、风险评估与告警闭环能力：支持规则生命周期治理、评估快照、告警确认/解决与统计查询，并在所有操作中强制用户与账户范围隔离。
 ## Requirements
 ### Requirement: 风控报警操作必须校验账户归属
 确认、解决、批量确认、统计等报警操作 MUST 验证报警所属账户属于当前用户。

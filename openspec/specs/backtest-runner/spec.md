@@ -1,7 +1,7 @@
 # backtest-runner Specification
 
 ## Purpose
-TBD - created by archiving change add-strategy-backtest-migration. Update Purpose after archive.
+提供策略回测任务的生命周期管理与结果存储能力：以用户与策略为边界提交回测、追踪状态、持久化结果并支持对比分析，为策略研究与优化提供可复算的统计输出。
 ## Requirements
 ### Requirement: 回测任务状态机必须可观测
 回测任务 MUST 遵循 `pending -> running -> completed|failed|cancelled` 的状态机，并支持查询。

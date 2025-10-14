@@ -1,7 +1,7 @@
 # strategy-management Specification
 
 ## Purpose
-TBD - created by archiving change add-strategy-backtest-migration. Update Purpose after archive.
+提供策略中心能力：策略模板目录、策略生命周期（draft/active 等）、参数校验、研究与优化任务（网格/贝叶斯）以及组合（portfolio）等聚合能力，为不同层级用户提供从模板到优化的完整研究路径。
 ## Requirements
 ### Requirement: 策略 CRUD 必须按用户隔离
 后端 MUST 按 `current_user.id` 约束策略的创建、读取、更新与删除。
