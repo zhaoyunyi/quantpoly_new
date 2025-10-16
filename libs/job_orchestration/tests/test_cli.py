@@ -72,6 +72,10 @@ def test_cli_types_lists_task_registry(capsys, monkeypatch):
     rows = payload["data"]
     item = next(row for row in rows if row["taskType"] == "risk_report_generate")
     assert item["domain"] == "risk"
+    assert item["priority"] >= 0
+    assert item["timeoutSeconds"] > 0
+    assert item["maxRetries"] >= 0
+    assert item["concurrencyLimit"] >= 1
 
 
 def test_cli_schedule_list_and_stop_scoped_by_user(capsys, monkeypatch):

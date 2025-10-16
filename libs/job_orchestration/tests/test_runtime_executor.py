@@ -239,3 +239,49 @@ def test_register_and_recover_system_schedule_templates_is_deduplicated():
     runtime = service.runtime_status()
     assert runtime["systemSchedules"]["total"] >= 4
     assert runtime["systemSchedules"]["active"] >= 4
+
+
+def test_dispatch_job_blocks_when_concurrency_limit_exceeded():
+    """并发上限守卫：超过 SLA concurrencyLimit 时不进入 running。"""
+
+    class _NoCallbackExecutor:
+        @property
+        def name(self) -> str:
+            return "noop"
+
+        def submit(self, *, job) -> str:  # type: ignore[no-untyped-def]
+            return f"dispatch:{job.id}"
+
+        def dispatch(self, *, job, dispatch_id: str, callback) -> None:  # type: ignore[no-untyped-def]
+            del job, dispatch_id, callback
+            # 故意不调用 callback，使任务保持 running。
+            return
+
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+        executor=_NoCallbackExecutor(),
+    )
+
+    first = service.submit_job(
+        user_id="u-1",
+        task_type="backtest_run",
+        payload={"strategyId": "s-1"},
+        idempotency_key="k-concurrency-1",
+    )
+
+    running = service.dispatch_job(user_id="u-1", job_id=first.id)
+    assert running.status == "running"
+
+    second = service.submit_job(
+        user_id="u-1",
+        task_type="backtest_run",
+        payload={"strategyId": "s-2"},
+        idempotency_key="k-concurrency-2",
+    )
+
+    blocked = service.dispatch_job(user_id="u-1", job_id=second.id)
+
+    assert blocked.status == "queued"
+    assert blocked.error_code == "CONCURRENCY_LIMIT_EXCEEDED"
+    assert blocked.error_message is not None

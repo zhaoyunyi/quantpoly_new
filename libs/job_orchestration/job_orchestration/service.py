@@ -8,7 +8,11 @@ from typing import Any, Protocol
 
 from job_orchestration.domain import InvalidJobTransitionError, Job, ScheduleConfig
 from job_orchestration.executor import ExecutionCallbackPayload, InProcessJobExecutor, JobExecutor
-from job_orchestration.task_registry import list_task_type_definitions, supported_task_types
+from job_orchestration.task_registry import (
+    get_task_type_definition,
+    list_task_type_definitions,
+    supported_task_types,
+)
 
 _SYSTEM_USER_ID = "system"
 _SYSTEM_NAMESPACE = "system"
@@ -152,6 +156,14 @@ class JobOrchestrationService:
         if task_type not in supported_task_types():
             raise ValueError(f"unsupported task_type={task_type}")
 
+    def _concurrency_limit_for_task_type(self, *, task_type: str) -> int:
+        definition = get_task_type_definition(task_type)
+        if definition is None:
+            return 1
+        limit = int(definition.sla.concurrency_limit)
+        return max(0, limit)
+
+
     def _namespace_for_user(self, *, user_id: str) -> str:
         return f"user:{user_id}"
 
@@ -259,6 +271,18 @@ class JobOrchestrationService:
     def dispatch_job(self, *, user_id: str, job_id: str) -> Job:
         job = self._load_owned_job(user_id=user_id, job_id=job_id)
 
+        limit = self._concurrency_limit_for_task_type(task_type=job.task_type)
+        running = self._repository.list(user_id=user_id, status="running", task_type=job.task_type)
+        if limit <= 0 or len(running) >= limit:
+            job.error_code = "CONCURRENCY_LIMIT_EXCEEDED"
+            job.error_message = f"concurrency limit exceeded for task_type={job.task_type}"
+            job.updated_at = datetime.now(timezone.utc)
+            self._repository.save(job)
+            return job
+
+        job.error_code = None
+        job.error_message = None
+
         dispatch_id = self._executor.submit(job=job)
         job.start_execution(executor_name=self._executor.name, dispatch_id=dispatch_id)
         self._repository.save(job)
@@ -297,6 +321,18 @@ class JobOrchestrationService:
         passthrough_exceptions: tuple[type[Exception], ...] = (),
     ) -> Job:
         job = self._load_owned_job(user_id=user_id, job_id=job_id)
+
+        limit = self._concurrency_limit_for_task_type(task_type=job.task_type)
+        running = self._repository.list(user_id=user_id, status="running", task_type=job.task_type)
+        if limit <= 0 or len(running) >= limit:
+            job.error_code = "CONCURRENCY_LIMIT_EXCEEDED"
+            job.error_message = f"concurrency limit exceeded for task_type={job.task_type}"
+            job.updated_at = datetime.now(timezone.utc)
+            self._repository.save(job)
+            return job
+
+        job.error_code = None
+        job.error_message = None
 
         dispatch_id = self._executor.submit(job=job)
         job.start_execution(executor_name=self._executor.name, dispatch_id=dispatch_id)
