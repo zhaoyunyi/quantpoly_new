@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from job_orchestration.repository import InMemoryJobRepository
 from job_orchestration.scheduler import InMemoryScheduler
 from job_orchestration.service import JobOrchestrationService
@@ -285,3 +287,40 @@ def test_dispatch_job_blocks_when_concurrency_limit_exceeded():
     assert blocked.status == "queued"
     assert blocked.error_code == "CONCURRENCY_LIMIT_EXCEEDED"
     assert blocked.error_message is not None
+
+
+def test_dispatch_job_on_running_job_raises_invalid_transition():
+    """并发守卫不应掩盖非法状态迁移。"""
+
+    from job_orchestration.domain import InvalidJobTransitionError
+
+    class _NoCallbackExecutor:
+        @property
+        def name(self) -> str:
+            return "noop"
+
+        def submit(self, *, job) -> str:  # type: ignore[no-untyped-def]
+            return f"dispatch:{job.id}"
+
+        def dispatch(self, *, job, dispatch_id: str, callback) -> None:  # type: ignore[no-untyped-def]
+            del job, dispatch_id, callback
+            return
+
+    service = JobOrchestrationService(
+        repository=InMemoryJobRepository(),
+        scheduler=InMemoryScheduler(),
+        executor=_NoCallbackExecutor(),
+    )
+
+    job = service.submit_job(
+        user_id="u-1",
+        task_type="backtest_run",
+        payload={"strategyId": "s-1"},
+        idempotency_key="k-dispatch-running-1",
+    )
+
+    running = service.dispatch_job(user_id="u-1", job_id=job.id)
+    assert running.status == "running"
+
+    with pytest.raises(InvalidJobTransitionError):
+        service.dispatch_job(user_id="u-1", job_id=job.id)

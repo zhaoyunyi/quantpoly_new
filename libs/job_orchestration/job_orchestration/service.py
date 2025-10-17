@@ -271,17 +271,18 @@ class JobOrchestrationService:
     def dispatch_job(self, *, user_id: str, job_id: str) -> Job:
         job = self._load_owned_job(user_id=user_id, job_id=job_id)
 
-        limit = self._concurrency_limit_for_task_type(task_type=job.task_type)
-        running = self._repository.list(user_id=user_id, status="running", task_type=job.task_type)
-        if limit <= 0 or len(running) >= limit:
-            job.error_code = "CONCURRENCY_LIMIT_EXCEEDED"
-            job.error_message = f"concurrency limit exceeded for task_type={job.task_type}"
-            job.updated_at = datetime.now(timezone.utc)
-            self._repository.save(job)
-            return job
+        if job.status == "queued":
+            limit = self._concurrency_limit_for_task_type(task_type=job.task_type)
+            running = self._repository.list(user_id=user_id, status="running", task_type=job.task_type)
+            if limit <= 0 or len(running) >= limit:
+                job.error_code = "CONCURRENCY_LIMIT_EXCEEDED"
+                job.error_message = f"concurrency limit exceeded for task_type={job.task_type}"
+                job.updated_at = datetime.now(timezone.utc)
+                self._repository.save(job)
+                return job
 
-        job.error_code = None
-        job.error_message = None
+            job.error_code = None
+            job.error_message = None
 
         dispatch_id = self._executor.submit(job=job)
         job.start_execution(executor_name=self._executor.name, dispatch_id=dispatch_id)
@@ -322,17 +323,18 @@ class JobOrchestrationService:
     ) -> Job:
         job = self._load_owned_job(user_id=user_id, job_id=job_id)
 
-        limit = self._concurrency_limit_for_task_type(task_type=job.task_type)
-        running = self._repository.list(user_id=user_id, status="running", task_type=job.task_type)
-        if limit <= 0 or len(running) >= limit:
-            job.error_code = "CONCURRENCY_LIMIT_EXCEEDED"
-            job.error_message = f"concurrency limit exceeded for task_type={job.task_type}"
-            job.updated_at = datetime.now(timezone.utc)
-            self._repository.save(job)
-            return job
+        if job.status == "queued":
+            limit = self._concurrency_limit_for_task_type(task_type=job.task_type)
+            running = self._repository.list(user_id=user_id, status="running", task_type=job.task_type)
+            if limit <= 0 or len(running) >= limit:
+                job.error_code = "CONCURRENCY_LIMIT_EXCEEDED"
+                job.error_message = f"concurrency limit exceeded for task_type={job.task_type}"
+                job.updated_at = datetime.now(timezone.utc)
+                self._repository.save(job)
+                return job
 
-        job.error_code = None
-        job.error_message = None
+            job.error_code = None
+            job.error_message = None
 
         dispatch_id = self._executor.submit(job=job)
         job.start_execution(executor_name=self._executor.name, dispatch_id=dispatch_id)
