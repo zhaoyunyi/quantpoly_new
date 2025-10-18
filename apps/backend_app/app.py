@@ -22,7 +22,6 @@ from apps.backend_app.settings import (
     normalize_storage_backend,
 )
 from platform_core.logging import mask_sensitive
-from platform_core.response import error_response
 from platform_core.fastapi import install_exception_handlers
 from platform_core.response import success_response
 from user_auth.app import create_app as create_user_auth_app

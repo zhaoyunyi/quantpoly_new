@@ -6,8 +6,7 @@ BDD Scenarios:
 - 撤销会话后 token 失效
 - 过期会话不可用
 """
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from user_auth.session import Session, SessionStore

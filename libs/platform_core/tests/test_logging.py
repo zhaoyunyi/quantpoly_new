@@ -4,8 +4,6 @@ BDD Scenarios from spec:
 - 打印认证信息时不泄漏 token
 - 覆盖 token / cookie / password / api_key
 """
-import pytest
-
 from platform_core.logging import SensitiveFilter, mask_sensitive
 
 

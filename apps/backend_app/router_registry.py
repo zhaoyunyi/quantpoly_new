@@ -26,7 +26,7 @@ from job_orchestration.service import JobOrchestrationService
 from market_data.alpaca_provider import AlpacaProvider
 from market_data.alpaca_transport import AlpacaHTTPTransport, resolve_alpaca_transport_config
 from market_data.api import create_router as create_market_router
-from market_data.domain import MarketAsset, MarketCandle, MarketQuote
+from market_data.domain import MarketQuote
 from market_data.service import MarketDataService
 from monitoring_realtime.app import create_app as create_monitoring_app
 from platform_core.logging import mask_sensitive

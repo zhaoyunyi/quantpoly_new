@@ -2,7 +2,7 @@
 
 提供 success_response / error_response / paged_response 三种标准响应格式。
 """
-from typing import Any, Optional
+from typing import Any
 
 
 def success_response(

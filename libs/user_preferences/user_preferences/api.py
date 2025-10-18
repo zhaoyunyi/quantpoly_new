@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from platform_core.response import success_response
 from user_preferences.domain import (
     AdvancedPreferencesPermissionError,
-    Preferences,
     PreferencesValidationError,
     apply_patch,
     filter_for_user,

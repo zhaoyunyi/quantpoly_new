@@ -6,14 +6,10 @@ BDD Scenarios from spec:
 - error_response 返回一致结构
 - 响应字段自动序列化为 camelCase
 """
-import pytest
-
 from platform_core.response import (
     success_response,
     error_response,
-    paged_response,
 )
-from platform_core.schema import CamelModel
 
 
 class TestSuccessResponse:

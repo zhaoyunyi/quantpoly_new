@@ -55,7 +55,7 @@ def test_get_related_backtests_returns_same_strategy_excluding_current_and_suppo
     app, service = _build_app(current_user_id="u-1")
 
     anchor = service.create_task(user_id="u-1", strategy_id="s-anchor", config={"symbol": "AAPL"})
-    related_pending = service.create_task(user_id="u-1", strategy_id="s-anchor", config={"symbol": "AAPL"})
+    service.create_task(user_id="u-1", strategy_id="s-anchor", config={"symbol": "AAPL"})
     related_completed = service.create_task(user_id="u-1", strategy_id="s-anchor", config={"symbol": "AAPL"})
     service.transition(user_id="u-1", task_id=related_completed.id, to_status="running")
     service.transition(user_id="u-1", task_id=related_completed.id, to_status="completed", metrics={"returnRate": 0.12})
@@ -77,5 +77,4 @@ def test_get_related_backtests_returns_same_strategy_excluding_current_and_suppo
     assert items[0]["id"] == related_completed.id
     assert items[0]["status"] == "completed"
     assert items[0]["strategyId"] == "s-anchor"
-
 

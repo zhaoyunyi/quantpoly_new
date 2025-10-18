@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
 
 from risk_control.repository import InMemoryRiskRepository
 from risk_control.service import AccountAccessDeniedError, RiskControlService

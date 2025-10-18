@@ -3,8 +3,6 @@ import json
 import subprocess
 import sys
 
-import pytest
-
 
 PYTHON = sys.executable or "python3.11"
 CLI_MODULE = "platform_core.cli"
