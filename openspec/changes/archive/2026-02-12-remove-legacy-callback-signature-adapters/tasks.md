@@ -28,5 +28,5 @@
 
 - [x] 6.1 运行 `ruff check .`
 - [x] 6.2 运行 `pytest -q`
-- [ ] 6.3 使用 `git cnd` 提交
-- [ ] 6.4 执行 `openspec archive remove-legacy-callback-signature-adapters --yes`
+- [x] 6.3 使用 `git cnd` 提交
+- [x] 6.4 执行 `openspec archive remove-legacy-callback-signature-adapters --yes`
