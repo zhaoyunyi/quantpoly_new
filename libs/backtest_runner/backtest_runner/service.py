@@ -6,6 +6,8 @@ import math
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from platform_core.callback_contract import require_explicit_keyword_parameters
+
 from backtest_runner.domain import BacktestTask
 from backtest_runner.repository import InMemoryBacktestRepository
 from backtest_runner.result_store import InMemoryBacktestResultStore
@@ -71,6 +73,17 @@ class BacktestService:
         self._result_store = result_store or InMemoryBacktestResultStore()
         self._strategy_reader = strategy_reader
         self._market_history_reader = market_history_reader
+
+        require_explicit_keyword_parameters(
+            self._strategy_reader,
+            required=["user_id", "strategy_id"],
+            callback_name="strategy_reader",
+        )
+        require_explicit_keyword_parameters(
+            self._market_history_reader,
+            required=["user_id", "symbol", "start_date", "end_date", "timeframe", "limit"],
+            callback_name="market_history_reader",
+        )
 
     @staticmethod
     def _strategy_field(strategy: Any, key: str, default: Any = None) -> Any:
@@ -139,15 +152,7 @@ class BacktestService:
         if self._strategy_reader is None:
             return None
 
-        try:
-            return self._strategy_reader(user_id=user_id, strategy_id=strategy_id)
-        except TypeError:
-            pass
-
-        try:
-            return self._strategy_reader(user_id, strategy_id)
-        except TypeError:
-            return self._strategy_reader(strategy_id)
+        return self._strategy_reader(user_id=user_id, strategy_id=strategy_id)
 
     def _call_market_history_reader(
         self,
@@ -162,22 +167,14 @@ class BacktestService:
         if self._market_history_reader is None:
             return None
 
-        try:
-            return self._market_history_reader(
-                user_id=user_id,
-                symbol=symbol,
-                start_date=start_date,
-                end_date=end_date,
-                timeframe=timeframe,
-                limit=limit,
-            )
-        except TypeError:
-            pass
-
-        try:
-            return self._market_history_reader(user_id, symbol, timeframe, limit)
-        except TypeError:
-            return self._market_history_reader(symbol)
+        return self._market_history_reader(
+            user_id=user_id,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            timeframe=timeframe,
+            limit=limit,
+        )
 
     @staticmethod
     def _moving_average_events(

@@ -40,7 +40,7 @@ def _build_app(*, current_user_id: str):
     )
     strategy_service = StrategyService(
         repository=strategy_repo,
-        count_active_backtests=lambda _user_id, _strategy_id: 0,
+        count_active_backtests=lambda user_id, strategy_id: 0,
     )
 
     app = FastAPI()

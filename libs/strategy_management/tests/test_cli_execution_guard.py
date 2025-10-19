@@ -18,7 +18,7 @@ def _run(handler, *, capsys, **kwargs):
 
 def test_cli_validate_execution_returns_validation_error(capsys, monkeypatch):
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
     monkeypatch.setattr(cli, "_repo", repo)
     monkeypatch.setattr(cli, "_service", service)
 
@@ -43,7 +43,7 @@ def test_cli_validate_execution_returns_validation_error(capsys, monkeypatch):
 
 def test_cli_validate_execution_returns_success_for_valid_input(capsys, monkeypatch):
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
     monkeypatch.setattr(cli, "_repo", repo)
     monkeypatch.setattr(cli, "_service", service)
 

@@ -10,7 +10,7 @@ def test_create_and_list_strategies_are_user_scoped():
     from strategy_management.service import StrategyService
 
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
 
     created = service.create_strategy(
         user_id="u-1",
@@ -32,7 +32,7 @@ def test_get_strategy_returns_none_for_non_owner():
     from strategy_management.service import StrategyService
 
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
 
     created = service.create_strategy(
         user_id="u-1",
@@ -50,7 +50,7 @@ def test_delete_strategy_blocked_when_backtest_in_use():
     from strategy_management.service import StrategyService
 
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 2)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 2)
 
     created = service.create_strategy(
         user_id="u-1",
@@ -68,7 +68,7 @@ def test_delete_strategy_success_when_no_active_backtests():
     from strategy_management.service import StrategyService
 
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
 
     created = service.create_strategy(
         user_id="u-1",

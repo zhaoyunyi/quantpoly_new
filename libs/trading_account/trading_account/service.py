@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
+from platform_core.callback_contract import require_explicit_keyword_parameters
 from platform_core.uow import NoopUnitOfWork, SnapshotUnitOfWork, UnitOfWork
 from trading_account.domain import (
     CashFlow,
@@ -87,6 +88,17 @@ class TradingAccountService:
         self._risk_evaluator = risk_evaluator
         self._refresh_records: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
         self._ops_store = ops_store or InMemoryTradingOperationsStore()
+
+        require_explicit_keyword_parameters(
+            self._risk_snapshot_reader,
+            required=["user_id", "account_id"],
+            callback_name="risk_snapshot_reader",
+        )
+        require_explicit_keyword_parameters(
+            self._risk_evaluator,
+            required=["user_id", "account_id"],
+            callback_name="risk_evaluator",
+        )
 
     def create_account(
         self,
@@ -218,10 +230,7 @@ class TradingAccountService:
         if callback is None:
             raise RiskAssessmentUnavailableError("risk assessment callback is not configured")
 
-        try:
-            return callback(**kwargs)
-        except TypeError:
-            return callback(kwargs["user_id"], kwargs["account_id"])
+        return callback(**kwargs)
 
     def get_risk_assessment(self, *, user_id: str, account_id: str) -> Any:
         self._assert_account_owner(user_id=user_id, account_id=account_id)

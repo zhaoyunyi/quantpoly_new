@@ -7,6 +7,8 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from platform_core.callback_contract import require_explicit_keyword_parameters
+
 from signal_execution.domain import ExecutionRecord, TradingSignal
 from signal_execution.repository import InMemorySignalRepository
 
@@ -71,6 +73,17 @@ class SignalExecutionService:
         self._governance_checker = governance_checker
         self._strategy_reader = strategy_reader
         self._market_history_reader = market_history_reader
+
+        require_explicit_keyword_parameters(
+            self._strategy_reader,
+            required=["user_id", "strategy_id"],
+            callback_name="strategy_reader",
+        )
+        require_explicit_keyword_parameters(
+            self._market_history_reader,
+            required=["user_id", "symbol", "timeframe", "limit"],
+            callback_name="market_history_reader",
+        )
 
     def _ensure_admin(
         self,
@@ -217,15 +230,7 @@ class SignalExecutionService:
         if self._strategy_reader is None:
             return None
 
-        try:
-            return self._strategy_reader(user_id=user_id, strategy_id=strategy_id)
-        except TypeError:
-            pass
-
-        try:
-            return self._strategy_reader(user_id, strategy_id)
-        except TypeError:
-            return self._strategy_reader(strategy_id)
+        return self._strategy_reader(user_id=user_id, strategy_id=strategy_id)
 
     def _call_market_history_reader(
         self,
@@ -238,20 +243,12 @@ class SignalExecutionService:
         if self._market_history_reader is None:
             return []
 
-        try:
-            return self._market_history_reader(
-                user_id=user_id,
-                symbol=symbol,
-                timeframe=timeframe,
-                limit=limit,
-            )
-        except TypeError:
-            pass
-
-        try:
-            return self._market_history_reader(user_id, symbol, timeframe, limit)
-        except TypeError:
-            return self._market_history_reader(symbol)
+        return self._market_history_reader(
+            user_id=user_id,
+            symbol=symbol,
+            timeframe=timeframe,
+            limit=limit,
+        )
 
     def _evaluate_moving_average(
         self,

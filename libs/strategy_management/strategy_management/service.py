@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from platform_core.callback_contract import require_explicit_keyword_parameters
+
 from strategy_management.domain import (
     InvalidStrategyTransitionError,
     Strategy,
@@ -140,6 +142,27 @@ class StrategyService:
         self._stats_backtests_for_strategy = stats_backtests_for_strategy
         self._portfolio_repository = portfolio_repository or InMemoryPortfolioRepository()
 
+        require_explicit_keyword_parameters(
+            self._count_active_backtests,
+            required=["user_id", "strategy_id"],
+            callback_name="count_active_backtests",
+        )
+        require_explicit_keyword_parameters(
+            self._create_backtest_for_strategy,
+            required=["user_id", "strategy_id", "config", "idempotency_key"],
+            callback_name="create_backtest_for_strategy",
+        )
+        require_explicit_keyword_parameters(
+            self._list_backtests_for_strategy,
+            required=["user_id", "strategy_id", "status", "page", "page_size"],
+            callback_name="list_backtests_for_strategy",
+        )
+        require_explicit_keyword_parameters(
+            self._stats_backtests_for_strategy,
+            required=["user_id", "strategy_id"],
+            callback_name="stats_backtests_for_strategy",
+        )
+
     def list_templates(self) -> list[dict[str, Any]]:
         return list(_TEMPLATE_CATALOG.values())
 
@@ -242,39 +265,14 @@ class StrategyService:
         user_id: str,
         strategy_id: str,
     ) -> int:
-        try:
-            return int(callback(user_id=user_id, strategy_id=strategy_id))
-        except TypeError:
-            pass
-
-        try:
-            return int(callback(user_id, strategy_id))
-        except TypeError:
-            return int(callback(strategy_id))
+        return int(callback(user_id=user_id, strategy_id=strategy_id))
 
     @staticmethod
     def _call_required(callback: Callable[..., Any] | None, **kwargs: Any) -> Any:
         if callback is None:
             raise RuntimeError("backtest linkage callback is not configured")
 
-        try:
-            return callback(**kwargs)
-        except TypeError:
-            ordered = [
-                kwargs["user_id"],
-                kwargs["strategy_id"],
-            ]
-            if "config" in kwargs:
-                ordered.append(kwargs["config"])
-            if "idempotency_key" in kwargs:
-                ordered.append(kwargs["idempotency_key"])
-            if "status" in kwargs:
-                ordered.append(kwargs["status"])
-            if "page" in kwargs:
-                ordered.append(kwargs["page"])
-            if "page_size" in kwargs:
-                ordered.append(kwargs["page_size"])
-            return callback(*ordered)
+        return callback(**kwargs)
 
     def validate_execution_parameters(
         self,

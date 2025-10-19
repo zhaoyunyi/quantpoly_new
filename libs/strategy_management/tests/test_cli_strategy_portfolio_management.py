@@ -18,7 +18,7 @@ from strategy_management.service import StrategyService
 @pytest.fixture(autouse=True)
 def _reset_cli_state(monkeypatch):
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
     monkeypatch.setattr(cli, "_repo", repo)
     monkeypatch.setattr(cli, "_service", service)
     monkeypatch.setattr(cli, "_job_service", JobOrchestrationService(repository=InMemoryJobRepository(), scheduler=InMemoryScheduler()))

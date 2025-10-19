@@ -19,7 +19,7 @@ def _build_app(*, current_user_id: str):
         return _User(current_user_id)
 
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
     app = FastAPI()
     app.include_router(create_router(service=service, get_current_user=_get_current_user))
     return app, service

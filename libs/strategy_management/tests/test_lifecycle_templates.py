@@ -10,7 +10,7 @@ from strategy_management.service import InvalidStrategyParametersError, Strategy
 
 
 def _service() -> StrategyService:
-    return StrategyService(repository=InMemoryStrategyRepository(), count_active_backtests=lambda _sid: 0)
+    return StrategyService(repository=InMemoryStrategyRepository(), count_active_backtests=lambda user_id, strategy_id: 0)
 
 
 def test_list_templates_contains_required_defaults():

@@ -21,7 +21,7 @@ def _build_client(*, current_user_id: str = "u-1") -> TestClient:
 
     service = StrategyService(
         repository=InMemoryStrategyRepository(),
-        count_active_backtests=lambda _user_id, _strategy_id: 0,
+        count_active_backtests=lambda user_id, strategy_id: 0,
     )
     app = FastAPI()
     app.include_router(create_router(service=service, get_current_user=_get_current_user))

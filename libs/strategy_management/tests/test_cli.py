@@ -15,7 +15,7 @@ from strategy_management.service import StrategyService
 @pytest.fixture(autouse=True)
 def _reset_cli_state(monkeypatch):
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 0)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 0)
     monkeypatch.setattr(cli, "_repo", repo)
     monkeypatch.setattr(cli, "_service", service)
 
@@ -121,7 +121,7 @@ def test_cli_create_and_list_scoped(capsys):
 
 def test_cli_delete_returns_strategy_in_use_code(capsys, monkeypatch):
     repo = InMemoryStrategyRepository()
-    service = StrategyService(repository=repo, count_active_backtests=lambda _strategy_id: 1)
+    service = StrategyService(repository=repo, count_active_backtests=lambda user_id, strategy_id: 1)
     monkeypatch.setattr(cli, "_repo", repo)
     monkeypatch.setattr(cli, "_service", service)
 
