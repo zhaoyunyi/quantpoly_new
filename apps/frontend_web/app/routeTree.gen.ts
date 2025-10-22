@@ -16,12 +16,14 @@ import { Route as DashboardImport } from './routes/dashboard'
 import { Route as IndexImport } from './routes/index'
 import { Route as TradingIndexImport } from './routes/trading/index'
 import { Route as StrategiesIndexImport } from './routes/strategies/index'
+import { Route as BacktestsIndexImport } from './routes/backtests/index'
 import { Route as TradingAnalyticsImport } from './routes/trading/analytics'
 import { Route as TradingAccountsImport } from './routes/trading/accounts'
 import { Route as StrategiesSimpleImport } from './routes/strategies/simple'
 import { Route as StrategiesCompareImport } from './routes/strategies/compare'
 import { Route as StrategiesAdvancedImport } from './routes/strategies/advanced'
 import { Route as StrategiesIdImport } from './routes/strategies/$id'
+import { Route as BacktestsIdImport } from './routes/backtests/$id'
 import { Route as AuthVerifyEmailImport } from './routes/auth/verify-email'
 import { Route as AuthResetPasswordImport } from './routes/auth/reset-password'
 import { Route as AuthResendVerificationImport } from './routes/auth/resend-verification'
@@ -61,6 +63,12 @@ const StrategiesIndexRoute = StrategiesIndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
+const BacktestsIndexRoute = BacktestsIndexImport.update({
+  id: '/backtests/',
+  path: '/backtests/',
+  getParentRoute: () => rootRoute,
+} as any)
+
 const TradingAnalyticsRoute = TradingAnalyticsImport.update({
   id: '/trading/analytics',
   path: '/trading/analytics',
@@ -94,6 +102,12 @@ const StrategiesAdvancedRoute = StrategiesAdvancedImport.update({
 const StrategiesIdRoute = StrategiesIdImport.update({
   id: '/strategies/$id',
   path: '/strategies/$id',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const BacktestsIdRoute = BacktestsIdImport.update({
+  id: '/backtests/$id',
+  path: '/backtests/$id',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -200,6 +214,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthVerifyEmailImport
       parentRoute: typeof rootRoute
     }
+    '/backtests/$id': {
+      id: '/backtests/$id'
+      path: '/backtests/$id'
+      fullPath: '/backtests/$id'
+      preLoaderRoute: typeof BacktestsIdImport
+      parentRoute: typeof rootRoute
+    }
     '/strategies/$id': {
       id: '/strategies/$id'
       path: '/strategies/$id'
@@ -242,6 +263,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TradingAnalyticsImport
       parentRoute: typeof rootRoute
     }
+    '/backtests/': {
+      id: '/backtests/'
+      path: '/backtests'
+      fullPath: '/backtests'
+      preLoaderRoute: typeof BacktestsIndexImport
+      parentRoute: typeof rootRoute
+    }
     '/strategies/': {
       id: '/strategies/'
       path: '/strategies'
@@ -271,12 +299,14 @@ export interface FileRoutesByFullPath {
   '/auth/resend-verification': typeof AuthResendVerificationRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
+  '/backtests/$id': typeof BacktestsIdRoute
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
+  '/backtests': typeof BacktestsIndexRoute
   '/strategies': typeof StrategiesIndexRoute
   '/trading': typeof TradingIndexRoute
 }
@@ -291,12 +321,14 @@ export interface FileRoutesByTo {
   '/auth/resend-verification': typeof AuthResendVerificationRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
+  '/backtests/$id': typeof BacktestsIdRoute
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
+  '/backtests': typeof BacktestsIndexRoute
   '/strategies': typeof StrategiesIndexRoute
   '/trading': typeof TradingIndexRoute
 }
@@ -312,12 +344,14 @@ export interface FileRoutesById {
   '/auth/resend-verification': typeof AuthResendVerificationRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
+  '/backtests/$id': typeof BacktestsIdRoute
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
+  '/backtests/': typeof BacktestsIndexRoute
   '/strategies/': typeof StrategiesIndexRoute
   '/trading/': typeof TradingIndexRoute
 }
@@ -334,12 +368,14 @@ export interface FileRouteTypes {
     | '/auth/resend-verification'
     | '/auth/reset-password'
     | '/auth/verify-email'
+    | '/backtests/$id'
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
     | '/strategies/simple'
     | '/trading/accounts'
     | '/trading/analytics'
+    | '/backtests'
     | '/strategies'
     | '/trading'
   fileRoutesByTo: FileRoutesByTo
@@ -353,12 +389,14 @@ export interface FileRouteTypes {
     | '/auth/resend-verification'
     | '/auth/reset-password'
     | '/auth/verify-email'
+    | '/backtests/$id'
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
     | '/strategies/simple'
     | '/trading/accounts'
     | '/trading/analytics'
+    | '/backtests'
     | '/strategies'
     | '/trading'
   id:
@@ -372,12 +410,14 @@ export interface FileRouteTypes {
     | '/auth/resend-verification'
     | '/auth/reset-password'
     | '/auth/verify-email'
+    | '/backtests/$id'
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
     | '/strategies/simple'
     | '/trading/accounts'
     | '/trading/analytics'
+    | '/backtests/'
     | '/strategies/'
     | '/trading/'
   fileRoutesById: FileRoutesById
@@ -393,12 +433,14 @@ export interface RootRouteChildren {
   AuthResendVerificationRoute: typeof AuthResendVerificationRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
+  BacktestsIdRoute: typeof BacktestsIdRoute
   StrategiesIdRoute: typeof StrategiesIdRoute
   StrategiesAdvancedRoute: typeof StrategiesAdvancedRoute
   StrategiesCompareRoute: typeof StrategiesCompareRoute
   StrategiesSimpleRoute: typeof StrategiesSimpleRoute
   TradingAccountsRoute: typeof TradingAccountsRoute
   TradingAnalyticsRoute: typeof TradingAnalyticsRoute
+  BacktestsIndexRoute: typeof BacktestsIndexRoute
   StrategiesIndexRoute: typeof StrategiesIndexRoute
   TradingIndexRoute: typeof TradingIndexRoute
 }
@@ -413,12 +455,14 @@ const rootRouteChildren: RootRouteChildren = {
   AuthResendVerificationRoute: AuthResendVerificationRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
   AuthVerifyEmailRoute: AuthVerifyEmailRoute,
+  BacktestsIdRoute: BacktestsIdRoute,
   StrategiesIdRoute: StrategiesIdRoute,
   StrategiesAdvancedRoute: StrategiesAdvancedRoute,
   StrategiesCompareRoute: StrategiesCompareRoute,
   StrategiesSimpleRoute: StrategiesSimpleRoute,
   TradingAccountsRoute: TradingAccountsRoute,
   TradingAnalyticsRoute: TradingAnalyticsRoute,
+  BacktestsIndexRoute: BacktestsIndexRoute,
   StrategiesIndexRoute: StrategiesIndexRoute,
   TradingIndexRoute: TradingIndexRoute,
 }
@@ -442,12 +486,14 @@ export const routeTree = rootRoute
         "/auth/resend-verification",
         "/auth/reset-password",
         "/auth/verify-email",
+        "/backtests/$id",
         "/strategies/$id",
         "/strategies/advanced",
         "/strategies/compare",
         "/strategies/simple",
         "/trading/accounts",
         "/trading/analytics",
+        "/backtests/",
         "/strategies/",
         "/trading/"
       ]
@@ -479,6 +525,9 @@ export const routeTree = rootRoute
     "/auth/verify-email": {
       "filePath": "auth/verify-email.tsx"
     },
+    "/backtests/$id": {
+      "filePath": "backtests/$id.tsx"
+    },
     "/strategies/$id": {
       "filePath": "strategies/$id.tsx"
     },
@@ -496,6 +545,9 @@ export const routeTree = rootRoute
     },
     "/trading/analytics": {
       "filePath": "trading/analytics.tsx"
+    },
+    "/backtests/": {
+      "filePath": "backtests/index.tsx"
     },
     "/strategies/": {
       "filePath": "strategies/index.tsx"

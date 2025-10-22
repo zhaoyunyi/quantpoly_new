@@ -827,11 +827,113 @@ export function evaluateRiskAssessment(accountId: string): Promise<RiskAssessmen
   return post<RiskAssessment>(`/trading/accounts/${id}/risk-assessment/evaluate`)
 }
 
-/* ─── Backtests Compare ─── */
+/* ─── Backtests ─── */
+
+export type BacktestStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface BacktestTask {
+  id: string
+  userId: string
+  strategyId: string
+  status: BacktestStatus
+  config: Record<string, unknown>
+  metrics: Record<string, number>
+  displayName: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BacktestListResult {
+  items: BacktestTask[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CreateBacktestPayload {
+  strategyId: string
+  config: Record<string, unknown>
+  idempotencyKey?: string
+}
+
+export interface BacktestResult {
+  equityCurve?: Array<{ timestamp: string; equity: number }>
+  trades?: Array<Record<string, unknown>>
+  metrics?: Record<string, number>
+  [key: string]: unknown
+}
 
 export interface BacktestCompareResult {
   taskIds: string[]
   metrics: Array<Record<string, unknown>>
+}
+
+export interface RenameBacktestPayload {
+  displayName: string | null
+}
+
+export function getBacktests(params?: {
+  strategyId?: string
+  status?: string
+  page?: number
+  pageSize?: number
+}): Promise<BacktestListResult> {
+  const path = _withQuery('/backtests', {
+    strategyId: params?.strategyId,
+    status: params?.status,
+    page: params?.page,
+    pageSize: params?.pageSize,
+  })
+  return get<BacktestListResult>(path)
+}
+
+export function getBacktest(taskId: string): Promise<BacktestTask> {
+  const id = encodeURIComponent(taskId)
+  return get<BacktestTask>(`/backtests/${id}`)
+}
+
+export function createBacktest(payload: CreateBacktestPayload): Promise<BacktestTask> {
+  return post<BacktestTask>('/backtests', payload)
+}
+
+export function getBacktestResult(taskId: string): Promise<BacktestResult> {
+  const id = encodeURIComponent(taskId)
+  return get<BacktestResult>(`/backtests/${id}/result`)
+}
+
+export function getRelatedBacktests(
+  taskId: string,
+  params?: { limit?: number; status?: string },
+): Promise<BacktestTask[]> {
+  const id = encodeURIComponent(taskId)
+  const path = _withQuery(`/backtests/${id}/related`, {
+    limit: params?.limit,
+    status: params?.status,
+  })
+  return get<BacktestTask[]>(path)
+}
+
+export function renameBacktest(
+  taskId: string,
+  payload: RenameBacktestPayload,
+): Promise<BacktestTask> {
+  const id = encodeURIComponent(taskId)
+  return patch<BacktestTask>(`/backtests/${id}/name`, payload)
+}
+
+export function cancelBacktest(taskId: string): Promise<BacktestTask> {
+  const id = encodeURIComponent(taskId)
+  return post<BacktestTask>(`/backtests/${id}/cancel`)
+}
+
+export function retryBacktest(taskId: string): Promise<BacktestTask> {
+  const id = encodeURIComponent(taskId)
+  return post<BacktestTask>(`/backtests/${id}/retry`)
+}
+
+export function deleteBacktest(taskId: string): Promise<{ deleted: boolean }> {
+  const id = encodeURIComponent(taskId)
+  return del<{ deleted: boolean }>(`/backtests/${id}`)
 }
 
 export function compareBacktests(
