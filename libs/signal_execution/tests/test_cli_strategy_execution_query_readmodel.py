@@ -30,7 +30,7 @@ def _build_service() -> tuple[SignalExecutionService, InMemorySignalRepository]:
 def test_cli_should_support_templates_strategy_statistics_and_trend(capsys, monkeypatch):
     service, repo = _build_service()
     monkeypatch.setattr(cli, "_service", service)
-    now = datetime(2026, 2, 11, 10, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
 
     repo.save_execution(
         ExecutionRecord(
