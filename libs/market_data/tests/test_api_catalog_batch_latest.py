@@ -72,7 +72,7 @@ def _build_app() -> TestClient:
     class _User:
         id = "u-1"
 
-    def _get_current_user():
+    def _get_current_user(request=None):
         return _User()
 
     service = MarketDataService(provider=_Provider(), quote_cache_ttl_seconds=60)

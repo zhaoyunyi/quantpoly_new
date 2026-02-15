@@ -16,7 +16,7 @@ def _build_app(*, provider, rate_limit_max_requests: int = 20, quote_cache_ttl_s
         def __init__(self):
             self.id = "u-1"
 
-    def _get_current_user():
+    def _get_current_user(request=None):
         return _User()
 
     service = MarketDataService(

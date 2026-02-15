@@ -69,7 +69,7 @@ def _build_client(*, current_user_id: str = "u-1"):
     from market_data.api import create_router
     from market_data.service import MarketDataService
 
-    def _get_current_user():
+    def _get_current_user(request=None):
         return _User(current_user_id)
 
     service = MarketDataService(provider=_StableProvider())

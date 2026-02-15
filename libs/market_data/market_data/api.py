@@ -7,7 +7,6 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-from starlette.requests import Request
 
 from market_data.domain import (
     BatchQuoteItem,
@@ -23,6 +22,7 @@ from market_data.domain import (
 )
 from market_data.service import MarketDataService
 from market_data.stream_gateway import MarketDataStreamGateway, StreamGatewayError
+from platform_core.callback_contract import require_explicit_keyword_parameters
 from platform_core.response import error_response, success_response
 
 from job_orchestration.service import (
@@ -172,6 +172,12 @@ def create_router(
     get_current_user: Any,
     job_service: JobOrchestrationService | None = None,
 ) -> APIRouter:
+    require_explicit_keyword_parameters(
+        get_current_user,
+        required=["request"],
+        callback_name="market_data.get_current_user",
+    )
+
     router = APIRouter()
     stream_gateway = MarketDataStreamGateway(
         quote_reader=lambda user_id, symbols: service.get_quotes(user_id=user_id, symbols=symbols),
@@ -189,16 +195,7 @@ def create_router(
         }
 
     def _resolve_ws_current_user(*, websocket: WebSocket):
-        try:
-            return get_current_user()
-        except TypeError:
-            pass
-
-        request = Request(websocket.scope)
-        try:
-            return get_current_user(request)
-        except TypeError:
-            return get_current_user(websocket)
+        return get_current_user(request=websocket)
 
     @router.websocket("/market/stream")
     async def stream_gateway_socket(websocket: WebSocket):

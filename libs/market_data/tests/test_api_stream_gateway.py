@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -54,7 +55,7 @@ def _build_client(*, provider, current_user_id: str = "u-1") -> TestClient:
     from market_data.api import create_router
     from market_data.service import MarketDataService
 
-    def _get_current_user():
+    def _get_current_user(request=None):
         return _User(current_user_id)
 
     app = FastAPI()
@@ -151,7 +152,7 @@ def test_stream_websocket_auth_failure_closes_connection():
     from market_data.api import create_router
     from market_data.service import MarketDataService
 
-    def _deny_user():
+    def _deny_user(request=None):
         raise PermissionError("UNAUTHORIZED")
 
     app = FastAPI()
@@ -167,3 +168,17 @@ def test_stream_websocket_auth_failure_closes_connection():
         payload = ws.receive_json()
         assert payload["type"] == "stream.error"
         assert payload["code"] == "STREAM_AUTH_REQUIRED"
+
+
+def test_stream_gateway_rejects_legacy_get_current_user_signature():
+    from market_data.api import create_router
+    from market_data.service import MarketDataService
+
+    def _legacy_get_current_user():
+        return _User("u-1")
+
+    with pytest.raises(TypeError):
+        create_router(
+            service=MarketDataService(provider=_StableProvider()),
+            get_current_user=_legacy_get_current_user,
+        )
