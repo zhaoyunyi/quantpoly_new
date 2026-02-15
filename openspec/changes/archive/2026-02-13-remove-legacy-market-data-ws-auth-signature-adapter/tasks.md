@@ -17,5 +17,5 @@
 
 - [x] 4.1 运行 `ruff check .`
 - [x] 4.2 运行 `pytest -q`
-- [ ] 4.3 使用 `git cnd` 提交
-- [ ] 4.4 执行 `openspec archive remove-legacy-market-data-ws-auth-signature-adapter --yes`
+- [x] 4.3 使用 `git cnd` 提交
+- [x] 4.4 执行 `openspec archive remove-legacy-market-data-ws-auth-signature-adapter --yes`
