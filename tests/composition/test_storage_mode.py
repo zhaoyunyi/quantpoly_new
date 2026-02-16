@@ -7,43 +7,86 @@ import pytest
 from apps.backend_app.router_registry import build_context
 from apps.backend_app.settings import CompositionSettings, normalize_job_executor_mode
 from backtest_runner.repository import InMemoryBacktestRepository
-from backtest_runner.repository_sqlite import SQLiteBacktestRepository
+from backtest_runner.repository_postgres import PostgresBacktestRepository
 from backtest_runner.result_store import InMemoryBacktestResultStore
-from backtest_runner.result_store_sqlite import SQLiteBacktestResultStore
+from backtest_runner.result_store_postgres import PostgresBacktestResultStore
 from job_orchestration.repository import InMemoryJobRepository
-from job_orchestration.repository_sqlite import SQLiteJobRepository
-from job_orchestration.scheduler import InMemoryScheduler, SQLiteScheduler
+from job_orchestration.repository_postgres import PostgresJobRepository
+from job_orchestration.scheduler import InMemoryScheduler
 from risk_control.repository import InMemoryRiskRepository
-from risk_control.repository_sqlite import SQLiteRiskRepository
+from risk_control.repository_postgres import PostgresRiskRepository
 from signal_execution.repository import InMemorySignalRepository
-from signal_execution.repository_sqlite import SQLiteSignalRepository
+from signal_execution.repository_postgres import PostgresSignalRepository
 from strategy_management.repository import InMemoryStrategyRepository
-from strategy_management.repository_sqlite import SQLiteStrategyRepository
+from strategy_management.repository_postgres import PostgresStrategyRepository
 from trading_account.repository import InMemoryTradingAccountRepository
-from trading_account.repository_sqlite import SQLiteTradingAccountRepository
-from user_preferences.store import InMemoryPreferencesStore
-from user_preferences.store_sqlite import SQLitePreferencesStore
+from trading_account.repository_postgres import PostgresTradingAccountRepository
+from user_auth.repository_postgres import PostgresUserRepository
+from user_auth.session_postgres import PostgresSessionStore
+from user_preferences.store import InMemoryPreferencesStore, PostgresPreferencesStore
 
 
-def test_build_context_uses_sqlite_repositories_for_production_mode(tmp_path):
-    db_path = tmp_path / "backend.sqlite3"
+class _FakeConn:
+    def exec_driver_sql(self, _sql, _params=None):
+        class _R:
+            rowcount = 1
 
-    context = build_context(storage_backend="sqlite", sqlite_db_path=str(db_path))
+            @staticmethod
+            def fetchone():
+                return None
 
-    assert isinstance(context.strategy_repo, SQLiteStrategyRepository)
-    assert isinstance(context.backtest_repo, SQLiteBacktestRepository)
-    assert isinstance(context.trading_repo, SQLiteTradingAccountRepository)
-    assert isinstance(context.job_repo, SQLiteJobRepository)
-    assert isinstance(context.job_scheduler, SQLiteScheduler)
-    assert isinstance(context.backtest_result_store, SQLiteBacktestResultStore)
-    assert isinstance(context.risk_repo, SQLiteRiskRepository)
-    assert isinstance(context.signal_repo, SQLiteSignalRepository)
-    assert isinstance(context.preferences_store, SQLitePreferencesStore)
+            @staticmethod
+            def fetchall():
+                return []
+
+        return _R()
+
+
+class _FakeBegin:
+    def __enter__(self):
+        return _FakeConn()
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeEngine:
+    def begin(self):
+        return _FakeBegin()
+
+
+def test_build_context_uses_postgres_repositories_for_production_mode(monkeypatch):
+    fake_engine = _FakeEngine()
+    monkeypatch.setattr("apps.backend_app.router_registry._build_postgres_engine", lambda dsn: fake_engine)
+
+    context = build_context(
+        storage_backend="postgres",
+        postgres_dsn="postgresql+psycopg://quantpoly:quantpoly@localhost:54329/quantpoly_test",
+    )
+
+    assert isinstance(context.user_repo, PostgresUserRepository)
+    assert isinstance(context.session_store, PostgresSessionStore)
+    assert isinstance(context.strategy_repo, PostgresStrategyRepository)
+    assert isinstance(context.backtest_repo, PostgresBacktestRepository)
+    assert isinstance(context.trading_repo, PostgresTradingAccountRepository)
+    assert isinstance(context.job_repo, PostgresJobRepository)
+    assert isinstance(context.job_scheduler, InMemoryScheduler)
+    assert isinstance(context.backtest_result_store, PostgresBacktestResultStore)
+    assert isinstance(context.risk_repo, PostgresRiskRepository)
+    assert isinstance(context.signal_repo, PostgresSignalRepository)
+    assert isinstance(context.preferences_store, PostgresPreferencesStore)
+
+
+def test_build_context_rejects_postgres_mode_without_dsn():
+    with pytest.raises(ValueError, match="postgres_dsn"):
+        build_context(storage_backend="postgres", postgres_dsn=None)
 
 
 def test_build_context_uses_inmemory_repositories_for_test_mode():
     context = build_context(storage_backend="memory")
 
+    assert context.user_repo.__class__.__name__ == "UserRepository"
+    assert context.session_store.__class__.__name__ == "SessionStore"
     assert isinstance(context.strategy_repo, InMemoryStrategyRepository)
     assert isinstance(context.backtest_repo, InMemoryBacktestRepository)
     assert isinstance(context.trading_repo, InMemoryTradingAccountRepository)
@@ -79,7 +122,6 @@ def test_build_context_alpaca_provider_fail_fast_without_required_config(monkeyp
 def test_build_context_rejects_unknown_market_data_provider():
     with pytest.raises(ValueError, match="market_data_provider"):
         build_context(storage_backend="memory", market_data_provider="unknown")
-
 
 
 def test_normalize_job_executor_mode_supports_inprocess_and_celery_adapter():

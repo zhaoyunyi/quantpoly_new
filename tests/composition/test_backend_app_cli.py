@@ -37,7 +37,7 @@ def test_cli_resolve_settings_from_stdin_json():
 
 def test_cli_rejects_invalid_market_data_provider():
     payload = {
-        "storageBackend": "sqlite",
+        "storageBackend": "postgres",
         "marketDataProvider": "unknown",
     }
 
@@ -54,10 +54,9 @@ def test_cli_rejects_invalid_market_data_provider():
     assert data["error"]["code"] == "INVALID_ARGUMENT"
 
 
-
 def test_cli_rejects_invalid_job_executor_mode():
     payload = {
-        "storageBackend": "sqlite",
+        "storageBackend": "postgres",
         "jobExecutorMode": "unknown",
     }
 

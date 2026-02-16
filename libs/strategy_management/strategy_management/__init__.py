@@ -15,6 +15,7 @@ from strategy_management.portfolio import (
 )
 from strategy_management.repository import InMemoryPortfolioRepository, InMemoryStrategyRepository
 from strategy_management.repository_sqlite import SQLiteStrategyRepository
+from strategy_management.repository_postgres import PostgresStrategyRepository
 from strategy_management.service import (
     InvalidResearchParameterSpaceError,
     InvalidResearchStatusFilterError,
@@ -37,6 +38,7 @@ __all__ = [
     "InMemoryStrategyRepository",
     "InMemoryPortfolioRepository",
     "SQLiteStrategyRepository",
+    "PostgresStrategyRepository",
     "InvalidStrategyParametersError",
     "StrategyAccessDeniedError",
     "PortfolioAccessDeniedError",

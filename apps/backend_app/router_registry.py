@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -13,15 +12,15 @@ from fastapi.responses import JSONResponse
 
 from backtest_runner.api import create_router as create_backtest_router
 from backtest_runner.repository import InMemoryBacktestRepository
-from backtest_runner.repository_sqlite import SQLiteBacktestRepository
+from backtest_runner.repository_postgres import PostgresBacktestRepository
 from backtest_runner.result_store import InMemoryBacktestResultStore
-from backtest_runner.result_store_sqlite import SQLiteBacktestResultStore
+from backtest_runner.result_store_postgres import PostgresBacktestResultStore
 from backtest_runner.service import BacktestService
 from job_orchestration.api import create_router as create_job_router
 from job_orchestration.executor import InProcessJobExecutor
 from job_orchestration.repository import InMemoryJobRepository
-from job_orchestration.repository_sqlite import SQLiteJobRepository
-from job_orchestration.scheduler import InMemoryScheduler, SQLiteScheduler
+from job_orchestration.repository_postgres import PostgresJobRepository
+from job_orchestration.scheduler import InMemoryScheduler
 from job_orchestration.service import JobOrchestrationService
 from market_data.alpaca_provider import AlpacaProvider
 from market_data.alpaca_transport import AlpacaHTTPTransport, resolve_alpaca_transport_config
@@ -33,30 +32,29 @@ from platform_core.logging import mask_sensitive
 from platform_core.response import error_response
 from risk_control.api import create_router as create_risk_router
 from risk_control.repository import InMemoryRiskRepository
-from risk_control.repository_sqlite import SQLiteRiskRepository
+from risk_control.repository_postgres import PostgresRiskRepository
 from risk_control.service import RiskControlService
 from signal_execution.api import create_router as create_signal_router
 from signal_execution.repository import InMemorySignalRepository
-from signal_execution.repository_sqlite import SQLiteSignalRepository
+from signal_execution.repository_postgres import PostgresSignalRepository
 from signal_execution.service import SignalExecutionService
 from strategy_management.api import create_router as create_strategy_router
 from strategy_management.repository import InMemoryStrategyRepository
-from strategy_management.repository_sqlite import SQLiteStrategyRepository
+from strategy_management.repository_postgres import PostgresStrategyRepository
 from strategy_management.service import StrategyService
 from trading_account.api import create_router as create_trading_router
 from trading_account.domain import TradingAccount
 from trading_account.repository import InMemoryTradingAccountRepository
-from trading_account.repository_sqlite import SQLiteTradingAccountRepository
+from trading_account.repository_postgres import PostgresTradingAccountRepository
 from trading_account.service import TradingAccountService
 from user_auth.domain import User
 from user_auth.repository import UserRepository
-from user_auth.repository_sqlite import SQLiteUserRepository
+from user_auth.repository_postgres import PostgresUserRepository
 from user_auth.session import SessionStore
-from user_auth.session_sqlite import SQLiteSessionStore
+from user_auth.session_postgres import PostgresSessionStore
 from user_auth.token import extract_session_token
 from user_preferences.api import create_router as create_preferences_router
-from user_preferences.store import InMemoryPreferencesStore
-from user_preferences.store_sqlite import SQLitePreferencesStore
+from user_preferences.store import InMemoryPreferencesStore, PostgresPreferencesStore
 
 
 AuthUserFn = Callable[[Request], User]
@@ -113,21 +111,31 @@ def _build_market_service(*, market_data_provider: str) -> MarketDataService:
     return MarketDataService(provider=provider)
 
 
+def _build_postgres_engine(postgres_dsn: str):
+    try:
+        from sqlalchemy import create_engine
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "postgres backend requires SQLAlchemy. Please install `sqlalchemy` and a Postgres driver such as `psycopg`."
+        ) from exc
+
+    return create_engine(postgres_dsn)
+
 
 @dataclass
 class CompositionContext:
-    user_repo: UserRepository
-    session_store: SessionStore
-    strategy_repo: InMemoryStrategyRepository | SQLiteStrategyRepository
-    backtest_repo: InMemoryBacktestRepository | SQLiteBacktestRepository
-    trading_repo: InMemoryTradingAccountRepository | SQLiteTradingAccountRepository
-    job_repo: InMemoryJobRepository | SQLiteJobRepository
-    job_scheduler: InMemoryScheduler | SQLiteScheduler
-    risk_repo: InMemoryRiskRepository | SQLiteRiskRepository
-    signal_repo: InMemorySignalRepository | SQLiteSignalRepository
-    preferences_store: InMemoryPreferencesStore | SQLitePreferencesStore
+    user_repo: UserRepository | PostgresUserRepository
+    session_store: SessionStore | PostgresSessionStore
+    strategy_repo: InMemoryStrategyRepository | PostgresStrategyRepository
+    backtest_repo: InMemoryBacktestRepository | PostgresBacktestRepository
+    trading_repo: InMemoryTradingAccountRepository | PostgresTradingAccountRepository
+    job_repo: InMemoryJobRepository | PostgresJobRepository
+    job_scheduler: InMemoryScheduler
+    risk_repo: InMemoryRiskRepository | PostgresRiskRepository
+    signal_repo: InMemorySignalRepository | PostgresSignalRepository
+    preferences_store: InMemoryPreferencesStore | PostgresPreferencesStore
     market_service: MarketDataService
-    backtest_result_store: InMemoryBacktestResultStore | SQLiteBacktestResultStore
+    backtest_result_store: InMemoryBacktestResultStore | PostgresBacktestResultStore
 
 
 class MetricsCollector:
@@ -155,32 +163,32 @@ class MetricsCollector:
 
 def build_context(
     *,
-    storage_backend: str = "sqlite",
-    sqlite_db_path: str | None = None,
+    storage_backend: str = "postgres",
+    postgres_dsn: str | None = None,
     market_data_provider: str = "inmemory",
 ) -> CompositionContext:
     normalized_backend = storage_backend.strip().lower()
-    if normalized_backend not in {"sqlite", "memory"}:
-        raise ValueError("storage_backend must be one of: sqlite, memory")
+    if normalized_backend not in {"postgres", "memory"}:
+        raise ValueError("storage_backend must be one of: postgres, memory")
 
-    if normalized_backend == "sqlite":
-        if not sqlite_db_path:
-            sqlite_db_path = "data/backend.sqlite3"
-        if sqlite_db_path != ":memory:":
-            db_path = Path(sqlite_db_path)
-            if db_path.parent != Path("."):
-                db_path.parent.mkdir(parents=True, exist_ok=True)
-        user_repo = SQLiteUserRepository(db_path=sqlite_db_path)
-        session_store = SQLiteSessionStore(db_path=sqlite_db_path)
-        strategy_repo = SQLiteStrategyRepository(db_path=sqlite_db_path)
-        backtest_repo = SQLiteBacktestRepository(db_path=sqlite_db_path)
-        trading_repo = SQLiteTradingAccountRepository(db_path=sqlite_db_path)
-        job_repo = SQLiteJobRepository(db_path=sqlite_db_path)
-        job_scheduler = SQLiteScheduler(db_path=sqlite_db_path)
-        backtest_result_store = SQLiteBacktestResultStore(db_path=sqlite_db_path)
-        risk_repo = SQLiteRiskRepository(db_path=sqlite_db_path)
-        signal_repo = SQLiteSignalRepository(db_path=sqlite_db_path)
-        preferences_store = SQLitePreferencesStore(db_path=sqlite_db_path)
+    if normalized_backend == "postgres":
+        normalized_dsn = (postgres_dsn or "").strip()
+        if not normalized_dsn:
+            raise ValueError("postgres_dsn is required when storage_backend=postgres")
+
+        engine = _build_postgres_engine(normalized_dsn)
+
+        user_repo = PostgresUserRepository(engine=engine)
+        session_store = PostgresSessionStore(engine=engine)
+        strategy_repo = PostgresStrategyRepository(engine=engine)
+        backtest_repo = PostgresBacktestRepository(engine=engine)
+        trading_repo = PostgresTradingAccountRepository(engine=engine)
+        job_repo = PostgresJobRepository(engine=engine)
+        job_scheduler = InMemoryScheduler()
+        backtest_result_store = PostgresBacktestResultStore(engine=engine)
+        risk_repo = PostgresRiskRepository(engine=engine)
+        signal_repo = PostgresSignalRepository(engine=engine)
+        preferences_store = PostgresPreferencesStore(engine=engine)
     else:
         user_repo = UserRepository()
         session_store = SessionStore()
@@ -210,7 +218,6 @@ def build_context(
         market_service=market_service,
         backtest_result_store=backtest_result_store,
     )
-
 
 def build_current_user_dependency(*, context: CompositionContext) -> AuthUserFn:
     auth_logger = logging.getLogger("backend_app.auth")

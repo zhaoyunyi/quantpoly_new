@@ -56,7 +56,7 @@ def _cmd_resolve_settings(args: argparse.Namespace) -> dict:
 
         storage_backend_raw = args.storage_backend or payload.get("storageBackend")
         market_provider_raw = args.market_data_provider or payload.get("marketDataProvider")
-        sqlite_db_path_raw = args.sqlite_db_path or payload.get("sqliteDbPath")
+        postgres_dsn_raw = args.postgres_dsn or payload.get("postgresDsn")
         contexts_raw = args.enabled_contexts or payload.get("enabledContexts")
         job_executor_mode_raw = args.job_executor_mode or payload.get("jobExecutorMode")
 
@@ -67,16 +67,16 @@ def _cmd_resolve_settings(args: argparse.Namespace) -> dict:
 
         contexts = normalize_enabled_contexts(_as_contexts(contexts_raw))
 
-        sqlite_db_path: str | None
-        if sqlite_db_path_raw is None:
-            sqlite_db_path = env_settings.sqlite_db_path
+        postgres_dsn: str | None
+        if postgres_dsn_raw is None:
+            postgres_dsn = env_settings.postgres_dsn
         else:
-            sqlite_db_path = str(sqlite_db_path_raw).strip() or None
+            postgres_dsn = str(postgres_dsn_raw).strip() or None
 
         resolved = CompositionSettings(
             enabled_contexts=contexts,
             storage_backend=storage_backend,
-            sqlite_db_path=sqlite_db_path,
+            postgres_dsn=postgres_dsn,
             market_data_provider=market_data_provider,
             job_executor_mode=job_executor_mode,
         )
@@ -85,7 +85,7 @@ def _cmd_resolve_settings(args: argparse.Namespace) -> dict:
             data={
                 "enabledContexts": sorted(resolved.enabled_contexts),
                 "storageBackend": resolved.storage_backend,
-                "sqliteDbPath": resolved.sqlite_db_path,
+                "postgresDsn": resolved.postgres_dsn,
                 "marketDataProvider": resolved.market_data_provider,
                 "jobExecutorMode": resolved.job_executor_mode,
             },
@@ -101,8 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     resolve = sub.add_parser("resolve-settings", help="解析组合入口配置")
     resolve.add_argument("--input-file", default=None, help="输入 JSON 文件路径，省略时读取 stdin")
-    resolve.add_argument("--storage-backend", default=None, help="storage backend: sqlite|memory")
-    resolve.add_argument("--sqlite-db-path", default=None, help="sqlite 文件路径")
+    resolve.add_argument("--storage-backend", default=None, help="storage backend: postgres|memory")
+    resolve.add_argument("--postgres-dsn", default=None, help="postgres DSN")
     resolve.add_argument("--market-data-provider", default=None, help="market provider: inmemory|alpaca")
     resolve.add_argument("--job-executor-mode", default=None, help="job executor mode: inprocess|celery-adapter")
     resolve.add_argument("--enabled-contexts", nargs="*", default=None, help="上下文列表")
