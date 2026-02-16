@@ -521,7 +521,11 @@ function DeleteConfirmDialog({
           </Button>
         </>
       }
-    />
+    >
+      <p className="text-body-secondary text-text-muted">
+        删除后将无法恢复，请确认是否继续。
+      </p>
+    </Dialog>
   );
 }
 

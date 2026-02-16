@@ -1036,3 +1036,17 @@ export function patchPreferences(
 ): Promise<UserPreferences> {
   return patch<UserPreferences>('/users/me/preferences', patchBody)
 }
+
+export function resetPreferences(): Promise<UserPreferences> {
+  return post<UserPreferences>('/users/me/preferences/reset')
+}
+
+export function exportPreferences(): Promise<UserPreferences> {
+  return get<UserPreferences>('/users/me/preferences/export')
+}
+
+export function importPreferences(
+  body: Record<string, unknown>,
+): Promise<UserPreferences> {
+  return post<UserPreferences>('/users/me/preferences/import', body)
+}

@@ -16,6 +16,7 @@ import { Route as DashboardImport } from './routes/dashboard'
 import { Route as IndexImport } from './routes/index'
 import { Route as TradingIndexImport } from './routes/trading/index'
 import { Route as StrategiesIndexImport } from './routes/strategies/index'
+import { Route as SettingsIndexImport } from './routes/settings/index'
 import { Route as BacktestsIndexImport } from './routes/backtests/index'
 import { Route as TradingAnalyticsImport } from './routes/trading/analytics'
 import { Route as TradingAccountsImport } from './routes/trading/accounts'
@@ -23,6 +24,8 @@ import { Route as StrategiesSimpleImport } from './routes/strategies/simple'
 import { Route as StrategiesCompareImport } from './routes/strategies/compare'
 import { Route as StrategiesAdvancedImport } from './routes/strategies/advanced'
 import { Route as StrategiesIdImport } from './routes/strategies/$id'
+import { Route as SettingsThemeImport } from './routes/settings/theme'
+import { Route as SettingsAccountImport } from './routes/settings/account'
 import { Route as BacktestsIdImport } from './routes/backtests/$id'
 import { Route as AuthVerifyEmailImport } from './routes/auth/verify-email'
 import { Route as AuthResetPasswordImport } from './routes/auth/reset-password'
@@ -60,6 +63,12 @@ const TradingIndexRoute = TradingIndexImport.update({
 const StrategiesIndexRoute = StrategiesIndexImport.update({
   id: '/strategies/',
   path: '/strategies/',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const SettingsIndexRoute = SettingsIndexImport.update({
+  id: '/settings/',
+  path: '/settings/',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -102,6 +111,18 @@ const StrategiesAdvancedRoute = StrategiesAdvancedImport.update({
 const StrategiesIdRoute = StrategiesIdImport.update({
   id: '/strategies/$id',
   path: '/strategies/$id',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const SettingsThemeRoute = SettingsThemeImport.update({
+  id: '/settings/theme',
+  path: '/settings/theme',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const SettingsAccountRoute = SettingsAccountImport.update({
+  id: '/settings/account',
+  path: '/settings/account',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -221,6 +242,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BacktestsIdImport
       parentRoute: typeof rootRoute
     }
+    '/settings/account': {
+      id: '/settings/account'
+      path: '/settings/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof SettingsAccountImport
+      parentRoute: typeof rootRoute
+    }
+    '/settings/theme': {
+      id: '/settings/theme'
+      path: '/settings/theme'
+      fullPath: '/settings/theme'
+      preLoaderRoute: typeof SettingsThemeImport
+      parentRoute: typeof rootRoute
+    }
     '/strategies/$id': {
       id: '/strategies/$id'
       path: '/strategies/$id'
@@ -270,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BacktestsIndexImport
       parentRoute: typeof rootRoute
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsIndexImport
+      parentRoute: typeof rootRoute
+    }
     '/strategies/': {
       id: '/strategies/'
       path: '/strategies'
@@ -300,6 +342,8 @@ export interface FileRoutesByFullPath {
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/backtests/$id': typeof BacktestsIdRoute
+  '/settings/account': typeof SettingsAccountRoute
+  '/settings/theme': typeof SettingsThemeRoute
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
@@ -307,6 +351,7 @@ export interface FileRoutesByFullPath {
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
   '/backtests': typeof BacktestsIndexRoute
+  '/settings': typeof SettingsIndexRoute
   '/strategies': typeof StrategiesIndexRoute
   '/trading': typeof TradingIndexRoute
 }
@@ -322,6 +367,8 @@ export interface FileRoutesByTo {
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/backtests/$id': typeof BacktestsIdRoute
+  '/settings/account': typeof SettingsAccountRoute
+  '/settings/theme': typeof SettingsThemeRoute
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
@@ -329,6 +376,7 @@ export interface FileRoutesByTo {
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
   '/backtests': typeof BacktestsIndexRoute
+  '/settings': typeof SettingsIndexRoute
   '/strategies': typeof StrategiesIndexRoute
   '/trading': typeof TradingIndexRoute
 }
@@ -345,6 +393,8 @@ export interface FileRoutesById {
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/backtests/$id': typeof BacktestsIdRoute
+  '/settings/account': typeof SettingsAccountRoute
+  '/settings/theme': typeof SettingsThemeRoute
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
@@ -352,6 +402,7 @@ export interface FileRoutesById {
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
   '/backtests/': typeof BacktestsIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/strategies/': typeof StrategiesIndexRoute
   '/trading/': typeof TradingIndexRoute
 }
@@ -369,6 +420,8 @@ export interface FileRouteTypes {
     | '/auth/reset-password'
     | '/auth/verify-email'
     | '/backtests/$id'
+    | '/settings/account'
+    | '/settings/theme'
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
@@ -376,6 +429,7 @@ export interface FileRouteTypes {
     | '/trading/accounts'
     | '/trading/analytics'
     | '/backtests'
+    | '/settings'
     | '/strategies'
     | '/trading'
   fileRoutesByTo: FileRoutesByTo
@@ -390,6 +444,8 @@ export interface FileRouteTypes {
     | '/auth/reset-password'
     | '/auth/verify-email'
     | '/backtests/$id'
+    | '/settings/account'
+    | '/settings/theme'
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
@@ -397,6 +453,7 @@ export interface FileRouteTypes {
     | '/trading/accounts'
     | '/trading/analytics'
     | '/backtests'
+    | '/settings'
     | '/strategies'
     | '/trading'
   id:
@@ -411,6 +468,8 @@ export interface FileRouteTypes {
     | '/auth/reset-password'
     | '/auth/verify-email'
     | '/backtests/$id'
+    | '/settings/account'
+    | '/settings/theme'
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
@@ -418,6 +477,7 @@ export interface FileRouteTypes {
     | '/trading/accounts'
     | '/trading/analytics'
     | '/backtests/'
+    | '/settings/'
     | '/strategies/'
     | '/trading/'
   fileRoutesById: FileRoutesById
@@ -434,6 +494,8 @@ export interface RootRouteChildren {
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
   BacktestsIdRoute: typeof BacktestsIdRoute
+  SettingsAccountRoute: typeof SettingsAccountRoute
+  SettingsThemeRoute: typeof SettingsThemeRoute
   StrategiesIdRoute: typeof StrategiesIdRoute
   StrategiesAdvancedRoute: typeof StrategiesAdvancedRoute
   StrategiesCompareRoute: typeof StrategiesCompareRoute
@@ -441,6 +503,7 @@ export interface RootRouteChildren {
   TradingAccountsRoute: typeof TradingAccountsRoute
   TradingAnalyticsRoute: typeof TradingAnalyticsRoute
   BacktestsIndexRoute: typeof BacktestsIndexRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
   StrategiesIndexRoute: typeof StrategiesIndexRoute
   TradingIndexRoute: typeof TradingIndexRoute
 }
@@ -456,6 +519,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthResetPasswordRoute: AuthResetPasswordRoute,
   AuthVerifyEmailRoute: AuthVerifyEmailRoute,
   BacktestsIdRoute: BacktestsIdRoute,
+  SettingsAccountRoute: SettingsAccountRoute,
+  SettingsThemeRoute: SettingsThemeRoute,
   StrategiesIdRoute: StrategiesIdRoute,
   StrategiesAdvancedRoute: StrategiesAdvancedRoute,
   StrategiesCompareRoute: StrategiesCompareRoute,
@@ -463,6 +528,7 @@ const rootRouteChildren: RootRouteChildren = {
   TradingAccountsRoute: TradingAccountsRoute,
   TradingAnalyticsRoute: TradingAnalyticsRoute,
   BacktestsIndexRoute: BacktestsIndexRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
   StrategiesIndexRoute: StrategiesIndexRoute,
   TradingIndexRoute: TradingIndexRoute,
 }
@@ -487,6 +553,8 @@ export const routeTree = rootRoute
         "/auth/reset-password",
         "/auth/verify-email",
         "/backtests/$id",
+        "/settings/account",
+        "/settings/theme",
         "/strategies/$id",
         "/strategies/advanced",
         "/strategies/compare",
@@ -494,6 +562,7 @@ export const routeTree = rootRoute
         "/trading/accounts",
         "/trading/analytics",
         "/backtests/",
+        "/settings/",
         "/strategies/",
         "/trading/"
       ]
@@ -528,6 +597,12 @@ export const routeTree = rootRoute
     "/backtests/$id": {
       "filePath": "backtests/$id.tsx"
     },
+    "/settings/account": {
+      "filePath": "settings/account.tsx"
+    },
+    "/settings/theme": {
+      "filePath": "settings/theme.tsx"
+    },
     "/strategies/$id": {
       "filePath": "strategies/$id.tsx"
     },
@@ -548,6 +623,9 @@ export const routeTree = rootRoute
     },
     "/backtests/": {
       "filePath": "backtests/index.tsx"
+    },
+    "/settings/": {
+      "filePath": "settings/index.tsx"
     },
     "/strategies/": {
       "filePath": "strategies/index.tsx"
