@@ -25,14 +25,35 @@ from user_preferences.domain import (
     filter_for_user,
     migrate_preferences,
 )
-from user_preferences.store import InMemoryPreferencesStore, PreferencesStore
-from user_preferences.store_sqlite import SQLitePreferencesStore
+from user_preferences.store import InMemoryPreferencesStore, PostgresPreferencesStore, PreferencesStore
 
 
-def _resolve_store(*, db_path: str | None) -> PreferencesStore:
-    if db_path:
-        return SQLitePreferencesStore(db_path=db_path)
-    return InMemoryPreferencesStore()
+def _create_postgres_engine(postgres_dsn: str):
+    try:
+        from sqlalchemy import create_engine
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "postgres backend requires SQLAlchemy. Please install `sqlalchemy` and a Postgres driver such as `psycopg`."
+        ) from exc
+
+    return create_engine(postgres_dsn)
+
+
+def _resolve_store(*, postgres_dsn: str | None) -> PreferencesStore:
+    normalized_dsn = (postgres_dsn or "").strip()
+    if not normalized_dsn:
+        return InMemoryPreferencesStore()
+
+    store = PostgresPreferencesStore(engine=_create_postgres_engine(normalized_dsn))
+    store.ensure_schema()
+    return store
+
+
+def _resolve_store_or_error(args: argparse.Namespace) -> PreferencesStore | dict[str, Any]:
+    try:
+        return _resolve_store(postgres_dsn=args.postgres_dsn)
+    except RuntimeError as exc:
+        return _error("STORE_INIT_FAILED", str(exc))
 
 
 def _read_json_payload(
@@ -94,13 +115,21 @@ def _cmd_migrate(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_get(args: argparse.Namespace) -> dict[str, Any]:
-    store = _resolve_store(db_path=args.db_path)
+    store_or_error = _resolve_store_or_error(args)
+    if isinstance(store_or_error, dict):
+        return store_or_error
+    store = store_or_error
+
     prefs = store.get_or_create(args.user_id)
     return _success_preferences(prefs, user_level=args.user_level)
 
 
 def _cmd_update(args: argparse.Namespace) -> dict[str, Any]:
-    store = _resolve_store(db_path=args.db_path)
+    store_or_error = _resolve_store_or_error(args)
+    if isinstance(store_or_error, dict):
+        return store_or_error
+    store = store_or_error
+
     current = store.get_or_create(args.user_id)
 
     try:
@@ -124,13 +153,20 @@ def _cmd_update(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_export(args: argparse.Namespace) -> dict[str, Any]:
-    store = _resolve_store(db_path=args.db_path)
+    store_or_error = _resolve_store_or_error(args)
+    if isinstance(store_or_error, dict):
+        return store_or_error
+    store = store_or_error
+
     prefs = store.get_or_create(args.user_id)
     return _success_preferences(prefs, user_level=args.user_level)
 
 
 def _cmd_import(args: argparse.Namespace) -> dict[str, Any]:
-    store = _resolve_store(db_path=args.db_path)
+    store_or_error = _resolve_store_or_error(args)
+    if isinstance(store_or_error, dict):
+        return store_or_error
+    store = store_or_error
 
     try:
         payload = _read_json_payload(
@@ -173,12 +209,12 @@ def build_parser() -> argparse.ArgumentParser:
     get_cmd = sub.add_parser("get", help="读取用户偏好")
     get_cmd.add_argument("--user-id", required=True)
     get_cmd.add_argument("--user-level", type=int, default=1)
-    get_cmd.add_argument("--db-path", default=None)
+    get_cmd.add_argument("--postgres-dsn", default=None)
 
     update_cmd = sub.add_parser("update", help="更新用户偏好（深度合并）")
     update_cmd.add_argument("--user-id", required=True)
     update_cmd.add_argument("--user-level", type=int, default=1)
-    update_cmd.add_argument("--db-path", default=None)
+    update_cmd.add_argument("--postgres-dsn", default=None)
     update_cmd.add_argument("--patch", default=None, help="内联 JSON patch")
     update_cmd.add_argument(
         "--file",
@@ -190,12 +226,12 @@ def build_parser() -> argparse.ArgumentParser:
     export_cmd = sub.add_parser("export", help="导出用户偏好 JSON")
     export_cmd.add_argument("--user-id", required=True)
     export_cmd.add_argument("--user-level", type=int, default=1)
-    export_cmd.add_argument("--db-path", default=None)
+    export_cmd.add_argument("--postgres-dsn", default=None)
 
     import_cmd = sub.add_parser("import", help="导入用户偏好 JSON")
     import_cmd.add_argument("--user-id", required=True)
     import_cmd.add_argument("--user-level", type=int, default=1)
-    import_cmd.add_argument("--db-path", default=None)
+    import_cmd.add_argument("--postgres-dsn", default=None)
     import_cmd.add_argument(
         "--file",
         type=argparse.FileType("r"),

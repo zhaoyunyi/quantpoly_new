@@ -1,4 +1,4 @@
-"""user-preferences 持久化适配器 CLI 测试。"""
+"""user-preferences 持久化适配器 CLI 测试（Postgres）。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+
+sqlalchemy = pytest.importorskip("sqlalchemy")
+create_engine = sqlalchemy.create_engine
+text = sqlalchemy.text
 
 PYTHON = sys.executable or "python3.11"
 CLI_MODULE = "user_preferences.cli"
@@ -27,6 +33,23 @@ def _cli_env() -> dict[str, str]:
     }
 
 
+def _postgres_dsn() -> str:
+    return os.getenv(
+        "POSTGRES_DSN",
+        "postgresql+psycopg://quantpoly:quantpoly@localhost:54329/quantpoly_test",
+    )
+
+
+def _reset_user_preferences(*, user_id: str) -> None:
+    from user_preferences.store import PostgresPreferencesStore
+
+    engine = create_engine(_postgres_dsn())
+    store = PostgresPreferencesStore(engine=engine)
+    store.ensure_schema()
+    with engine.begin() as conn:
+        conn.execute(text("delete from user_preferences where user_id=:user_id"), {"user_id": user_id})
+
+
 def _run_cli(args: list[str], *, stdin_payload: dict | None = None) -> dict:
     result = subprocess.run(
         [PYTHON, "-m", CLI_MODULE, *args],
@@ -39,18 +62,20 @@ def _run_cli(args: list[str], *, stdin_payload: dict | None = None) -> dict:
     return json.loads(result.stdout)
 
 
-def test_cli_should_support_get_update_export_import_with_sqlite_store(tmp_path):
-    db_path = str(tmp_path / "prefs.sqlite3")
+@pytest.mark.integration
+def test_cli_should_support_get_update_export_import_with_postgres_store():
+    user_id = "cli-pg-u1"
+    _reset_user_preferences(user_id=user_id)
 
     updated = _run_cli(
         [
             "update",
             "--user-id",
-            "u-1",
+            user_id,
             "--user-level",
             "2",
-            "--db-path",
-            db_path,
+            "--postgres-dsn",
+            _postgres_dsn(),
             "--patch",
             '{"theme": {"darkMode": true}}',
         ]
@@ -61,11 +86,11 @@ def test_cli_should_support_get_update_export_import_with_sqlite_store(tmp_path)
     got = _run_cli([
         "get",
         "--user-id",
-        "u-1",
+        user_id,
         "--user-level",
         "2",
-        "--db-path",
-        db_path,
+        "--postgres-dsn",
+        _postgres_dsn(),
     ])
     assert got["success"] is True
     assert got["data"]["theme"]["darkMode"] is True
@@ -73,11 +98,11 @@ def test_cli_should_support_get_update_export_import_with_sqlite_store(tmp_path)
     exported = _run_cli([
         "export",
         "--user-id",
-        "u-1",
+        user_id,
         "--user-level",
         "2",
-        "--db-path",
-        db_path,
+        "--postgres-dsn",
+        _postgres_dsn(),
     ])
     assert exported["success"] is True
     assert exported["data"]["theme"]["darkMode"] is True
@@ -86,11 +111,11 @@ def test_cli_should_support_get_update_export_import_with_sqlite_store(tmp_path)
         [
             "import",
             "--user-id",
-            "u-1",
+            user_id,
             "--user-level",
             "2",
-            "--db-path",
-            db_path,
+            "--postgres-dsn",
+            _postgres_dsn(),
         ],
         stdin_payload={"theme": {"primaryColor": "#00FF00", "darkMode": True}},
     )
@@ -98,18 +123,20 @@ def test_cli_should_support_get_update_export_import_with_sqlite_store(tmp_path)
     assert imported["data"]["theme"]["primaryColor"] == "#00FF00"
 
 
-def test_cli_update_should_reject_advanced_for_level1(tmp_path):
-    db_path = str(tmp_path / "prefs.sqlite3")
+@pytest.mark.integration
+def test_cli_update_should_reject_advanced_for_level1():
+    user_id = "cli-pg-u2"
+    _reset_user_preferences(user_id=user_id)
 
     payload = _run_cli(
         [
             "update",
             "--user-id",
-            "u-1",
+            user_id,
             "--user-level",
             "1",
-            "--db-path",
-            db_path,
+            "--postgres-dsn",
+            _postgres_dsn(),
             "--patch",
             '{"advanced": {"betaFeatures": true}}',
         ]

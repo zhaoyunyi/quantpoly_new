@@ -20,11 +20,8 @@ from platform_core.response import success_response
 from user_auth.deps import build_get_current_user
 from user_auth.domain import PasswordTooWeakError, User
 from user_auth.password_reset import InMemoryPasswordResetStore, PasswordResetRequestRateLimiter, PasswordResetStore
-from user_auth.password_reset_sqlite import SQLitePasswordResetStore
 from user_auth.repository import UserRepository
-from user_auth.repository_sqlite import SQLiteUserRepository
 from user_auth.session import Session, SessionStore
-from user_auth.session_sqlite import SQLiteSessionStore
 from user_auth.token import extract_session_token
 
 
@@ -118,7 +115,6 @@ def _user_payload(user: User) -> dict:
 def create_app(
     user_repo: UserRepository | None = None,
     session_store: SessionStore | None = None,
-    sqlite_db_path: str | None = None,
     governance_checker: Callable[..., Any] | None = None,
     password_reset_store: PasswordResetStore | None = None,
     password_reset_test_mode: bool = False,
@@ -127,20 +123,14 @@ def create_app(
 ) -> FastAPI:
     """创建 FastAPI 应用实例。"""
 
-    if sqlite_db_path:
-        repo = user_repo or SQLiteUserRepository(db_path=sqlite_db_path)
-        sessions = session_store or SQLiteSessionStore(db_path=sqlite_db_path)
-    else:
-        repo = user_repo or UserRepository()
-        sessions = session_store or SessionStore()
+    repo = user_repo or UserRepository()
+    sessions = session_store or SessionStore()
     app = FastAPI(title="user-auth")
 
     install_exception_handlers(app)
 
     if password_reset_store is not None:
         reset_store = password_reset_store
-    elif sqlite_db_path:
-        reset_store = SQLitePasswordResetStore(db_path=sqlite_db_path)
     else:
         reset_store = InMemoryPasswordResetStore()
 
