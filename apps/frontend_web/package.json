@@ -9,7 +9,8 @@
     "start": "vinxi start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:contract": "vitest run --config vitest.config.ts tests/contract/"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",

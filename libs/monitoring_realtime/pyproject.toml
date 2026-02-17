@@ -9,6 +9,7 @@ description = "QuantPoly 实时监控（WebSocket）库"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.100",
+    "websockets>=16.0",
     "user-auth>=0.1.0",
 ]
 
