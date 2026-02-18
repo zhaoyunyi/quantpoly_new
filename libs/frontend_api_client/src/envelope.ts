@@ -4,7 +4,7 @@
  * 适配后端统一响应格式：
  * - 成功：{ success: true, message: "...", data?: ... }
  * - 错误：{ success: false, error: { code: "...", message: "..." } }
- * - 分页：{ success: true, data: { items: [...], total, page, pageSize } }
+ * - 分页：{ success: true, message: "...", data: { items: [...], total, page, pageSize } }
  */
 
 import {

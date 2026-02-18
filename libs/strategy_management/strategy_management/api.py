@@ -128,7 +128,8 @@ def _serialize_backtest(task: Any) -> dict[str, Any]:
         "strategyId": task.strategy_id,
         "status": task.status,
         "config": task.config,
-        "metrics": task.metrics,
+        # 与 /backtests 保持一致：metrics 无值时返回 {}，避免 null 分支。
+        "metrics": task.metrics or {},
         "createdAt": _dt(task.created_at),
         "updatedAt": _dt(task.updated_at),
     }

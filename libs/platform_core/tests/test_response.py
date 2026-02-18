@@ -9,6 +9,7 @@ BDD Scenarios from spec:
 from platform_core.response import (
     success_response,
     error_response,
+    paged_response,
 )
 
 
@@ -45,3 +46,17 @@ class TestErrorResponse:
     def test_error_response_no_data_field(self):
         result = error_response(code="NOT_FOUND", message="not found")
         assert "data" not in result
+
+
+class TestPagedResponse:
+    """Test统一分页响应。"""
+
+    def test_paged_response_structure_includes_message(self):
+        result = paged_response(items=[], total=0, page=1, page_size=20)
+        assert result["success"] is True
+        assert result["message"] == "ok"
+        assert result["data"] == {"items": [], "total": 0, "page": 1, "pageSize": 20}
+
+    def test_paged_response_allows_custom_message(self):
+        result = paged_response(items=[], total=0, page=1, page_size=20, message="done")
+        assert result["message"] == "done"

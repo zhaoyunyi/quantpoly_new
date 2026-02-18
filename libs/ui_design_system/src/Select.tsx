@@ -95,7 +95,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
           </BaseSelect.Trigger>
 
         <BaseSelect.Portal>
-          <BaseSelect.Positioner sideOffset={4}>
+          <BaseSelect.Positioner sideOffset={4} className="z-[60]">
             <BaseSelect.Popup
               className={cn(
                 "bg-bg-card border border-secondary-300/40 rounded-md shadow-card",

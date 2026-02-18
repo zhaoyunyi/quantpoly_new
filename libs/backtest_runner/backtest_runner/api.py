@@ -58,7 +58,8 @@ def _serialize_task(task) -> dict[str, Any]:
         "strategyId": task.strategy_id,
         "status": task.status,
         "config": task.config,
-        "metrics": task.metrics,
+        # 前端类型要求 metrics 始终为对象（无指标时为 {}），避免 null 分支扩散。
+        "metrics": task.metrics or {},
         "displayName": task.display_name,
         "createdAt": _dt(task.created_at),
         "updatedAt": _dt(task.updated_at),

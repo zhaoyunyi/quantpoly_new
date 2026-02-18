@@ -38,10 +38,12 @@ def paged_response(
     total: int,
     page: int,
     page_size: int,
+    message: str = "ok",
 ) -> dict:
     """构建分页响应。"""
     return {
         "success": True,
+        "message": message,
         "data": {
             "items": items,
             "total": total,
