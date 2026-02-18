@@ -9,7 +9,6 @@ from trading_account.domain import (
     TradingAccount,
 )
 from trading_account.repository import InMemoryTradingAccountRepository
-from trading_account.repository_sqlite import SQLiteTradingAccountRepository
 from trading_account.repository_postgres import PostgresTradingAccountRepository
 from trading_account.service import (
     AccountAccessDeniedError,
@@ -31,7 +30,6 @@ __all__ = [
     "TradeRecord",
     "TradingAccount",
     "InMemoryTradingAccountRepository",
-    "SQLiteTradingAccountRepository",
     "PostgresTradingAccountRepository",
     "AccountAccessDeniedError",
     "InsufficientFundsError",
