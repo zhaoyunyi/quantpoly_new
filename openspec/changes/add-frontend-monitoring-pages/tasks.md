@@ -18,23 +18,23 @@
 
 ## 3. Signals 读与操作闭环
 
-- [ ] 3.1 列表与筛选：`GET /signals`、`GET /signals/search`、`GET /signals/pending`
+- [x] 3.1 列表与筛选：`GET /signals`、`GET /signals/search`、`GET /signals/pending`
 - [x] 3.2 单项操作：
   - [x] `POST /signals/{signal_id}/process`
   - [x] `POST /signals/{signal_id}/execute`
   - [x] `POST /signals/{signal_id}/cancel`
-- [ ] 3.3 批量操作（可选）：
-  - [ ] `POST /signals/batch/execute`
-  - [ ] `POST /signals/batch/cancel`
+- [x] 3.3 批量操作（可选）：
+  - [x] `POST /signals/batch/execute`
+  - [x] `POST /signals/batch/cancel`
 
 ## 4. Alerts 读与操作闭环
 
 - [x] 4.1 列表：`GET /risk/alerts?unresolvedOnly=true`
-- [ ] 4.2 统计：`GET /risk/alerts/stats`
+- [x] 4.2 统计：`GET /risk/alerts/stats`
 - [x] 4.3 单项操作：
   - [x] `PATCH /risk/alerts/{alert_id}/acknowledge`
   - [x] `POST /risk/alerts/{alert_id}/resolve`
-- [ ] 4.4 批量 ack（可选）：`POST /risk/alerts/batch-acknowledge`
+- [x] 4.4 批量 ack（可选）：`POST /risk/alerts/batch-acknowledge`
 
 ## 5. 组件规划
 

@@ -139,6 +139,10 @@ export interface RiskAlertStats {
   bySeverity: Record<string, number>
 }
 
+export interface BatchAcknowledgeRiskAlertsResult {
+  affected: number
+}
+
 export interface RiskAlert {
   id: string
   userId: string
@@ -198,6 +202,14 @@ export function acknowledgeRiskAlert(alertId: string): Promise<RiskAlert> {
 export function resolveRiskAlert(alertId: string): Promise<{ resolved: boolean }> {
   const id = encodeURIComponent(alertId)
   return post<{ resolved: boolean }>(`/risk/alerts/${id}/resolve`)
+}
+
+export function batchAcknowledgeRiskAlerts(
+  alertIds: string[],
+): Promise<BatchAcknowledgeRiskAlertsResult> {
+  return post<BatchAcknowledgeRiskAlertsResult>('/risk/alerts/batch-acknowledge', {
+    alertIds,
+  })
 }
 
 /* ─── Signals ─── */
@@ -291,6 +303,49 @@ export function executeSignal(signalId: string): Promise<TradingSignal> {
 export function cancelSignal(signalId: string): Promise<TradingSignal> {
   const id = encodeURIComponent(signalId)
   return post<TradingSignal>(`/signals/${id}/cancel`)
+}
+
+export interface BatchSignalItemResult {
+  signalId: string
+  status: string
+}
+
+export interface BatchExecuteSignalsResult {
+  total: number
+  executed: number
+  skipped: number
+  denied: number
+  results: BatchSignalItemResult[]
+  idempotent: boolean
+}
+
+export interface BatchCancelSignalsResult {
+  total: number
+  cancelled: number
+  skipped: number
+  denied: number
+  results: BatchSignalItemResult[]
+  idempotent: boolean
+}
+
+export function batchExecuteSignals(
+  signalIds: string[],
+  idempotencyKey?: string,
+): Promise<BatchExecuteSignalsResult> {
+  return post<BatchExecuteSignalsResult>('/signals/batch/execute', {
+    signalIds,
+    idempotencyKey,
+  })
+}
+
+export function batchCancelSignals(
+  signalIds: string[],
+  idempotencyKey?: string,
+): Promise<BatchCancelSignalsResult> {
+  return post<BatchCancelSignalsResult>('/signals/batch/cancel', {
+    signalIds,
+    idempotencyKey,
+  })
 }
 
 /* ─── Strategy Management ─── */
