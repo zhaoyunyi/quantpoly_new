@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from job_orchestration.repository import InMemoryJobRepository
@@ -88,27 +86,11 @@ def test_runtime_recovery_marks_running_jobs_failed_but_keeps_queued_jobs():
     assert queued_after.status == "queued"
 
 
-def test_sqlite_scheduler_persists_and_recovers_schedules(tmp_path: Path):
-    from job_orchestration.scheduler import SQLiteScheduler
+def test_scheduler_module_should_not_expose_sqlite_scheduler_adapter():
+    import job_orchestration.scheduler as scheduler_module
 
-    db_path = tmp_path / "job_scheduler.sqlite3"
-
-    scheduler_first = SQLiteScheduler(db_path=str(db_path))
-    created = scheduler_first.register_interval(
-        user_id="u-1",
-        namespace="user:u-1",
-        job_type="market_data_sync",
-        every_seconds=60,
-    )
-
-    scheduler_second = SQLiteScheduler(db_path=str(db_path))
-    recovered = scheduler_second.recover()
-    rows = scheduler_second.list_schedules(user_id="u-1", namespace="user:u-1")
-
-    assert recovered == 1
-    assert len(rows) == 1
-    assert rows[0].id == created.id
-
+    assert hasattr(scheduler_module, "InMemoryScheduler")
+    assert not hasattr(scheduler_module, "SQLiteScheduler")
 
 
 def test_dispatch_job_with_callable_updates_observability_fields():
