@@ -1,7 +1,7 @@
 """market_data 数据管道读模型存储。
 
 当前实现为内存存储，用于迁移期的任务化能力补齐。
-后续可替换为 SQLite/Postgres 等持久化实现。
+后续可替换为 PostgreSQL 等持久化实现。
 """
 
 from __future__ import annotations
