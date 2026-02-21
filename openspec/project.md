@@ -17,7 +17,7 @@ QuantPoly 是一个量化交易平台，目标能力包括：
 
 - Python（FastAPI / Pydantic v2 / SQLAlchemy/SQLModel）
 - PostgreSQL：业务/计算数据（交易、回测、信号、风控、行情等）
-- SQLite / Cloudflare D1：用户与轻量配置数据（是否继续保留 D1 由认证方案决定）
+- PostgreSQL：统一业务与用户域数据持久化（含用户、偏好与轻量配置）
 - Redis + Celery（或等价队列）：异步任务（回测、策略执行、风控批处理）
 
 ## Project Conventions
@@ -55,7 +55,7 @@ QuantPoly 是一个量化交易平台，目标能力包括：
 
 ## External Dependencies
 - Alpaca（行情/交易 API）
-- Cloudflare D1（如保留）：生产环境通过 REST API 访问会带来一致性/延迟约束
+- PostgreSQL（统一主库）：通过事务与约束保证一致性边界
 
 ## Migration Proposal Review Gates（新增）
 
