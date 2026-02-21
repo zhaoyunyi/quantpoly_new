@@ -68,7 +68,7 @@ Superpowers 已通过 Codex 原生 skill discovery 安装，无需再使用旧�
 - `docs/migration/2026-02-13-backend-current-state.md`：后端当前实现状态（实现事实）
 - `docs/runbooks/backend-operations-runbook.md`：后端发布/切换/冒烟/观测基线
 - `docs/gates/backend-gate-handbook.md`：门禁手册
-- `docs/frontend/OVERVIEW.md`：前端建设文档入口（规范与目录约定）
+- `docs/frontend/AGENTS.md`：前端建设文档入口（规范与目录约定）
 
 前端子项目约定：
 

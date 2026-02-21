@@ -23,7 +23,7 @@
 
 ## 4. 前端建设文档
 
-- `docs/frontend/OVERVIEW.md`
+- `docs/frontend/AGENTS.md`
 
 说明：前端目录、UI 规范、架构规范、设计令牌规范入口。
 

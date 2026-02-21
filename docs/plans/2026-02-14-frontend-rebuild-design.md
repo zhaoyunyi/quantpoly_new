@@ -20,7 +20,7 @@
 
 前端与后端为不同 Origin（端口不同也算不同 Origin），但**建议同域同 scheme**（例如都用 `http://localhost`），以满足 cookie 的 `SameSite=Lax` 行为。
 
-- `FRONTEND_ORIGIN`（示例）：`http://localhost:3000`
+- `FRONTEND_ORIGIN`（示例）：`http://localhost:3300`
 - `BACKEND_ORIGIN`（示例）：`http://localhost:8000`
 
 > 禁止混用 `localhost` 与 `127.0.0.1`，否则 cookie/WS 鉴权会出现“看似登录成功但请求不带 cookie”的问题。
@@ -166,4 +166,3 @@
 
 后续独立处理（避免引入破坏性升级影响主线）：
 - `update-frontend-security-dependencies`（集中处理 `npm audit` 高危/中危依赖）
-

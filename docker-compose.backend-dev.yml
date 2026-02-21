@@ -1,0 +1,60 @@
+name: quantpoly-backend-dev
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: quantpoly-postgres-dev
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-quantpoly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantpoly}
+      POSTGRES_DB: ${POSTGRES_DB:-quantpoly_test}
+    ports:
+      - "${POSTGRES_PORT:-54329}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quantpoly} -d ${POSTGRES_DB:-quantpoly_test}"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - quantpoly_postgres_dev_data:/var/lib/postgresql/data
+
+  backend_dev:
+    build:
+      context: .
+      dockerfile: docker/backend.dev.Dockerfile
+    container_name: quantpoly-backend-dev
+    working_dir: /workspace
+    command:
+      - uvicorn
+      - apps.backend_app:create_app
+      - --factory
+      - --reload
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload-dir
+      - /workspace/apps
+      - --reload-dir
+      - /workspace/libs
+      - --reload-dir
+      - /workspace/scripts
+    environment:
+      PYTHONPATH: "/workspace:/workspace/libs/platform_core:/workspace/libs/user_auth:/workspace/libs/monitoring_realtime:/workspace/libs/strategy_management:/workspace/libs/backtest_runner:/workspace/libs/trading_account:/workspace/libs/market_data:/workspace/libs/risk_control:/workspace/libs/signal_execution:/workspace/libs/data_topology_boundary:/workspace/libs/job_orchestration:/workspace/libs/admin_governance:/workspace/libs/user_preferences"
+      BACKEND_STORAGE_BACKEND: "${BACKEND_STORAGE_BACKEND:-postgres}"
+      BACKEND_POSTGRES_DSN: "${BACKEND_POSTGRES_DSN:-postgresql+psycopg://quantpoly:quantpoly@postgres:5432/quantpoly_test}"
+      BACKEND_CORS_ALLOWED_ORIGINS: "${BACKEND_CORS_ALLOWED_ORIGINS:-http://localhost:3300}"
+      BACKEND_CORS_ALLOW_CREDENTIALS: "${BACKEND_CORS_ALLOW_CREDENTIALS:-true}"
+      BACKEND_CORS_ALLOW_METHODS: "${BACKEND_CORS_ALLOW_METHODS:-GET,POST,PUT,PATCH,DELETE,OPTIONS}"
+      BACKEND_CORS_ALLOW_HEADERS: "${BACKEND_CORS_ALLOW_HEADERS:-*}"
+      BACKEND_LOG_LEVEL: "${BACKEND_LOG_LEVEL:-warning}"
+    volumes:
+      - ./:/workspace
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  quantpoly_postgres_dev_data:

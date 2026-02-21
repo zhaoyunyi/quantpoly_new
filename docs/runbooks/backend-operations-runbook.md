@@ -23,15 +23,80 @@
 
 推荐开发期统一使用 `localhost`（避免 `localhost` 与 `127.0.0.1` 混用导致 cookie/WS 鉴权异常）：
 
-- 前端：`http://localhost:3000`
+- 前端：`http://localhost:3300`
 - 后端：`http://localhost:8000`
 
 后端 CORS 配置（默认关闭）：
 
-- `BACKEND_CORS_ALLOWED_ORIGINS`：允许的前端 origin 白名单（逗号分隔），示例：`http://localhost:3000`
+- `BACKEND_CORS_ALLOWED_ORIGINS`：允许的前端 origin 白名单（逗号分隔），示例：`http://localhost:3300`
 - `BACKEND_CORS_ALLOW_CREDENTIALS`：是否允许 credentials（默认 `true`）
 - `BACKEND_CORS_ALLOW_METHODS`：允许方法（逗号分隔，默认 `GET,POST,PUT,PATCH,DELETE,OPTIONS`）
 - `BACKEND_CORS_ALLOW_HEADERS`：允许头（逗号分隔，默认 `*`）
+
+### 1.4 本地联调一键脚本（推荐）
+
+脚本：`scripts/local_dev_stack.py`
+
+常用命令：
+
+```bash
+# 预览将执行的命令、环境变量、日志路径（不实际启动）
+./.venv/bin/python scripts/local_dev_stack.py up --print-only
+
+# 一键启动前后端联调（默认：frontend=3300、backend=8000、backend=memory）
+./.venv/bin/python scripts/local_dev_stack.py up
+
+# 查看当前运行状态（PID / origin / 日志）
+./.venv/bin/python scripts/local_dev_stack.py status
+
+# 停止一键脚本拉起的前后端进程
+./.venv/bin/python scripts/local_dev_stack.py down
+```
+
+补充：
+
+- `up` 默认会执行启动后冒烟（`scripts/smoke_backend_composition.py`）；如需跳过可加 `--skip-smoke`
+- 默认状态文件与日志目录：`.tmux-logs/local_dev_stack/`
+
+### 1.5 Docker 本地后端热更新联调
+
+脚本：`scripts/backend_docker_dev.sh`
+
+默认行为：
+
+- 通过 `docker-compose.backend-dev.yml` 构建并启动 `postgres + backend_dev`
+- 后端容器端口映射为 `localhost:8000`
+- CORS 默认放行 `http://localhost:3300`
+- 后端以 `uvicorn --reload` 运行，代码目录挂载 `./:/workspace`，本地改代码会自动热更新
+
+常用命令：
+
+```bash
+# 预览将执行的命令与环境变量（不实际启动）
+bash scripts/backend_docker_dev.sh up --print-only
+
+# 一键构建并启动（frontend 默认通过 http://localhost:3300 访问 http://localhost:8000）
+bash scripts/backend_docker_dev.sh up
+
+# 查看容器状态
+bash scripts/backend_docker_dev.sh status
+
+# 查看后端日志
+bash scripts/backend_docker_dev.sh logs
+
+# 停止并移除本脚本创建的容器/网络
+bash scripts/backend_docker_dev.sh down
+```
+
+可选环境变量（示例）：
+
+```bash
+# 避免本机 8000 端口冲突
+BACKEND_PORT=18000 bash scripts/backend_docker_dev.sh up
+
+# 切换后端存储为内存（不依赖 Postgres）
+BACKEND_STORAGE_BACKEND=memory bash scripts/backend_docker_dev.sh up
+```
 
 ## 2. 切换前冒烟
 

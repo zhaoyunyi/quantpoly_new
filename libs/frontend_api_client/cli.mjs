@@ -6,7 +6,7 @@
  *
  * 用法：
  *   node cli.mjs --backend http://localhost:8000
- *   node cli.mjs --backend http://localhost:8000 --probe cors --origin http://localhost:3000
+ *   node cli.mjs --backend http://localhost:8000 --probe cors --origin http://localhost:3300
  */
 
 const args = process.argv.slice(2)
@@ -19,7 +19,7 @@ function getArg(name) {
 
 const backend = getArg('backend') || 'http://localhost:8000'
 const probe = getArg('probe') || 'health'
-const origin = getArg('origin') || 'http://localhost:3000'
+const origin = getArg('origin') || 'http://localhost:3300'
 
 async function probeHealth() {
   try {

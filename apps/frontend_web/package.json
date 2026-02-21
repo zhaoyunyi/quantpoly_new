@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vinxi dev",
+    "dev": "vinxi dev --port 3300",
     "build": "vinxi build",
     "start": "vinxi start",
     "test": "vitest run",
