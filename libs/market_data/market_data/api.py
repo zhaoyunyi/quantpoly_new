@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketDisconnect
@@ -184,7 +184,7 @@ def create_router(
     )
 
     def _stream_now() -> str:
-        return f"{datetime.utcnow().isoformat()}Z"
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     def _stream_error_event(*, code: str, message: str) -> dict[str, Any]:
         return {

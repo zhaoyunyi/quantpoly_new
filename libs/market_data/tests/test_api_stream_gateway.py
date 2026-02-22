@@ -182,3 +182,18 @@ def test_stream_gateway_rejects_legacy_get_current_user_signature():
             service=MarketDataService(provider=_StableProvider()),
             get_current_user=_legacy_get_current_user,
         )
+
+
+
+def test_stream_websocket_should_not_emit_datetime_deprecation_warning():
+    import warnings
+
+    client = _build_client(provider=_StableProvider())
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        with client.websocket_connect("/market/stream") as ws:
+            _ready = ws.receive_json()
+
+    deprecations = [item for item in captured if issubclass(item.category, DeprecationWarning)]
+    assert deprecations == []

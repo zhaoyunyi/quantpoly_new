@@ -73,3 +73,16 @@ def test_cli_parser_should_accept_postgres_dsn_and_reject_db_path():
         "postgresql+psycopg://quantpoly:quantpoly@localhost:54329/quantpoly_test",
     ])
     assert parsed.postgres_dsn.startswith("postgresql+")
+
+
+def test_build_parser_should_not_emit_pending_deprecation_warning():
+    import warnings
+
+    from user_preferences.cli import build_parser
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        build_parser()
+
+    pending = [item for item in captured if issubclass(item.category, PendingDeprecationWarning)]
+    assert pending == []

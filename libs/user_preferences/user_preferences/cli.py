@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, TextIO
+from typing import Any
 
 from user_preferences.domain import (
     AdvancedPreferencesPermissionError,
@@ -59,16 +59,17 @@ def _resolve_store_or_error(args: argparse.Namespace) -> PreferencesStore | dict
 def _read_json_payload(
     *,
     inline_json: str | None,
-    file_obj: TextIO | None,
+    file_path: str | None,
     allow_empty: bool,
 ) -> dict[str, Any]:
-    if inline_json is not None and file_obj is not None:
+    if inline_json is not None and file_path is not None:
         raise ValueError("use either --patch or --file")
 
     if inline_json is not None:
         raw = inline_json
-    elif file_obj is not None:
-        raw = file_obj.read()
+    elif file_path is not None:
+        with open(file_path, "r", encoding="utf-8") as file_obj:
+            raw = file_obj.read()
     else:
         raw = sys.stdin.read()
 
@@ -104,7 +105,7 @@ def _cmd_migrate(args: argparse.Namespace) -> dict[str, Any]:
     try:
         payload = _read_json_payload(
             inline_json=None,
-            file_obj=args.file,
+            file_path=args.file,
             allow_empty=True,
         )
     except (ValueError, json.JSONDecodeError) as exc:
@@ -135,7 +136,7 @@ def _cmd_update(args: argparse.Namespace) -> dict[str, Any]:
     try:
         patch_payload = _read_json_payload(
             inline_json=args.patch,
-            file_obj=args.file,
+            file_path=args.file,
             allow_empty=False,
         )
     except (ValueError, json.JSONDecodeError) as exc:
@@ -171,7 +172,7 @@ def _cmd_import(args: argparse.Namespace) -> dict[str, Any]:
     try:
         payload = _read_json_payload(
             inline_json=None,
-            file_obj=args.file,
+            file_path=args.file,
             allow_empty=False,
         )
     except (ValueError, json.JSONDecodeError) as exc:
@@ -201,7 +202,6 @@ def build_parser() -> argparse.ArgumentParser:
     mig = sub.add_parser("migrate", help="迁移输入 preferences 到当前版本")
     mig.add_argument(
         "--file",
-        type=argparse.FileType("r"),
         default=None,
         help="输入 JSON 文件路径（省略则从 stdin 读取）",
     )
@@ -218,7 +218,6 @@ def build_parser() -> argparse.ArgumentParser:
     update_cmd.add_argument("--patch", default=None, help="内联 JSON patch")
     update_cmd.add_argument(
         "--file",
-        type=argparse.FileType("r"),
         default=None,
         help="JSON patch 文件路径（省略则从 stdin 读取）",
     )
@@ -234,7 +233,6 @@ def build_parser() -> argparse.ArgumentParser:
     import_cmd.add_argument("--postgres-dsn", default=None)
     import_cmd.add_argument(
         "--file",
-        type=argparse.FileType("r"),
         default=None,
         help="输入 JSON 文件路径（省略则从 stdin 读取）",
     )
