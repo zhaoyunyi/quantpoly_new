@@ -5,6 +5,20 @@ import path from 'node:path'
 export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
+    build: {
+      rollupOptions: {
+        output: {
+          // TanStack Start 在生成 tsr routes manifest 时会读取入口 chunk 的 `imports`。
+          // 当前依赖组合下，若产物被打成单 chunk，会导致 `imports` 缺失并触发 SSR 构建报错。
+          // 这里显式拆分 vendor，确保入口 chunk 持有 imports 元数据。
+          manualChunks(id: string) {
+            if (id.includes('node_modules')) {
+              return 'vendor'
+            }
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@qp/api-client': path.resolve(
