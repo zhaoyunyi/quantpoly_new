@@ -96,7 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     label: '风控中心',
-    path: '/risk',
+    path: '/trading/analytics',
     icon: (
       <>
         <path

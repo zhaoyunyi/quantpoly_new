@@ -204,7 +204,7 @@ export function StrategyComparePage() {
                       <span
                         className={`w-5 h-5 rounded-sm border flex items-center justify-center transition-all duration-120 ease-out ${
                           isSelected
-                            ? "bg-primary-700 border-primary-700 text-white"
+                            ? "bg-primary-700 border-primary-700 text-text-on-primary"
                             : "border-secondary-300/40"
                         }`}
                       >

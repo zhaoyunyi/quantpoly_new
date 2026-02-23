@@ -41,6 +41,7 @@ const REQUIRED_TOKENS = [
   '--color-text-primary',
   '--color-text-secondary',
   '--color-text-muted',
+  '--color-text-on-primary',
   // 状态
   '--color-state-up',
   '--color-state-down',

@@ -26,8 +26,8 @@ describe("/ (Landing Page)", () => {
 
   afterEach(() => {
     try {
-      const actWarnings = consoleErrorSpy.mock.calls.filter((call) =>
-        call.some((arg) => String(arg).includes("not wrapped in act")),
+      const actWarnings = consoleErrorSpy.mock.calls.filter((call: unknown[]) =>
+        call.some((arg: unknown) => String(arg).includes("not wrapped in act")),
       );
       expect(actWarnings).toHaveLength(0);
     } finally {

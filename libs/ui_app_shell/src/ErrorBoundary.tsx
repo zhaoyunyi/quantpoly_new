@@ -65,7 +65,7 @@ function ErrorFallback({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex items-center justify-center min-h-[400px] px-lg">
+    <div className="flex items-center justify-center min-h-100 px-lg">
       <div className="max-w-md text-center">
         <div className="text-state-risk mb-md">
           <svg
@@ -100,7 +100,7 @@ function ErrorFallback({
           onClick={onRetry}
           className={cn(
             "inline-flex items-center justify-center h-10 px-6 rounded-sm",
-            "bg-primary-700 text-white font-medium",
+            "bg-primary-700 text-text-on-primary font-medium",
             "hover:opacity-92 transition-all duration-120 ease-out",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 focus-visible:ring-offset-1",
           )}

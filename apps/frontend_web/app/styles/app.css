@@ -28,6 +28,7 @@
   --color-text-primary: #1D2433;
   --color-text-secondary: #5B6779;
   --color-text-muted: #8C96A8;
+  --color-text-on-primary: #FFFFFF; /* 主色背景上的文字色（bg-primary-700/900） */
 
   /* ── Color / State ── 低饱和功能色 */
   --color-state-up: #9E5350;

@@ -22,7 +22,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary: [
-    "bg-primary-700 text-white",
+    "bg-primary-700 text-text-on-primary",
     "hover:opacity-92",
     "active:bg-primary-900",
   ].join(" "),
@@ -39,9 +39,9 @@ const variantStyles: Record<ButtonVariant, string> = {
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-caption gap-1.5 rounded-sm",
-  md: "h-10 px-4 text-body gap-2 rounded-sm",
-  lg: "h-12 px-6 text-body gap-2.5 rounded-sm font-medium",
+  sm: "h-8 px-3 text-[length:var(--text-caption)] gap-1.5 rounded-sm",
+  md: "h-10 px-4 text-[length:var(--text-body)] gap-2 rounded-sm",
+  lg: "h-12 px-6 text-[length:var(--text-body)] gap-2.5 rounded-sm font-medium",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

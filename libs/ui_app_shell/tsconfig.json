@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "paths": {
+      "@qp/api-client": ["../frontend_api_client/src/index.ts"],
+      "@qp/api-client/*": ["../frontend_api_client/src/*"],
+      "@qp/ui": ["../ui_design_system/src/index.ts"],
+      "@qp/ui/*": ["../ui_design_system/src/*"],
+      "react": ["../../apps/frontend_web/node_modules/@types/react/index.d.ts"],
+      "react/jsx-runtime": [
+        "../../apps/frontend_web/node_modules/@types/react/jsx-runtime.d.ts"
+      ],
+      "clsx": ["../../apps/frontend_web/node_modules/clsx/clsx.d.ts"],
+      "@base-ui/react/*": ["../../apps/frontend_web/node_modules/@base-ui/react/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

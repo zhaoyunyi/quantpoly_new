@@ -121,14 +121,18 @@ function ToastCard({
   toast: ToastItem;
   onDismiss: (id: string) => void;
 }) {
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const duration = toast.duration ?? 4000;
     if (duration > 0) {
       timerRef.current = setTimeout(() => onDismiss(toast.id), duration);
     }
-    return () => clearTimeout(timerRef.current);
+    return () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+    };
   }, [toast.id, toast.duration, onDismiss]);
 
   return (

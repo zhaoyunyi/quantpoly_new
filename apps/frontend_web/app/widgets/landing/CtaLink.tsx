@@ -10,7 +10,8 @@ interface CtaLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
 }
 
 const variantStyles: Record<CtaLinkVariant, string> = {
-  primary: "bg-primary-700 text-white hover:opacity-92 active:bg-primary-900",
+  primary:
+    "bg-primary-700 text-text-on-primary hover:opacity-92 active:bg-primary-900",
   secondary:
     "bg-bg-subtle text-text-primary border border-secondary-300/40 hover:opacity-92 active:bg-bg-page",
   ghost:
@@ -18,8 +19,8 @@ const variantStyles: Record<CtaLinkVariant, string> = {
 };
 
 const sizeStyles: Record<CtaLinkSize, string> = {
-  sm: "h-8 px-3 text-caption gap-1.5",
-  lg: "h-12 px-6 text-body gap-2.5 font-medium",
+  sm: "h-8 px-3 text-[length:var(--text-caption)] gap-1.5",
+  lg: "h-12 px-6 text-[length:var(--text-body)] gap-2.5 font-medium",
 };
 
 const focusVisibleClass = focusRingClass

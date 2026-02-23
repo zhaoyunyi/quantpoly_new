@@ -36,12 +36,12 @@ export function WizardStepper({
             {/* 步骤圆圈 */}
             <div
               className={cn(
-                "flex items-center justify-center w-8 h-8 rounded-full text-caption font-medium",
+                "flex items-center justify-center w-8 h-8 rounded-full text-[length:var(--text-caption)] font-medium",
                 transitionClass,
                 isCompleted
-                  ? "bg-primary-700 text-white"
+                  ? "bg-primary-700 text-text-on-primary"
                   : isActive
-                    ? "bg-primary-500 text-white"
+                    ? "bg-primary-500 text-text-on-primary"
                     : "bg-bg-subtle text-text-muted",
               )}
               aria-current={isActive ? "step" : undefined}
