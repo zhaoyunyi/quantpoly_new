@@ -88,15 +88,6 @@
 - **THEN** 返回重启前最后一次写入结果
 - **AND** 版本字段与结构保持有效
 
-### Requirement: 偏好存储必须提供 sqlite 持久化适配器
-偏好上下文 MUST 提供 postgres 持久化适配器，并在 postgres 运行模式下保存用户偏好变更。
-
-#### Scenario: 偏好更新后重启仍可读取
-- **GIVEN** 用户已成功更新偏好
-- **WHEN** 服务重启并再次读取偏好
-- **THEN** 返回重启前最后一次保存值
-- **AND** `version` 字段保持有效
-
 ### Requirement: 偏好库不得再暴露 sqlite 持久化适配器
 在 PostgreSQL 硬切完成后，`user-preferences` capability MUST 不再将 sqlite store 作为公开契约的一部分。
 
@@ -105,4 +96,13 @@
 - **WHEN** 检查公开导出与文档约定
 - **THEN** 必须仅包含 `Postgres` 与 `InMemory` 运行路径
 - **AND** sqlite store 路径不再属于受支持能力
+
+### Requirement: 偏好存储必须提供 postgres 持久化适配器
+偏好上下文 MUST 提供 postgres 持久化适配器，并在 postgres 运行模式下保存用户偏好变更。
+
+#### Scenario: 偏好更新后重启仍可读取
+- **GIVEN** 用户已成功更新偏好
+- **WHEN** 服务重启并再次读取偏好
+- **THEN** 返回重启前最后一次保存值
+- **AND** `version` 字段保持有效
 
