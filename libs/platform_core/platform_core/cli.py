@@ -13,6 +13,7 @@ from platform_core.capability_gate import evaluate_gate
 from platform_core.config import Settings
 from platform_core.logging import mask_sensitive
 from platform_core.response import error_response, success_response
+from platform_core.storage_contract_gate import evaluate_storage_contract_gate
 
 
 def _cmd_config(args: argparse.Namespace) -> dict:
@@ -60,6 +61,24 @@ def _load_json_input(*, input_file: str | None) -> dict:
     return json.loads(raw)
 
 
+def _load_optional_json_input(*, input_file: str | None) -> dict:
+    if input_file:
+        with open(input_file, "r", encoding="utf-8") as f:
+            parsed = json.load(f)
+            if not isinstance(parsed, dict):
+                raise ValueError("input payload must be a JSON object")
+            return parsed
+
+    raw = sys.stdin.read().strip()
+    if not raw:
+        return {}
+
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("input payload must be a JSON object")
+    return parsed
+
+
 def _cmd_capability_gate(args: argparse.Namespace) -> dict:
     """执行能力门禁校验。"""
     try:
@@ -68,6 +87,16 @@ def _cmd_capability_gate(args: argparse.Namespace) -> dict:
         return success_response(data=result, message="capability gate evaluated")
     except (ValueError, json.JSONDecodeError) as exc:
         return error_response(code="CAPABILITY_GATE_INVALID_INPUT", message=str(exc))
+
+
+def _cmd_storage_contract_gate(args: argparse.Namespace) -> dict:
+    """执行存储契约防回流门禁。"""
+    try:
+        payload = _load_optional_json_input(input_file=args.input_file)
+        result = evaluate_storage_contract_gate(payload)
+        return success_response(data=result, message="storage contract gate evaluated")
+    except (ValueError, json.JSONDecodeError, ModuleNotFoundError) as exc:
+        return error_response(code="STORAGE_CONTRACT_GATE_INVALID_INPUT", message=str(exc))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -100,6 +129,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="能力门禁输入 JSON 文件路径（省略时读取 stdin）",
     )
 
+    storage_gate = sub.add_parser("storage-contract-gate", help="执行存储契约防回流门禁")
+    storage_gate.add_argument(
+        "--input-file",
+        default=None,
+        help="存储契约门禁输入 JSON 文件路径（省略时读取 stdin；空输入使用默认模块）",
+    )
+
     return parser
 
 
@@ -108,6 +144,7 @@ _COMMANDS = {
     "validate": _cmd_validate,
     "mask": _cmd_mask,
     "capability-gate": _cmd_capability_gate,
+    "storage-contract-gate": _cmd_storage_contract_gate,
 }
 
 
