@@ -87,6 +87,20 @@ class TestLogin:
         assert resp.status_code == 200
         assert resp.cookies.get("session_token")
 
+    def test_login_sets_secure_cookie_in_production(self, monkeypatch):
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        app = create_app()
+        client = TestClient(app)
+        self._register(client)
+
+        resp = client.post(
+            "/auth/login",
+            json={"email": "login@example.com", "password": "StrongPass123!"},
+        )
+        assert resp.status_code == 200
+        header = resp.headers.get("set-cookie", "")
+        assert "Secure" in header
+
     def test_login_wrong_password(self, client):
         self._register(client)
         resp = client.post(
@@ -322,4 +336,3 @@ class TestPasswordReset:
         assert existing.json()["message"] == missing.json()["message"]
         assert "data" not in existing.json() or "resetToken" not in existing.json().get("data", {})
         assert "data" not in missing.json() or "resetToken" not in missing.json().get("data", {})
-

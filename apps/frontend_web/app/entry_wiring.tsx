@@ -12,6 +12,7 @@ import type { ReactNode } from 'react'
 
 import { configureClient } from '@qp/api-client'
 import { AuthProvider } from '@qp/api-client'
+import type { UserProfile } from '@qp/api-client'
 import { ToastProvider } from '@qp/ui'
 import { AppShell, AuthGuard, ErrorBoundary } from '@qp/shell'
 
@@ -36,10 +37,24 @@ export function bootstrapApiClient(origin?: string): void {
 }
 
 /** 全局 Providers：错误边界 + 认证 + Toast */
-export function AppProviders({ children }: { children: ReactNode }) {
+export interface InitialAuthState {
+  user: UserProfile | null
+  resolved: boolean
+}
+
+export function AppProviders({
+  children,
+  initialAuth,
+}: {
+  children: ReactNode
+  initialAuth?: InitialAuthState
+}) {
   return (
     <ErrorBoundary>
-      <AuthProvider>
+      <AuthProvider
+        initialUser={initialAuth?.user ?? null}
+        initialResolved={initialAuth?.resolved ?? false}
+      >
         <ToastProvider>{children}</ToastProvider>
       </AuthProvider>
     </ErrorBoundary>
@@ -59,4 +74,3 @@ export function ProtectedLayout({ children }: { children: ReactNode }) {
     </AuthGuard>
   )
 }
-

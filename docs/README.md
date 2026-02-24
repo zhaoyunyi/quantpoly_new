@@ -11,6 +11,7 @@
 ## 2. 运行与切换手册
 
 - `docs/runbooks/backend-operations-runbook.md`
+- `docs/runbooks/fullstack-coolify-deployment-runbook.md`
 
 说明：包含发布/切换前后操作基线、冒烟命令、观测指标与回滚建议。
 

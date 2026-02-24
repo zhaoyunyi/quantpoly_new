@@ -12,6 +12,7 @@ import appCss from "../styles/app.css?url";
 import {
   AppProviders,
   bootstrapApiClient,
+  type InitialAuthState,
 } from "../entry_wiring";
 
 export {
@@ -24,7 +25,16 @@ export {
 // 入口统一配置：API client baseUrl（直连后端）
 bootstrapApiClient();
 
+const UNRESOLVED_AUTH: InitialAuthState = {
+  user: null,
+  resolved: false,
+};
+
 export const Route = createRootRoute({
+  loader: async () => {
+    // 当前阶段统一走客户端鉴权刷新，避免将 server-only 依赖打入浏览器构建。
+    return { initialAuth: { ...UNRESOLVED_AUTH } };
+  },
   head: () => ({
     meta: [
       {
@@ -62,9 +72,11 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  const { initialAuth } = Route.useLoaderData();
+
   return (
     <RootDocument>
-      <AppProviders>
+      <AppProviders initialAuth={initialAuth}>
         <Outlet />
       </AppProviders>
     </RootDocument>

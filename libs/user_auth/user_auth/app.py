@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -174,6 +175,31 @@ def _register_routes(
     reset_logger = logging.getLogger("user_auth.password_reset")
     verification_logger = logging.getLogger("user_auth.email_verification")
 
+    def _resolve_cookie_secure() -> bool:
+        override = (os.getenv("USER_AUTH_COOKIE_SECURE") or "").strip().lower()
+        if override in {"1", "true", "yes", "on"}:
+            return True
+        if override in {"0", "false", "no", "off"}:
+            return False
+        env = (os.getenv("ENVIRONMENT") or "").strip().lower()
+        return env in {"production", "staging", "prod"}
+
+    def _resolve_cookie_samesite() -> str:
+        value = (os.getenv("USER_AUTH_COOKIE_SAMESITE") or "lax").strip().lower()
+        if value not in {"lax", "strict", "none"}:
+            return "lax"
+        return value
+
+    def _resolve_cookie_domain() -> str | None:
+        value = (os.getenv("USER_AUTH_COOKIE_DOMAIN") or "").strip()
+        return value or None
+
+    cookie_secure = _resolve_cookie_secure()
+    cookie_samesite = _resolve_cookie_samesite()
+    cookie_domain = _resolve_cookie_domain()
+    if cookie_samesite == "none":
+        cookie_secure = True
+
     def _audit_password_reset(*, email: str, user_id: str | None, outcome: str) -> None:
         event = {
             "event": "password_reset",
@@ -275,7 +301,9 @@ def _register_routes(
             key="session_token",
             value=session.token,
             httponly=True,
-            samesite="lax",
+            samesite=cookie_samesite,
+            secure=cookie_secure,
+            domain=cookie_domain,
         )
 
         return success_response(data={"token": session.token})
@@ -381,7 +409,7 @@ def _register_routes(
         if token:
             sessions.revoke(token)
 
-        response.delete_cookie("session_token")
+        response.delete_cookie("session_token", domain=cookie_domain)
         return success_response(message="Logged out")
 
     @app.patch("/users/me")

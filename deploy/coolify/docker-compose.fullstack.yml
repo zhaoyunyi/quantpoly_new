@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-quantpoly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-quantpoly}
+    volumes:
+      - quantpoly_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-quantpoly} -d ${POSTGRES_DB:-quantpoly}
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    expose:
+      - "5432"
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: docker/backend.prod.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: production
+      BACKEND_STORAGE_BACKEND: postgres
+      BACKEND_POSTGRES_DSN: postgresql+psycopg://${POSTGRES_USER:-quantpoly}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-quantpoly}
+      BACKEND_CORS_ALLOWED_ORIGINS: ${BACKEND_CORS_ALLOWED_ORIGINS:?BACKEND_CORS_ALLOWED_ORIGINS is required}
+      BACKEND_CORS_ALLOW_CREDENTIALS: ${BACKEND_CORS_ALLOW_CREDENTIALS:-true}
+      BACKEND_CORS_ALLOW_METHODS: ${BACKEND_CORS_ALLOW_METHODS:-GET,POST,PUT,PATCH,DELETE,OPTIONS}
+      BACKEND_CORS_ALLOW_HEADERS: ${BACKEND_CORS_ALLOW_HEADERS:-*}
+      BACKEND_MARKET_DATA_PROVIDER: ${BACKEND_MARKET_DATA_PROVIDER:-inmemory}
+      BACKEND_JOB_EXECUTOR_MODE: ${BACKEND_JOB_EXECUTOR_MODE:-inprocess}
+      USER_AUTH_COOKIE_SECURE: ${USER_AUTH_COOKIE_SECURE:-true}
+      USER_AUTH_COOKIE_SAMESITE: ${USER_AUTH_COOKIE_SAMESITE:-lax}
+      USER_AUTH_COOKIE_DOMAIN: ${USER_AUTH_COOKIE_DOMAIN:-}
+      BACKEND_ALPACA_API_KEY: ${BACKEND_ALPACA_API_KEY:-}
+      BACKEND_ALPACA_API_SECRET: ${BACKEND_ALPACA_API_SECRET:-}
+      BACKEND_ALPACA_BASE_URL: ${BACKEND_ALPACA_BASE_URL:-}
+      BACKEND_ALPACA_DATA_URL: ${BACKEND_ALPACA_DATA_URL:-}
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:8000/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: docker/frontend.prod.Dockerfile
+      args:
+        VITE_BACKEND_ORIGIN: ${VITE_BACKEND_ORIGIN:?VITE_BACKEND_ORIGIN is required}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - "-"
+        - http://127.0.0.1:3000/
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  quantpoly_postgres_data:
