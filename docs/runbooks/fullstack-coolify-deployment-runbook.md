@@ -4,7 +4,8 @@
 
 ## 1. 对应部署资产
 
-- Compose：`deploy/coolify/docker-compose.fullstack.yml`
+- Compose（生产推荐）：`docker-compose.coolify.yml`
+- Compose（模板/参考）：`deploy/coolify/docker-compose.fullstack.yml`
 - 前端镜像：`docker/frontend.prod.Dockerfile`
 - 后端镜像：`docker/backend.prod.Dockerfile`
 - 环境变量模板：`deploy/coolify/.env.fullstack.example`
@@ -22,7 +23,7 @@
 
 1. `Add Resource` → `Docker Compose`。
 2. 选择仓库与分支。
-3. `Compose Path` 填：`deploy/coolify/docker-compose.fullstack.yml`。
+3. `Compose Path` 填：`docker-compose.coolify.yml`。
 4. 在 `Environment Variables` 中粘贴并修改 `deploy/coolify/.env.fullstack.example` 的变量。
 
 关键变量最少需要：
