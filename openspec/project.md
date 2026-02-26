@@ -62,11 +62,11 @@ QuantPoly 是一个量化交易平台，目标能力包括：
 所有迁移类 OpenSpec 提案（尤其 Wave 切换）在评审通过前必须附带以下证据：
 
 1. 能力等价矩阵（用户旅程 × 限界上下文）
-   - 参考：`docs/gates/2026-02-09-capability-equivalence-matrix.md`
+   - 参考：`docs/gates/backend-gate-handbook.md`
 2. Given/When/Then 场景清单
-   - 参考：`docs/gates/2026-02-09-capability-gwt-scenarios.md`
+   - 参考：`docs/gates/backend-gate-handbook.md`
 3. Wave 门禁与回滚规则
-   - 参考：`docs/gates/2026-02-09-wave-gate-rules.md`
+   - 参考：`docs/gates/backend-gate-handbook.md`
 4. 能力门禁 CLI 校验输出（JSON）
    - 命令：
 
