@@ -6,3 +6,10 @@ __pycache__/
 *.pyc
 README.md
 !docs/README.md
+
+# Local deployment secrets (never commit)
+deploy/secrets/ops_tokens.local.env
+deploy/secrets/*.local.env
+deploy/secrets/*.secret.env
+!deploy/secrets/.gitkeep
+!deploy/secrets/README.md
