@@ -53,4 +53,4 @@
 - 历史“剩余迁移盘点/设计稿/执行计划”文档；
 - 未落地的未来波次拆分提案。
 
-当前以 `openspec/specs/` + 本文档 + `docs/runbooks/backend-operations-runbook.md` 为准。
+当前以 `openspec/specs/` + `docs/README.md` 为准。
