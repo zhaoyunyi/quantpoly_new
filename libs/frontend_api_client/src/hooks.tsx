@@ -36,13 +36,27 @@ export interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
+export interface AuthProviderProps {
+  children: ReactNode
+  /** 首屏注入的用户信息（通常来自 SSR） */
+  initialUser?: UserProfile | null
+  /** 首屏是否已完成认证状态解析 */
+  initialResolved?: boolean
+}
+
+export function AuthProvider({
+  children,
+  initialUser = null,
+  initialResolved = false,
+}: AuthProviderProps) {
+  const [user, setUser] = useState<UserProfile | null>(
+    initialResolved ? (initialUser ?? null) : null,
+  )
+  const [loading, setLoading] = useState(!initialResolved)
   const [error, setError] = useState<AppError | null>(null)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const loadUser = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
     setError(null)
     try {
       const me = await getMe()
@@ -57,16 +71,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
       }
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }, [])
+
+  const refresh = useCallback(async () => {
+    await loadUser()
+  }, [loadUser])
 
   const login = useCallback(
     async (email: string, password: string) => {
       await apiLogin({ email, password })
-      await refresh()
+      await loadUser()
     },
-    [refresh],
+    [loadUser],
   )
 
   const logout = useCallback(async () => {
@@ -75,8 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    if (initialResolved) return
+    void loadUser()
+  }, [initialResolved, loadUser])
 
   return (
     <AuthContext.Provider

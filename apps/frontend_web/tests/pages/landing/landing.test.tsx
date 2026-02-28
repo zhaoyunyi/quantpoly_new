@@ -10,13 +10,33 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
-import { bootstrapApiClient } from "../../../app/entry_wiring";
+import type { UserProfile } from "@qp/api-client";
+import { AppProviders, bootstrapApiClient } from "../../../app/entry_wiring";
 import { LandingPage } from "../../../app/widgets/landing/LandingContent";
 
 describe("/ (Landing Page)", () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  const authenticatedUser: UserProfile = {
+    id: "u-1",
+    email: "user@example.com",
+    displayName: "User",
+    isActive: true,
+    emailVerified: true,
+    role: "user",
+    level: 1,
+  };
+
+  function renderLanding(options?: {
+    initialAuth?: { user: UserProfile | null; resolved: boolean };
+  }) {
+    return render(
+      <AppProviders initialAuth={options?.initialAuth}>
+        <LandingPage />
+      </AppProviders>,
+    );
+  }
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -39,6 +59,18 @@ describe("/ (Landing Page)", () => {
 
   it("given_landing_when_render_then_shows_cta_and_disclaimer", async () => {
     const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: false,
+              error: { code: "UNAUTHORIZED", message: "unauthorized" },
+            }),
+        });
+      }
       if (url.endsWith("/health")) {
         return Promise.resolve({
           ok: true,
@@ -63,10 +95,10 @@ describe("/ (Landing Page)", () => {
 
     vi.stubGlobal("fetch", mockFetch);
 
-    const { container } = render(<LandingPage />);
+    const { container } = renderLanding();
 
     // CTA：注册入口
-    expect(screen.getByText("免费注册")).toBeInTheDocument();
+    await screen.findByText("免费注册");
     expect(screen.getByText("立即开始")).toBeInTheDocument();
 
     // CTA：登录入口
@@ -84,9 +116,166 @@ describe("/ (Landing Page)", () => {
     await screen.findByText("服务运行中");
   });
 
+  it("given_authenticated_user_when_render_then_shows_dashboard_cta", async () => {
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: authenticatedUser,
+            }),
+        });
+      }
+      if (url.endsWith("/health")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: "ok",
+              data: { status: "healthy", enabledContexts: ["user_auth"] },
+            }),
+        });
+      }
+      throw new Error(`unexpected fetch url: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", mockFetch);
+
+    renderLanding();
+
+    const dashboardLinks = await screen.findAllByRole("link", {
+      name: "Dashboard",
+    });
+    expect(dashboardLinks).toHaveLength(2);
+    expect(dashboardLinks[0]).toHaveAttribute("href", "/dashboard");
+    expect(dashboardLinks[1]).toHaveAttribute("href", "/dashboard");
+
+    expect(screen.queryByText("免费注册")).not.toBeInTheDocument();
+    expect(screen.queryByText("登录")).not.toBeInTheDocument();
+    expect(screen.queryByText("立即开始")).not.toBeInTheDocument();
+    expect(screen.queryByText("已有账号？登录")).not.toBeInTheDocument();
+
+    await screen.findByText("服务运行中");
+  });
+
+  it("given_initial_auth_user_when_render_then_shows_dashboard_without_fetching_users_me", async () => {
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        throw new Error("should not fetch /users/me when initialAuth is ready");
+      }
+      if (url.endsWith("/health")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: "ok",
+              data: { status: "healthy", enabledContexts: ["user_auth"] },
+            }),
+        });
+      }
+      throw new Error(`unexpected fetch url: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", mockFetch);
+
+    renderLanding({
+      initialAuth: {
+        user: authenticatedUser,
+        resolved: true,
+      },
+    });
+
+    const dashboardLinks = screen.getAllByRole("link", { name: "Dashboard" });
+    expect(dashboardLinks).toHaveLength(2);
+    expect(screen.queryByText("免费注册")).not.toBeInTheDocument();
+    expect(screen.queryByText("登录")).not.toBeInTheDocument();
+    expect(screen.queryByText("立即开始")).not.toBeInTheDocument();
+    expect(screen.queryByText("已有账号？登录")).not.toBeInTheDocument();
+
+    expect(
+      mockFetch.mock.calls.some((call) => String(call[0]).endsWith("/users/me")),
+    ).toBe(false);
+    await screen.findByText("服务运行中");
+  });
+
+  it("given_auth_loading_when_render_then_keeps_public_cta_visible_until_resolved", async () => {
+    let resolveMe: ((value: unknown) => void) | null = null;
+
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        return new Promise((resolve) => {
+          resolveMe = resolve as typeof resolveMe;
+        });
+      }
+      if (url.endsWith("/health")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: "ok",
+              data: { status: "healthy", enabledContexts: ["user_auth"] },
+            }),
+        });
+      }
+      throw new Error(`unexpected fetch url: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", mockFetch);
+
+    renderLanding();
+
+    expect(screen.getByText("免费注册")).toBeInTheDocument();
+    expect(screen.getByText("登录")).toBeInTheDocument();
+    expect(screen.getByText("立即开始")).toBeInTheDocument();
+    expect(screen.getByText("已有账号？登录")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveMe?.({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: authenticatedUser,
+          }),
+      });
+    });
+
+    const dashboardLinks = await screen.findAllByRole("link", {
+      name: "Dashboard",
+    });
+    expect(dashboardLinks).toHaveLength(2);
+  });
+
   it("given_landing_when_render_then_shows_core_features", async () => {
-    const mockFetch = vi.fn(() =>
-      Promise.resolve({
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: false,
+              error: { code: "UNAUTHORIZED", message: "unauthorized" },
+            }),
+        });
+      }
+      return Promise.resolve({
         ok: true,
         status: 200,
         headers: new Headers({ "content-type": "application/json" }),
@@ -95,12 +284,12 @@ describe("/ (Landing Page)", () => {
             success: true,
             data: { status: "healthy", enabledContexts: [] },
           }),
-      }),
-    );
+      });
+    });
 
     vi.stubGlobal("fetch", mockFetch);
 
-    render(<LandingPage />);
+    renderLanding();
 
     // 四大核心能力模块
     expect(screen.getByText("策略管理")).toBeInTheDocument();
@@ -112,6 +301,18 @@ describe("/ (Landing Page)", () => {
 
   it("given_health_ok_when_render_then_shows_service_running", async () => {
     const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: false,
+              error: { code: "UNAUTHORIZED", message: "unauthorized" },
+            }),
+        });
+      }
       if (url.endsWith("/health")) {
         return Promise.resolve({
           ok: true,
@@ -135,7 +336,7 @@ describe("/ (Landing Page)", () => {
 
     vi.stubGlobal("fetch", mockFetch);
 
-    const { container } = render(<LandingPage />);
+    const { container } = renderLanding();
 
     await waitFor(() => {
       expect(screen.getByTestId("health-ok")).toBeInTheDocument();
@@ -147,6 +348,18 @@ describe("/ (Landing Page)", () => {
 
   it("given_health_fail_when_render_then_shows_unavailable_without_blocking", async () => {
     const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: false,
+              error: { code: "UNAUTHORIZED", message: "unauthorized" },
+            }),
+        });
+      }
       if (url.endsWith("/health")) {
         return Promise.reject(new Error("Network error"));
       }
@@ -160,10 +373,10 @@ describe("/ (Landing Page)", () => {
 
     vi.stubGlobal("fetch", mockFetch);
 
-    const { container } = render(<LandingPage />);
+    const { container } = renderLanding();
 
     // 页面不被阻断——CTA 仍可见
-    expect(screen.getByText("免费注册")).toBeInTheDocument();
+    await screen.findByText("免费注册");
     expect(screen.getByText("登录")).toBeInTheDocument();
 
     await waitFor(() => {
@@ -176,8 +389,20 @@ describe("/ (Landing Page)", () => {
   });
 
   it("given_landing_when_render_then_has_value_proposition", async () => {
-    const mockFetch = vi.fn(() =>
-      Promise.resolve({
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith("/users/me")) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: () =>
+            Promise.resolve({
+              success: false,
+              error: { code: "UNAUTHORIZED", message: "unauthorized" },
+            }),
+        });
+      }
+      return Promise.resolve({
         ok: true,
         status: 200,
         headers: new Headers({ "content-type": "application/json" }),
@@ -186,12 +411,12 @@ describe("/ (Landing Page)", () => {
             success: true,
             data: { status: "healthy", enabledContexts: [] },
           }),
-      }),
-    );
+      });
+    });
 
     vi.stubGlobal("fetch", mockFetch);
 
-    render(<LandingPage />);
+    renderLanding();
 
     // Hero 一句话价值主张
     expect(screen.getByText("可解释的量化分析工具")).toBeInTheDocument();

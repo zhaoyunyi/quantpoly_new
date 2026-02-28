@@ -7,7 +7,11 @@
 
 import { CtaLink } from "./CtaLink";
 
-export function HeroSection() {
+export function HeroSection({
+  authState = "anonymous",
+}: {
+  authState?: "authenticated" | "anonymous";
+}) {
   return (
     <section className="flex-shrink-0 py-2xl px-xl">
       <div className="max-w-[960px] mx-auto text-center flex flex-col items-center gap-lg">
@@ -28,12 +32,20 @@ export function HeroSection() {
 
         {/* CTA 按钮组 */}
         <div className="flex items-center gap-md mt-sm">
-          <CtaLink href="/auth/register" variant="primary" size="lg">
-            立即开始
-          </CtaLink>
-          <CtaLink href="/auth/login" variant="secondary" size="lg">
-            已有账号？登录
-          </CtaLink>
+          {authState === "authenticated" ? (
+            <CtaLink href="/dashboard" variant="primary" size="lg">
+              Dashboard
+            </CtaLink>
+          ) : (
+            <>
+              <CtaLink href="/auth/register" variant="primary" size="lg">
+                立即开始
+              </CtaLink>
+              <CtaLink href="/auth/login" variant="secondary" size="lg">
+                已有账号？登录
+              </CtaLink>
+            </>
+          )}
         </div>
       </div>
     </section>

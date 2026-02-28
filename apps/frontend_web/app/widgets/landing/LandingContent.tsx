@@ -9,8 +9,12 @@ import { HeroSection } from "./HeroSection";
 import { FeaturesSection } from "./FeaturesSection";
 import { HealthIndicator } from "./HealthIndicator";
 import { CtaLink } from "./CtaLink";
+import { useAuth } from "@qp/api-client";
 
 export function LandingPage() {
+  const { user } = useAuth();
+  const authState = user ? "authenticated" : "anonymous";
+
   return (
     <div className="min-h-screen bg-bg-page flex flex-col">
       {/* 顶部导航栏 */}
@@ -22,17 +26,25 @@ export function LandingPage() {
         </a>
         <nav className="flex items-center gap-md">
           <HealthIndicator />
-          <CtaLink href="/auth/login" variant="ghost" size="sm">
-            登录
-          </CtaLink>
-          <CtaLink href="/auth/register" variant="primary" size="sm">
-            免费注册
-          </CtaLink>
+          {authState === "authenticated" ? (
+            <CtaLink href="/dashboard" variant="primary" size="sm">
+              Dashboard
+            </CtaLink>
+          ) : authState === "anonymous" ? (
+            <>
+              <CtaLink href="/auth/login" variant="ghost" size="sm">
+                登录
+              </CtaLink>
+              <CtaLink href="/auth/register" variant="primary" size="sm">
+                免费注册
+              </CtaLink>
+            </>
+          ) : null}
         </nav>
       </header>
 
       {/* Hero */}
-      <HeroSection />
+      <HeroSection authState={authState} />
 
       {/* Features */}
       <FeaturesSection />

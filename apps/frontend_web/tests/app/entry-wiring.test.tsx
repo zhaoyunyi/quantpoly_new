@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 
 describe('entry_wiring', () => {
   beforeEach(() => {
@@ -47,24 +47,42 @@ describe('entry_wiring', () => {
     // 配置 API client（避免 request() 的 baseUrl 为空）
     root.bootstrapApiClient('http://localhost:8000')
 
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: () =>
-        Promise.resolve({
-          success: true,
-          message: 'ok',
-          data: {
-            id: 'u-1',
-            email: 'u1@example.com',
-            displayName: 'U1',
-            isActive: true,
-            emailVerified: true,
-            role: 'user',
-            level: 1,
-          },
-        }),
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith('/users/me')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                id: 'u-1',
+                email: 'u1@example.com',
+                displayName: 'U1',
+                isActive: true,
+                emailVerified: true,
+                role: 'user',
+                level: 1,
+              },
+            }),
+        })
+      }
+      if (url.endsWith('/health')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: { status: 'healthy', enabledContexts: ['user_auth'] },
+            }),
+        })
+      }
+      throw new Error(`unexpected fetch url: ${url}`)
     })
     vi.stubGlobal('fetch', mockFetch)
 
@@ -84,8 +102,35 @@ describe('entry_wiring', () => {
       expect(screen.getByText('secret')).toBeInTheDocument()
     })
 
-    // AppShell 的品牌文案应存在（基础烟测）
+    // 服务状态可见，且全页只出现一次
+    const serviceRunning = await screen.findByText('服务运行中')
+    expect(serviceRunning).toBeInTheDocument()
+    expect(screen.getAllByText('服务运行中')).toHaveLength(1)
+
+    // 左侧导航栏恢复，且不应出现顶部横向菜单导致的重复链接
     expect(screen.getByText('QuantPoly')).toBeInTheDocument()
+    const collapseButton = screen.getByLabelText('收起侧栏')
+    expect(collapseButton).toBeInTheDocument()
+    const sidebarHeader = screen.getByTestId('shell-sidebar-header')
+    expect(sidebarHeader).toHaveClass('justify-between')
+    expect(
+      within(collapseButton).getByTestId('shell-sidebar-toggle-icon'),
+    ).toHaveAttribute('data-icon', 'collapse-sidebar')
+    expect(screen.getByRole('link', { name: '仪表盘' })).toHaveAttribute(
+      'href',
+      '/dashboard',
+    )
+    expect(screen.getByRole('link', { name: '策略管理' })).toHaveAttribute(
+      'href',
+      '/strategies',
+    )
+    expect(screen.getAllByRole('link', { name: '仪表盘' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: '策略管理' })).toHaveLength(1)
+
+    // 顶部横向导航栏已移除（不再包含菜单链接）
+    const topNav = screen.queryByTestId('shell-top-nav')
+    if (topNav) {
+      expect(within(topNav).queryAllByRole('link')).toHaveLength(0)
+    }
   })
 })
-

@@ -6,7 +6,6 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { cn } from "@qp/ui";
-
 export interface ErrorBoundaryProps {
   children: ReactNode;
   /** 自定义 fallback */

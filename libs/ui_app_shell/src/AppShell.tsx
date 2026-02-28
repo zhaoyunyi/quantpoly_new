@@ -2,22 +2,20 @@
  * App Shell — AppShell
  *
  * 已认证用户的主布局。
- * - 固定侧栏导航（一级 IA 对齐 spec/UISpec.md 8.1）
- * - 顶栏（品牌 + 用户信息）
+ * - 固定侧栏导航
+ * - 顶部状态栏（右侧服务状态，不含横向菜单）
  * - 内容区（max-w-[1200px] 居中）
  * - 底部免责声明
- *
- * 全部样式来自 Design Tokens。
  */
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { cn, transitionClass } from "@qp/ui";
-import { useAuth } from "@qp/api-client";
+import { healthCheck, useAuth } from "@qp/api-client";
 import { NAV_ITEMS, type NavItem } from "./navigation";
 
 export interface AppShellProps {
   children: ReactNode;
-  /** 当前路由路径，用于高亮导航项 */
+  /** 当前路由路径，用于高亮侧栏导航项 */
   currentPath?: string;
 }
 
@@ -27,7 +25,6 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-bg-page flex">
-      {/* ─── 侧栏 ─── */}
       <aside
         className={cn(
           "fixed top-0 left-0 h-screen bg-bg-card border-r border-secondary-300/20 flex flex-col z-30",
@@ -35,8 +32,10 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
           sidebarCollapsed ? "w-16" : "w-56",
         )}
       >
-        {/* 品牌标识 */}
-        <div className="flex items-center h-14 px-4 border-b border-secondary-300/20">
+        <div
+          className="flex items-center justify-between h-14 px-4 border-b border-secondary-300/20"
+          data-testid="shell-sidebar-header"
+        >
           <span
             className={cn(
               "text-title-card text-primary-900 font-medium whitespace-nowrap overflow-hidden",
@@ -53,7 +52,6 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
               "p-1.5 rounded-sm text-text-muted hover:text-text-primary hover:bg-bg-subtle",
               transitionClass,
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
-              sidebarCollapsed && "mx-auto",
             )}
             aria-label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
           >
@@ -62,11 +60,28 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
               height="18"
               viewBox="0 0 18 18"
               fill="none"
+              data-testid="shell-sidebar-toggle-icon"
+              data-icon={sidebarCollapsed ? "expand-sidebar" : "collapse-sidebar"}
               aria-hidden="true"
             >
+              <rect
+                x="2.75"
+                y="3.25"
+                width="12.5"
+                height="11.5"
+                rx="1.5"
+                stroke="currentColor"
+                strokeWidth="1.4"
+              />
+              <path
+                d="M7.5 3.5v11"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
               {sidebarCollapsed ? (
                 <path
-                  d="M6 4l5 5-5 5"
+                  d="M9.25 7l2 2-2 2"
                   stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
@@ -74,7 +89,7 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
                 />
               ) : (
                 <path
-                  d="M12 4L7 9l5 5"
+                  d="M11.25 7l-2 2 2 2"
                   stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
@@ -85,7 +100,6 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
           </button>
         </div>
 
-        {/* 导航列表 */}
         <nav className="flex-1 py-sm overflow-y-auto">
           <ul className="flex flex-col gap-0.5 px-2">
             {NAV_ITEMS.map((item) => (
@@ -99,7 +113,6 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
           </ul>
         </nav>
 
-        {/* 底部用户区 */}
         {user && (
           <div className="border-t border-secondary-300/20 p-3">
             <div
@@ -108,7 +121,6 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
                 sidebarCollapsed && "justify-center",
               )}
             >
-              {/* 头像占位 */}
               <div className="shrink-0 w-8 h-8 rounded-full bg-primary-500/10 flex items-center justify-center text-primary-700 text-caption font-medium">
                 {user.displayName?.[0]?.toUpperCase() ||
                   user.email[0]?.toUpperCase()}
@@ -132,7 +144,6 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
         )}
       </aside>
 
-      {/* ─── 主内容区 ─── */}
       <div
         className={cn(
           "flex-1 flex flex-col",
@@ -140,12 +151,19 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
           sidebarCollapsed ? "ml-16" : "ml-56",
         )}
       >
-        {/* 内容 */}
+        <header className="border-b border-secondary-300/20 bg-bg-card/95 backdrop-blur-sm">
+          <div
+            className="h-14 w-full max-w-[1200px] mx-auto px-xl flex items-center justify-end"
+            data-testid="shell-top-status"
+          >
+            <ShellHealthIndicator />
+          </div>
+        </header>
+
         <main className="flex-1 w-full max-w-[1200px] mx-auto px-xl py-lg">
           {children}
         </main>
 
-        {/* 免责声明 */}
         <footer className="py-md px-xl text-center border-t border-secondary-300/10">
           <p className="text-disclaimer">
             不构成投资建议。回测结果不代表未来表现。
@@ -155,8 +173,6 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
     </div>
   );
 }
-
-/* ─── 侧栏导航项 ─── */
 
 function SidebarNavItem({
   item,
@@ -196,5 +212,54 @@ function SidebarNavItem({
         {!collapsed && <span className="truncate">{item.label}</span>}
       </a>
     </li>
+  );
+}
+
+function ShellHealthIndicator() {
+  const [status, setStatus] = useState<"loading" | "ok" | "down">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    void healthCheck()
+      .then(() => {
+        if (cancelled) return;
+        setStatus("ok");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStatus("down");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (status === "loading") {
+    return (
+      <span className="inline-flex items-center gap-xs text-caption text-text-muted">
+        <span className="inline-block w-2 h-2 rounded-full bg-secondary-300 animate-pulse" />
+        检测中…
+      </span>
+    );
+  }
+
+  if (status === "down") {
+    return (
+      <span className="inline-flex items-center gap-xs text-caption text-text-muted">
+        <span className="inline-block w-2 h-2 rounded-full bg-secondary-500" />
+        服务暂不可用
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-xs text-caption text-text-muted"
+      data-testid="shell-health-ok"
+    >
+      <span className="inline-block w-2 h-2 rounded-full bg-primary-500" />
+      服务运行中
+    </span>
   );
 }
