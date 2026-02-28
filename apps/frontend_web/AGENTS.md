@@ -21,7 +21,18 @@
 - 生产构建：`cd apps/frontend_web && npm run build`
 - 本地预览：`cd apps/frontend_web && npm run start`
 
-## 4. 边界说明
+## 4. 设计系统与 Tokens
 
-- 当前提交完成 TanStack Start 脚手架落位，不改变后端运行路径。
+- 设计系统基座：`Base UI + Tailwind CSS v4`
+- Design Tokens：`app/styles/app.css`（`@theme {}`）
+- UI 规范入口：`spec/UISpec.md`
+
+## 5. 边界说明
+
+- 当前仅保留前端规范与 Design Tokens 基线，业务 UI 暂未实现。
 - 现有后端入口 `apps/backend_app/` 与脚本命令保持不变。
+
+## 6. 安全提示（开发阶段）
+
+- `npm audit` 目前会提示上游依赖存在高危漏洞（涉及 `vinxi/h3/esbuild` 等）。
+- 在漏洞处理完成前，不建议将本前端构建产物用于生产环境对外提供服务。

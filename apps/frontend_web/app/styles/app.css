@@ -1,0 +1,214 @@
+/* ============================================
+ * QuantPoly · Tailwind CSS v4 Theme
+ * 理性可信 · 克制科技感 · 可解释
+ *
+ * 色相统一：H ≈ 215°–220° 靛蓝灰轴
+ * ============================================ */
+
+@import 'tailwindcss' source('../');
+
+/* ─── Custom Theme ─── */
+@theme {
+  /* ── Color / Brand / Primary ── H≈218° 靛蓝系 */
+  --color-primary-900: #1B3255;
+  --color-primary-700: #2D5990;
+  --color-primary-500: #4A7DB8;
+
+  /* ── Color / Brand / Secondary ── H≈220° 冷青灰 */
+  --color-secondary-500: #6374A5;
+  --color-secondary-300: #8DA5CA;
+
+  /* ── Color / Background ── 统一蓝灰底调 */
+  --color-bg-page: #F7F8FB;
+  --color-bg-card: #FFFFFF;
+  --color-bg-subtle: #EDF0F6;
+
+  /* ── Color / Text ── 蓝灰调文本层级 */
+  --color-text-primary: #1D2433;
+  --color-text-secondary: #5B6779;
+  --color-text-muted: #8C96A8;
+
+  /* ── Color / State ── 低饱和功能色 */
+  --color-state-up: #9E5350;
+  --color-state-down: #4D7D63;
+  --color-state-risk: #BF7838;
+  --color-state-disabled: #C1C8D3;
+
+  /* ── Color / Chart ── */
+  --color-chart-primary: #2D5990;
+  --color-chart-secondary: #6374A5;
+  --color-chart-grid: #E0E5EE;
+  --color-chart-axis: #96A1B3;
+
+  /* ── Font / Family ── */
+  --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Menlo', monospace;
+
+  /* ── Font / Size ── */
+  --text-h1: 28px;
+  --text-h2: 22px;
+  --text-h3: 18px;
+  --text-body: 14px;
+  --text-caption: 12px;
+
+  /* ── Spacing（4px 倍数） ── */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+
+  /* ── Radius ── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  /* ── Shadow ── */
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  /* ── Transition ── */
+  --transition-base: 120ms ease-out;
+}
+
+/* ─── Global Base Styles ─── */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-page);
+  }
+
+  /* 等宽数字（tabular-nums）全局启用 */
+  .font-mono,
+  [data-mono] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Links */
+  a {
+    color: var(--color-primary-500);
+    text-decoration: none;
+    transition: opacity var(--transition-base);
+  }
+  a:hover {
+    opacity: 0.92;
+  }
+}
+
+/* ─── Utility Classes for Typography ─── */
+@layer utilities {
+  /* Page-level title */
+  .text-title-page {
+    font-size: var(--text-h1);
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--color-primary-900);
+    letter-spacing: -0.01em;
+  }
+
+  /* Section title */
+  .text-title-section {
+    font-size: var(--text-h2);
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--color-primary-900);
+  }
+
+  /* Card title */
+  .text-title-card {
+    font-size: var(--text-h3);
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--color-text-primary);
+  }
+
+  /* Primary data display — large mono */
+  .text-data-primary {
+    font-family: var(--font-mono);
+    font-size: var(--text-h2);
+    font-weight: 500;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-primary-900);
+  }
+
+  /* Secondary data display */
+  .text-data-secondary {
+    font-family: var(--font-mono);
+    font-size: var(--text-body);
+    font-weight: 400;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary);
+  }
+
+  /* Small mono data */
+  .text-data-mono {
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    font-weight: 400;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary);
+  }
+
+  /* Body text */
+  .text-body {
+    font-size: var(--text-body);
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--color-text-primary);
+  }
+
+  /* Body secondary */
+  .text-body-secondary {
+    font-size: var(--text-body);
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+  }
+
+  /* Caption */
+  .text-caption {
+    font-size: var(--text-caption);
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* Disclaimer */
+  .text-disclaimer {
+    font-size: var(--text-caption);
+    font-weight: 400;
+    line-height: 1.7;
+    color: var(--color-text-muted);
+  }
+
+  /* State colors */
+  .state-up { color: var(--color-state-up); }
+  .state-down { color: var(--color-state-down); }
+  .state-risk { color: var(--color-state-risk); }
+  .state-disabled {
+    color: var(--color-state-disabled);
+    opacity: 0.4;
+  }
+}
