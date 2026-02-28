@@ -1,0 +1,35 @@
+{
+  "name": "quantpoly-frontend-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "1.117.1",
+    "@tanstack/react-start": "1.117.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vinxi": "0.5.3"
+  },
+  "overrides": {
+    "@tanstack/react-router": "1.117.1",
+    "@tanstack/router-core": "1.117.1",
+    "@tanstack/router-generator": "1.117.1",
+    "@tanstack/router-plugin": "1.117.2",
+    "@tanstack/start-client-core": "1.117.1",
+    "@tanstack/start-server-core": "1.117.1",
+    "@tanstack/react-start-client": "1.117.1",
+    "@tanstack/react-start-server": "1.117.1",
+    "@tanstack/react-start-config": "1.117.2",
+    "@tanstack/react-start-plugin": "1.115.0",
+    "@tanstack/server-functions-plugin": "1.115.0",
+    "@tanstack/start-server-functions-handler": "1.117.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.8"
+  }
+}
