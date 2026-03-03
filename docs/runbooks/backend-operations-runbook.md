@@ -17,6 +17,22 @@
 - 当前用户主路径：`/users/me`
 - 兼容移除提示：`GET /auth/me` 返回 `410` 与 `error.code=ROUTE_REMOVED`
 
+### 1.3 前端直连后端（CORS + Cookie 会话）
+
+当前前端采用浏览器端 **HTTP 直连后端** 的方式联调，后端需开启 CORS 以允许跨 Origin 携带 `session_token` cookie（credentials）。
+
+推荐开发期统一使用 `localhost`（避免 `localhost` 与 `127.0.0.1` 混用导致 cookie/WS 鉴权异常）：
+
+- 前端：`http://localhost:3000`
+- 后端：`http://localhost:8000`
+
+后端 CORS 配置（默认关闭）：
+
+- `BACKEND_CORS_ALLOWED_ORIGINS`：允许的前端 origin 白名单（逗号分隔），示例：`http://localhost:3000`
+- `BACKEND_CORS_ALLOW_CREDENTIALS`：是否允许 credentials（默认 `true`）
+- `BACKEND_CORS_ALLOW_METHODS`：允许方法（逗号分隔，默认 `GET,POST,PUT,PATCH,DELETE,OPTIONS`）
+- `BACKEND_CORS_ALLOW_HEADERS`：允许头（逗号分隔，默认 `*`）
+
 ## 2. 切换前冒烟
 
 执行：

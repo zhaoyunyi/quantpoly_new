@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from apps.backend_app.router_registry import (
     MetricsCollector,
@@ -58,6 +59,10 @@ def create_app(
         postgres_dsn=postgres_dsn or env_settings.postgres_dsn,
         market_data_provider=normalize_market_data_provider(market_data_provider or env_settings.market_data_provider),
         job_executor_mode=normalize_job_executor_mode(job_executor_mode or env_settings.job_executor_mode),
+        cors_allowed_origins=env_settings.cors_allowed_origins,
+        cors_allow_credentials=env_settings.cors_allow_credentials,
+        cors_allow_methods=env_settings.cors_allow_methods,
+        cors_allow_headers=env_settings.cors_allow_headers,
     )
     context = build_context(
         storage_backend=settings.storage_backend,
@@ -69,6 +74,16 @@ def create_app(
     app.title = "quantpoly-backend-app"
 
     install_exception_handlers(app)
+
+    if settings.cors_allowed_origins:
+        # 安全约束：前端携带 cookie（credentials）时，允许 origin 必须为显式白名单，禁止 "*"
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_allowed_origins),
+            allow_credentials=bool(settings.cors_allow_credentials),
+            allow_methods=list(settings.cors_allow_methods),
+            allow_headers=list(settings.cors_allow_headers),
+        )
 
     metrics = MetricsCollector()
 

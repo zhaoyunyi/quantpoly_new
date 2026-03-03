@@ -27,6 +27,10 @@ class CompositionSettings:
     postgres_dsn: str | None = None
     market_data_provider: str = "inmemory"
     job_executor_mode: str = "inprocess"
+    cors_allowed_origins: tuple[str, ...] = ()
+    cors_allow_credentials: bool = True
+    cors_allow_methods: tuple[str, ...] = ("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+    cors_allow_headers: tuple[str, ...] = ("*",)
 
     @classmethod
     def from_env(cls) -> "CompositionSettings":
@@ -35,6 +39,10 @@ class CompositionSettings:
         postgres_dsn = os.getenv("BACKEND_POSTGRES_DSN", "").strip() or None
         market_data_provider = normalize_market_data_provider(os.getenv("BACKEND_MARKET_DATA_PROVIDER"))
         job_executor_mode = normalize_job_executor_mode(os.getenv("BACKEND_JOB_EXECUTOR_MODE"))
+        cors_allowed_origins = normalize_cors_allowed_origins(os.getenv("BACKEND_CORS_ALLOWED_ORIGINS"))
+        cors_allow_credentials = normalize_cors_allow_credentials(os.getenv("BACKEND_CORS_ALLOW_CREDENTIALS"))
+        cors_allow_methods = normalize_cors_allow_methods(os.getenv("BACKEND_CORS_ALLOW_METHODS"))
+        cors_allow_headers = normalize_cors_allow_headers(os.getenv("BACKEND_CORS_ALLOW_HEADERS"))
         if not raw:
             return cls(
                 enabled_contexts=set(_DEFAULT_CONTEXTS),
@@ -42,6 +50,10 @@ class CompositionSettings:
                 postgres_dsn=postgres_dsn,
                 market_data_provider=market_data_provider,
                 job_executor_mode=job_executor_mode,
+                cors_allowed_origins=cors_allowed_origins,
+                cors_allow_credentials=cors_allow_credentials,
+                cors_allow_methods=cors_allow_methods,
+                cors_allow_headers=cors_allow_headers,
             )
 
         selected = {item.strip() for item in raw.split(",") if item.strip()}
@@ -53,6 +65,10 @@ class CompositionSettings:
             postgres_dsn=postgres_dsn,
             market_data_provider=market_data_provider,
             job_executor_mode=job_executor_mode,
+            cors_allowed_origins=cors_allowed_origins,
+            cors_allow_credentials=cors_allow_credentials,
+            cors_allow_methods=cors_allow_methods,
+            cors_allow_headers=cors_allow_headers,
         )
 
 
@@ -84,3 +100,51 @@ def normalize_enabled_contexts(enabled_contexts: set[str] | None) -> set[str]:
     normalized = {item.strip() for item in enabled_contexts if item.strip()}
     normalized.add("user-auth")
     return normalized
+
+
+def _parse_csv(value: str | None) -> tuple[str, ...]:
+    raw = (value or "").strip()
+    if not raw:
+        return ()
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def _parse_bool(value: str | None, *, default: bool) -> bool:
+    if value is None:
+        return default
+    raw = value.strip()
+    if not raw:
+        return default
+    lowered = raw.lower()
+    if lowered in {"1", "true", "yes", "y", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ValueError("cors allow_credentials must be a boolean")
+
+
+def normalize_cors_allowed_origins(value: str | None) -> tuple[str, ...]:
+    origins = _parse_csv(value)
+    if not origins:
+        return ()
+    if "*" in origins:
+        raise ValueError("cors allowed_origins must not include '*' when credentials are enabled")
+    return origins
+
+
+def normalize_cors_allow_credentials(value: str | None) -> bool:
+    return _parse_bool(value, default=True)
+
+
+def normalize_cors_allow_methods(value: str | None) -> tuple[str, ...]:
+    methods = _parse_csv(value)
+    if not methods:
+        return ("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+    return tuple(item.upper() for item in methods)
+
+
+def normalize_cors_allow_headers(value: str | None) -> tuple[str, ...]:
+    headers = _parse_csv(value)
+    if not headers:
+        return ("*",)
+    return headers
