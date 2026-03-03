@@ -36,3 +36,11 @@ def test_frontend_web_pins_tanstack_start_versions() -> None:
     assert overrides.get("@tanstack/react-start-server") == "1.117.1"
     assert overrides.get("@tanstack/react-start-config") == "1.117.2"
     assert overrides.get("@tanstack/router-plugin") == "1.117.2"
+
+
+def test_frontend_web_client_entry_exports_default() -> None:
+    client_entry = Path("apps/frontend_web/app/client.tsx")
+    assert client_entry.exists(), "缺少 app/client.tsx（vinxi client handler）"
+
+    content = client_entry.read_text(encoding="utf-8")
+    assert "export default" in content, "client handler 缺少默认导出，可能导致 vinxi build 警告或运行时异常"
