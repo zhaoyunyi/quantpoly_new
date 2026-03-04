@@ -9,4 +9,4 @@
 - **WHEN** 调用 `POST /auth/verify-email/resend`
 - **THEN** 总是返回统一成功语义
 - **AND** 不泄漏邮箱是否存在或是否已验证
-
+- **AND** 系统记录审计事件用于安全追踪（不记录原始 email）

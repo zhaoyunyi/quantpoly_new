@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -171,6 +172,7 @@ def _register_routes(
     governance_checker: Callable[..., Any] | None,
 ):
     reset_logger = logging.getLogger("user_auth.password_reset")
+    verification_logger = logging.getLogger("user_auth.email_verification")
 
     def _audit_password_reset(*, email: str, user_id: str | None, outcome: str) -> None:
         event = {
@@ -183,6 +185,21 @@ def _register_routes(
             password_reset_audit_sink(event)
             return
         reset_logger.info("password_reset_event=%s", event)
+
+    def _audit_email_verification_resend(*, email: str, user_id: str | None, outcome: str) -> None:
+        # 安全约束：审计日志不记录可直接识别用户的原始 email，避免日志泄漏带来枚举风险。
+        normalized = (email or "").strip().lower()
+        email_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12] if normalized else ""
+        email_domain = normalized.split("@", 1)[1] if "@" in normalized else ""
+
+        event = {
+            "event": "email_verification_resend",
+            "emailHash": email_hash,
+            "emailDomain": email_domain,
+            "userId": user_id,
+            "outcome": outcome,
+        }
+        verification_logger.info("email_verification_resend_event=%s", event)
 
     def _authorize_admin_action(
         *,
@@ -271,6 +288,27 @@ def _register_routes(
         user.verify_email()
         repo.save(user)
         return success_response(message="Email verified")
+
+    @app.post("/auth/verify-email/resend")
+    def resend_verify_email(body: VerifyEmailRequest):
+        # 统一成功语义（抗枚举）：不泄漏邮箱是否存在或是否已验证。
+        message = "If the account exists, verification instructions have been sent"
+
+        user = repo.get_by_email(body.email)
+        if user is None:
+            outcome = "user_not_found"
+        elif user.email_verified:
+            outcome = "already_verified"
+        else:
+            outcome = "accepted"
+
+        _audit_email_verification_resend(
+            email=body.email,
+            user_id=user.id if user is not None else None,
+            outcome=outcome,
+        )
+
+        return success_response(message=message)
 
     @app.post("/auth/password-reset/request")
     def request_password_reset(body: PasswordResetRequest):
