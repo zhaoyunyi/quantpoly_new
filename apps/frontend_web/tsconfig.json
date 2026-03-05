@@ -5,6 +5,14 @@
     "module": "ESNext",
     "target": "ES2022",
     "skipLibCheck": true,
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "paths": {
+      "@qp/api-client": ["../../libs/frontend_api_client/src/index.ts"],
+      "@qp/api-client/*": ["../../libs/frontend_api_client/src/*"],
+      "@qp/ui": ["../../libs/ui_design_system/src/index.ts"],
+      "@qp/ui/*": ["../../libs/ui_design_system/src/*"],
+      "@qp/shell": ["../../libs/ui_app_shell/src/index.ts"],
+      "@qp/shell/*": ["../../libs/ui_app_shell/src/*"]
+    }
   }
 }

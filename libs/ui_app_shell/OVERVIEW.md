@@ -1,9 +1,11 @@
-# 前端应用壳库（规划占位）
+# 前端应用壳库（ui_app_shell）
 
-本目录用于承载应用壳能力，包括：
+本目录承载前端应用壳能力，提供：
 
-- 布局框架（顶部导航、侧栏、内容区）
-- 鉴权路由守卫
-- 全局通知、错误边界、页面级骨架屏
+- `PublicLayout`：公开页面布局（登录/注册等）
+- `AppShell`：已认证用户主布局（侧栏导航 + 内容区 + footer）
+- `AuthGuard`：认证守卫（基于 `GET /users/me`，401 重定向到 `/auth/login?next=...`）
+- `ErrorBoundary`：全局错误边界（route-level / app-level）
+- `NAV_ITEMS`：一级导航信息架构
 
-当前仅为目录占位，不接入后端运行链路。
+> 说明：`AuthGuard` 依赖 `frontend_api_client` 的 `AuthProvider/useAuth`，并要求在应用启动时完成 `configureClient({ baseUrl })` 配置。

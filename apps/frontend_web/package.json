@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vinxi dev",
     "build": "vinxi build",
-    "start": "vinxi start"
+    "start": "vinxi start",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -34,6 +36,11 @@
     "@tanstack/start-server-functions-handler": "1.117.1"
   },
   "devDependencies": {
-    "@types/react": "^19.0.8"
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.0.8",
+    "jsdom": "^28.0.0",
+    "vitest": "^4.0.18"
   }
 }
