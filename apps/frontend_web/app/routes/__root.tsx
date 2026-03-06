@@ -9,6 +9,21 @@ import type { ReactNode } from "react";
 /// <reference types="vite/client" />
 import appCss from "../styles/app.css?url";
 
+import {
+  AppProviders,
+  bootstrapApiClient,
+} from "../entry_wiring";
+
+export {
+  normalizeBackendOrigin,
+  bootstrapApiClient,
+  AppProviders,
+  ProtectedLayout,
+} from "../entry_wiring";
+
+// 入口统一配置：API client baseUrl（直连后端）
+bootstrapApiClient();
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -49,7 +64,9 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <RootDocument>
-      <Outlet />
+      <AppProviders>
+        <Outlet />
+      </AppProviders>
     </RootDocument>
   );
 }
