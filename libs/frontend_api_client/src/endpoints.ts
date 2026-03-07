@@ -33,6 +33,23 @@ export interface LoginResult {
   token: string
 }
 
+export interface VerifyEmailPayload {
+  email: string
+}
+
+export interface PasswordResetRequestPayload {
+  email: string
+}
+
+export interface PasswordResetRequestResult {
+  resetToken: string
+}
+
+export interface PasswordResetConfirmPayload {
+  token: string
+  newPassword: string
+}
+
 export interface HealthResult {
   status: string
   enabledContexts: string[]
@@ -66,6 +83,35 @@ export function register(payload: RegisterPayload): Promise<void> {
 
 export function logout(): Promise<void> {
   return post<void>('/auth/logout')
+}
+
+export function verifyEmail(payload: VerifyEmailPayload): Promise<void> {
+  return post<void>('/auth/verify-email', payload)
+}
+
+export function resendVerification(payload: VerifyEmailPayload): Promise<void> {
+  return post<void>('/auth/verify-email/resend', payload)
+}
+
+/**
+ * 发起密码重置请求。
+ *
+ * 后端在测试模式下可能返回 resetToken（便于端到端测试），
+ * 非测试模式则不返回 data。
+ */
+export function requestPasswordReset(
+  payload: PasswordResetRequestPayload,
+): Promise<PasswordResetRequestResult | undefined> {
+  return post<PasswordResetRequestResult | undefined>(
+    '/auth/password-reset/request',
+    payload,
+  )
+}
+
+export function confirmPasswordReset(
+  payload: PasswordResetConfirmPayload,
+): Promise<void> {
+  return post<void>('/auth/password-reset/confirm', payload)
 }
 
 /* ─── Users / Me ─── */
