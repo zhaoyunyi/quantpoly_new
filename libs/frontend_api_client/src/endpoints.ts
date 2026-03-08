@@ -55,6 +55,133 @@ export interface HealthResult {
   enabledContexts: string[]
 }
 
+/* ─── Monitoring / Summary ─── */
+
+export interface MonitorSummary {
+  type: 'monitor.summary'
+  generatedAt: string
+  metadata: {
+    version: string
+    latencyMs: number
+    sources: Record<string, 'ok' | 'degraded'>
+  }
+  accounts: { total: number; active: number }
+  strategies: { total: number; active: number }
+  backtests: {
+    total: number
+    pending: number
+    running: number
+    completed: number
+    failed: number
+    cancelled: number
+  }
+  tasks: {
+    total: number
+    queued: number
+    running: number
+    succeeded: number
+    failed: number
+    cancelled: number
+  }
+  signals: { total: number; pending: number; expired: number }
+  alerts: { total: number; open: number; critical: number }
+  degraded: { enabled: boolean; reasons: string[] }
+  isEmpty: boolean
+}
+
+export function getMonitorSummary(): Promise<MonitorSummary> {
+  return get<MonitorSummary>('/monitor/summary')
+}
+
+/* ─── Trading / Analytics ─── */
+
+export interface TradingAccountsAggregate {
+  userId: string
+  accountCount: number
+  totalCashBalance: number
+  totalMarketValue: number
+  totalUnrealizedPnl: number
+  totalEquity: number
+  totalTradeCount: number
+  totalTurnover: number
+  pendingOrderCount: number
+}
+
+export function getTradingAccountsAggregate(): Promise<TradingAccountsAggregate> {
+  return get<TradingAccountsAggregate>('/trading/accounts/aggregate')
+}
+
+/* ─── Backtests ─── */
+
+export interface BacktestStatistics {
+  pendingCount: number
+  runningCount: number
+  completedCount: number
+  failedCount: number
+  cancelledCount: number
+  totalCount: number
+  averageReturnRate: number
+  averageMaxDrawdown: number
+  averageWinRate: number
+}
+
+export function getBacktestStatistics(): Promise<BacktestStatistics> {
+  return get<BacktestStatistics>('/backtests/statistics')
+}
+
+/* ─── Risk / Alerts ─── */
+
+export interface RiskAlertStats {
+  total: number
+  open: number
+  acknowledged: number
+  resolved: number
+  bySeverity: Record<string, number>
+}
+
+function _withQuery(path: string, query: Record<string, string | undefined>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    const normalized = (value ?? '').trim()
+    if (!normalized) continue
+    params.set(key, normalized)
+  }
+  const qs = params.toString()
+  return qs ? `${path}?${qs}` : path
+}
+
+export function getRiskAlertStats(params?: { accountId?: string }): Promise<RiskAlertStats> {
+  const path = _withQuery('/risk/alerts/stats', {
+    accountId: params?.accountId,
+  })
+  return get<RiskAlertStats>(path)
+}
+
+/* ─── Signals ─── */
+
+export interface SignalsDashboard {
+  total: number
+  pending: number
+  expired: number
+  executed: number
+  cancelled: number
+  byAccount: Array<{
+    accountId: string
+    total: number
+    pending: number
+    expired: number
+    executed: number
+    cancelled: number
+  }>
+}
+
+export function getSignalsDashboard(params?: { accountId?: string }): Promise<SignalsDashboard> {
+  const path = _withQuery('/signals/dashboard', {
+    accountId: params?.accountId,
+  })
+  return get<SignalsDashboard>(path)
+}
+
 export type UserPreferences = Record<string, unknown>
 
 export interface ChangePasswordResult {

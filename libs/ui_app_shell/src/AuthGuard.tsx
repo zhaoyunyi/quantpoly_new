@@ -9,6 +9,7 @@
 import { type ReactNode } from "react";
 import { useAuth } from "@qp/api-client";
 import { Spinner } from "@qp/ui";
+import { redirectTo } from "./redirect";
 
 export interface AuthGuardProps {
   children: ReactNode;
@@ -43,7 +44,7 @@ export function AuthGuard({
       const next = encodeURIComponent(
         window.location.pathname + window.location.search,
       );
-      window.location.href = `${loginPath}?next=${next}`;
+      redirectTo(`${loginPath}?next=${next}`);
     }
     return null;
   }
