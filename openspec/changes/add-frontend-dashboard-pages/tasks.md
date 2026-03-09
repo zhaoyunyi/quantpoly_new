@@ -8,7 +8,7 @@
 - [x] 2.1 接入 `GET /monitor/summary`（运营摘要：accounts/strategies/backtests/tasks/signals/alerts）
 - [x] 2.2 接入 `GET /trading/accounts/aggregate`（资产汇总：若后端返回结构变化，以 envelope 解包为准）
 - [x] 2.3 接入 `GET /backtests/statistics`
-- [ ] 2.4 （可选）接入 `GET /risk/alerts/stats`、`GET /signals/dashboard`
+- [x] 2.4 （可选）接入 `GET /risk/alerts/stats`、`GET /signals/dashboard`
 
 ## 3. 组件规划
 

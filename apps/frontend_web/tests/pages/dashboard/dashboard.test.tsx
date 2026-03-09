@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 
 import { AppProviders, bootstrapApiClient } from '../../../app/entry_wiring'
 
@@ -140,6 +140,56 @@ describe('/dashboard', () => {
         })
       }
 
+      if (url.endsWith('/risk/alerts/stats')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                total: 9,
+                open: 3,
+                acknowledged: 4,
+                resolved: 2,
+                bySeverity: { critical: 1, high: 2, low: 6 },
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/signals/dashboard')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                total: 12,
+                pending: 5,
+                expired: 2,
+                executed: 3,
+                cancelled: 2,
+                byAccount: [
+                  {
+                    accountId: 'acc-1',
+                    total: 6,
+                    pending: 2,
+                    expired: 1,
+                    executed: 2,
+                    cancelled: 1,
+                  },
+                ],
+              },
+            }),
+        })
+      }
+
       throw new Error(`unexpected fetch url: ${url}`)
     })
 
@@ -162,6 +212,20 @@ describe('/dashboard', () => {
     expect(screen.getByText('部分数据源已降级')).toBeInTheDocument()
     expect(screen.getByText('accounts_unavailable')).toBeInTheDocument()
     expect(screen.getByText('signals_unavailable')).toBeInTheDocument()
+
+    // 可选面板：告警统计 + 信号统计
+    expect(screen.getByText('告警统计')).toBeInTheDocument()
+    expect(screen.getByText('信号统计')).toBeInTheDocument()
+
+    const riskPanel = screen.getByText('告警统计').closest('section')
+    expect(riskPanel).not.toBeNull()
+    expect(within(riskPanel!).getByText('未解决')).toBeInTheDocument()
+    expect(within(riskPanel!).getByText('3')).toBeInTheDocument()
+
+    const signalPanel = screen.getByText('信号统计').closest('section')
+    expect(signalPanel).not.toBeNull()
+    expect(within(signalPanel!).getByText('待处理')).toBeInTheDocument()
+    expect(within(signalPanel!).getByText('5')).toBeInTheDocument()
   })
 
   it('given_401_me_when_open_dashboard_then_auth_guard_redirects', async () => {
@@ -203,4 +267,3 @@ describe('/dashboard', () => {
     })
   })
 })
-
