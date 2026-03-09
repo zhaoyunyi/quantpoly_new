@@ -139,10 +139,32 @@ export interface RiskAlertStats {
   bySeverity: Record<string, number>
 }
 
-function _withQuery(path: string, query: Record<string, string | undefined>): string {
+export interface RiskAlert {
+  id: string
+  userId: string
+  accountId: string
+  ruleName: string
+  severity: string
+  message: string
+  status: string
+  createdAt: string | null
+  acknowledgedAt: string | null
+  acknowledgedBy: string | null
+  resolvedAt: string | null
+  resolvedBy: string | null
+  notificationStatus: string | null
+  notifiedAt: string | null
+  notifiedBy: string | null
+}
+
+function _withQuery(
+  path: string,
+  query: Record<string, string | number | boolean | undefined | null>,
+): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
-    const normalized = (value ?? '').trim()
+    if (value === undefined || value === null) continue
+    const normalized = String(value).trim()
     if (!normalized) continue
     params.set(key, normalized)
   }
@@ -155,6 +177,27 @@ export function getRiskAlertStats(params?: { accountId?: string }): Promise<Risk
     accountId: params?.accountId,
   })
   return get<RiskAlertStats>(path)
+}
+
+export function getRiskAlerts(params?: {
+  accountId?: string
+  unresolvedOnly?: boolean
+}): Promise<RiskAlert[]> {
+  const path = _withQuery('/risk/alerts', {
+    accountId: params?.accountId,
+    unresolvedOnly: params?.unresolvedOnly ? 'true' : undefined,
+  })
+  return get<RiskAlert[]>(path)
+}
+
+export function acknowledgeRiskAlert(alertId: string): Promise<RiskAlert> {
+  const id = encodeURIComponent(alertId)
+  return patch<RiskAlert>(`/risk/alerts/${id}/acknowledge`)
+}
+
+export function resolveRiskAlert(alertId: string): Promise<{ resolved: boolean }> {
+  const id = encodeURIComponent(alertId)
+  return post<{ resolved: boolean }>(`/risk/alerts/${id}/resolve`)
 }
 
 /* ─── Signals ─── */
@@ -180,6 +223,74 @@ export function getSignalsDashboard(params?: { accountId?: string }): Promise<Si
     accountId: params?.accountId,
   })
   return get<SignalsDashboard>(path)
+}
+
+export interface TradingSignal {
+  id: string
+  userId: string
+  strategyId: string
+  accountId: string
+  symbol: string
+  side: string
+  status: string
+  createdAt: string | null
+  updatedAt: string | null
+  expiresAt: string | null
+  metadata: Record<string, unknown>
+  risk?: unknown
+}
+
+export function getSignals(params?: {
+  keyword?: string
+  strategyId?: string
+  accountId?: string
+  symbol?: string
+  status?: string
+}): Promise<TradingSignal[]> {
+  const path = _withQuery('/signals', {
+    keyword: params?.keyword,
+    strategyId: params?.strategyId,
+    accountId: params?.accountId,
+    symbol: params?.symbol,
+    status: params?.status,
+  })
+  return get<TradingSignal[]>(path)
+}
+
+export function searchSignals(params?: {
+  keyword?: string
+  strategyId?: string
+  accountId?: string
+  symbol?: string
+  status?: string
+}): Promise<TradingSignal[]> {
+  const path = _withQuery('/signals/search', {
+    keyword: params?.keyword,
+    strategyId: params?.strategyId,
+    accountId: params?.accountId,
+    symbol: params?.symbol,
+    status: params?.status,
+  })
+  return get<TradingSignal[]>(path)
+}
+
+export function getSignalsPending(): Promise<TradingSignal[]> {
+  return get<TradingSignal[]>('/signals/pending')
+}
+
+export function processSignal(signalId: string): Promise<TradingSignal> {
+  const id = encodeURIComponent(signalId)
+  return post<TradingSignal>(`/signals/${id}/process`)
+}
+
+export function executeSignal(signalId: string): Promise<TradingSignal> {
+  const id = encodeURIComponent(signalId)
+  return post<TradingSignal>(`/signals/${id}/execute`)
+}
+
+export function cancelSignal(signalId: string): Promise<TradingSignal> {
+  const id = encodeURIComponent(signalId)
+  return post<TradingSignal>(`/signals/${id}/cancel`)
 }
 
 export type UserPreferences = Record<string, unknown>
