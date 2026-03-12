@@ -61,12 +61,12 @@ const REQUIRED_TOKENS = [
   '--text-body',
   '--text-caption',
   // 间距
-  '--spacing-xs',
-  '--spacing-sm',
-  '--spacing-md',
-  '--spacing-lg',
-  '--spacing-xl',
-  '--spacing-2xl',
+  '--space-xs',
+  '--space-sm',
+  '--space-md',
+  '--space-lg',
+  '--space-xl',
+  '--space-2xl',
   // 圆角
   '--radius-sm',
   '--radius-md',

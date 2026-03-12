@@ -19,13 +19,10 @@ export default defineConfig({
           import.meta.dirname,
           '../../libs/ui_app_shell/src',
         ),
-        // 确保 libs 源码中的裸模块引用解析到 frontend_web 的 node_modules
-        react: path.resolve(import.meta.dirname, 'node_modules/react'),
-        'react-dom': path.resolve(import.meta.dirname, 'node_modules/react-dom'),
-        'react/jsx-runtime': path.resolve(import.meta.dirname, 'node_modules/react/jsx-runtime'),
-        clsx: path.resolve(import.meta.dirname, 'node_modules/clsx'),
-        '@base-ui/react': path.resolve(import.meta.dirname, 'node_modules/@base-ui/react'),
       },
+      // libs 源码位于 workspace 根目录之外（../libs），需要 dedupe 强制从本项目 node_modules 解析依赖，
+      // 否则 SSR dev 下会从 libs 的父目录向上找 node_modules 导致找不到包。
+      dedupe: ['react', 'react-dom', 'clsx', '@base-ui/react'],
     },
     server: {
       fs: {

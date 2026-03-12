@@ -94,18 +94,19 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
             </BaseSelect.Icon>
           </BaseSelect.Trigger>
 
-          <BaseSelect.Portal>
-            <BaseSelect.Positioner sideOffset={4}>
-              <BaseSelect.Popup
-                className={cn(
-                  "bg-bg-card border border-secondary-300/40 rounded-md shadow-card",
-                  "py-1 min-w-[var(--anchor-width)]",
-                  "origin-[var(--transform-origin)]",
-                  transitionClass,
-                )}
-              >
+        <BaseSelect.Portal>
+          <BaseSelect.Positioner sideOffset={4}>
+            <BaseSelect.Popup
+              className={cn(
+                "bg-bg-card border border-secondary-300/40 rounded-md shadow-card",
+                "py-1 min-w-[var(--anchor-width)]",
+                "origin-[var(--transform-origin)]",
+                transitionClass,
+              )}
+            >
+              <BaseSelect.List>
                 {options.map((opt) => (
-                  <BaseSelect.Option
+                  <BaseSelect.Item
                     key={opt.value}
                     value={opt.value}
                     disabled={opt.disabled}
@@ -117,16 +118,17 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
                       opt.disabled && "opacity-40 cursor-not-allowed",
                     )}
                   >
-                    <BaseSelect.OptionIndicator className="mr-2 text-primary-700">
+                    <BaseSelect.ItemIndicator className="mr-2 text-primary-700">
                       ✓
-                    </BaseSelect.OptionIndicator>
-                    <BaseSelect.OptionText>{opt.label}</BaseSelect.OptionText>
-                  </BaseSelect.Option>
+                    </BaseSelect.ItemIndicator>
+                    <BaseSelect.ItemText>{opt.label}</BaseSelect.ItemText>
+                  </BaseSelect.Item>
                 ))}
-              </BaseSelect.Popup>
-            </BaseSelect.Positioner>
-          </BaseSelect.Portal>
-        </BaseSelect.Root>
+              </BaseSelect.List>
+            </BaseSelect.Popup>
+          </BaseSelect.Positioner>
+        </BaseSelect.Portal>
+      </BaseSelect.Root>
 
         {hasError && (
           <p id={errorId} className="text-caption text-state-risk" role="alert">

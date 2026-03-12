@@ -6,6 +6,10 @@ node_modules/
 .vinxi/
 app.config.timestamp_*.js
 
+# Playwright
+playwright-report/
+test-results/
+
 # Env
 .env
 .env.local

@@ -41,7 +41,7 @@ export function Dialog({
       <BaseDialog.Portal>
         <BaseDialog.Backdrop
           className={cn(
-            "fixed inset-0 bg-text-primary/20 backdrop-blur-[2px]",
+            "fixed inset-0 bg-text-primary/20 backdrop-blur-[2px] z-40",
             transitionClass,
             "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
           )}
@@ -49,7 +49,7 @@ export function Dialog({
         <BaseDialog.Popup
           className={cn(
             "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
-            "w-full max-w-lg bg-bg-card rounded-md shadow-card",
+            "w-full max-w-lg bg-bg-card rounded-md shadow-card z-50",
             "p-lg",
             transitionClass,
             "data-[starting-style]:opacity-0 data-[starting-style]:scale-95",

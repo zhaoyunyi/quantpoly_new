@@ -14,6 +14,11 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as MonitorImport } from './routes/monitor'
 import { Route as DashboardImport } from './routes/dashboard'
 import { Route as IndexImport } from './routes/index'
+import { Route as StrategiesIndexImport } from './routes/strategies/index'
+import { Route as StrategiesSimpleImport } from './routes/strategies/simple'
+import { Route as StrategiesCompareImport } from './routes/strategies/compare'
+import { Route as StrategiesAdvancedImport } from './routes/strategies/advanced'
+import { Route as StrategiesIdImport } from './routes/strategies/$id'
 import { Route as AuthVerifyEmailImport } from './routes/auth/verify-email'
 import { Route as AuthResetPasswordImport } from './routes/auth/reset-password'
 import { Route as AuthResendVerificationImport } from './routes/auth/resend-verification'
@@ -38,6 +43,36 @@ const DashboardRoute = DashboardImport.update({
 const IndexRoute = IndexImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const StrategiesIndexRoute = StrategiesIndexImport.update({
+  id: '/strategies/',
+  path: '/strategies/',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const StrategiesSimpleRoute = StrategiesSimpleImport.update({
+  id: '/strategies/simple',
+  path: '/strategies/simple',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const StrategiesCompareRoute = StrategiesCompareImport.update({
+  id: '/strategies/compare',
+  path: '/strategies/compare',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const StrategiesAdvancedRoute = StrategiesAdvancedImport.update({
+  id: '/strategies/advanced',
+  path: '/strategies/advanced',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const StrategiesIdRoute = StrategiesIdImport.update({
+  id: '/strategies/$id',
+  path: '/strategies/$id',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -144,6 +179,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthVerifyEmailImport
       parentRoute: typeof rootRoute
     }
+    '/strategies/$id': {
+      id: '/strategies/$id'
+      path: '/strategies/$id'
+      fullPath: '/strategies/$id'
+      preLoaderRoute: typeof StrategiesIdImport
+      parentRoute: typeof rootRoute
+    }
+    '/strategies/advanced': {
+      id: '/strategies/advanced'
+      path: '/strategies/advanced'
+      fullPath: '/strategies/advanced'
+      preLoaderRoute: typeof StrategiesAdvancedImport
+      parentRoute: typeof rootRoute
+    }
+    '/strategies/compare': {
+      id: '/strategies/compare'
+      path: '/strategies/compare'
+      fullPath: '/strategies/compare'
+      preLoaderRoute: typeof StrategiesCompareImport
+      parentRoute: typeof rootRoute
+    }
+    '/strategies/simple': {
+      id: '/strategies/simple'
+      path: '/strategies/simple'
+      fullPath: '/strategies/simple'
+      preLoaderRoute: typeof StrategiesSimpleImport
+      parentRoute: typeof rootRoute
+    }
+    '/strategies/': {
+      id: '/strategies/'
+      path: '/strategies'
+      fullPath: '/strategies'
+      preLoaderRoute: typeof StrategiesIndexImport
+      parentRoute: typeof rootRoute
+    }
   }
 }
 
@@ -159,6 +229,11 @@ export interface FileRoutesByFullPath {
   '/auth/resend-verification': typeof AuthResendVerificationRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
+  '/strategies/$id': typeof StrategiesIdRoute
+  '/strategies/advanced': typeof StrategiesAdvancedRoute
+  '/strategies/compare': typeof StrategiesCompareRoute
+  '/strategies/simple': typeof StrategiesSimpleRoute
+  '/strategies': typeof StrategiesIndexRoute
 }
 
 export interface FileRoutesByTo {
@@ -171,6 +246,11 @@ export interface FileRoutesByTo {
   '/auth/resend-verification': typeof AuthResendVerificationRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
+  '/strategies/$id': typeof StrategiesIdRoute
+  '/strategies/advanced': typeof StrategiesAdvancedRoute
+  '/strategies/compare': typeof StrategiesCompareRoute
+  '/strategies/simple': typeof StrategiesSimpleRoute
+  '/strategies': typeof StrategiesIndexRoute
 }
 
 export interface FileRoutesById {
@@ -184,6 +264,11 @@ export interface FileRoutesById {
   '/auth/resend-verification': typeof AuthResendVerificationRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
+  '/strategies/$id': typeof StrategiesIdRoute
+  '/strategies/advanced': typeof StrategiesAdvancedRoute
+  '/strategies/compare': typeof StrategiesCompareRoute
+  '/strategies/simple': typeof StrategiesSimpleRoute
+  '/strategies/': typeof StrategiesIndexRoute
 }
 
 export interface FileRouteTypes {
@@ -198,6 +283,11 @@ export interface FileRouteTypes {
     | '/auth/resend-verification'
     | '/auth/reset-password'
     | '/auth/verify-email'
+    | '/strategies/$id'
+    | '/strategies/advanced'
+    | '/strategies/compare'
+    | '/strategies/simple'
+    | '/strategies'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -209,6 +299,11 @@ export interface FileRouteTypes {
     | '/auth/resend-verification'
     | '/auth/reset-password'
     | '/auth/verify-email'
+    | '/strategies/$id'
+    | '/strategies/advanced'
+    | '/strategies/compare'
+    | '/strategies/simple'
+    | '/strategies'
   id:
     | '__root__'
     | '/'
@@ -220,6 +315,11 @@ export interface FileRouteTypes {
     | '/auth/resend-verification'
     | '/auth/reset-password'
     | '/auth/verify-email'
+    | '/strategies/$id'
+    | '/strategies/advanced'
+    | '/strategies/compare'
+    | '/strategies/simple'
+    | '/strategies/'
   fileRoutesById: FileRoutesById
 }
 
@@ -233,6 +333,11 @@ export interface RootRouteChildren {
   AuthResendVerificationRoute: typeof AuthResendVerificationRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
+  StrategiesIdRoute: typeof StrategiesIdRoute
+  StrategiesAdvancedRoute: typeof StrategiesAdvancedRoute
+  StrategiesCompareRoute: typeof StrategiesCompareRoute
+  StrategiesSimpleRoute: typeof StrategiesSimpleRoute
+  StrategiesIndexRoute: typeof StrategiesIndexRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
@@ -245,6 +350,11 @@ const rootRouteChildren: RootRouteChildren = {
   AuthResendVerificationRoute: AuthResendVerificationRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
   AuthVerifyEmailRoute: AuthVerifyEmailRoute,
+  StrategiesIdRoute: StrategiesIdRoute,
+  StrategiesAdvancedRoute: StrategiesAdvancedRoute,
+  StrategiesCompareRoute: StrategiesCompareRoute,
+  StrategiesSimpleRoute: StrategiesSimpleRoute,
+  StrategiesIndexRoute: StrategiesIndexRoute,
 }
 
 export const routeTree = rootRoute
@@ -265,7 +375,12 @@ export const routeTree = rootRoute
         "/auth/register",
         "/auth/resend-verification",
         "/auth/reset-password",
-        "/auth/verify-email"
+        "/auth/verify-email",
+        "/strategies/$id",
+        "/strategies/advanced",
+        "/strategies/compare",
+        "/strategies/simple",
+        "/strategies/"
       ]
     },
     "/": {
@@ -294,6 +409,21 @@ export const routeTree = rootRoute
     },
     "/auth/verify-email": {
       "filePath": "auth/verify-email.tsx"
+    },
+    "/strategies/$id": {
+      "filePath": "strategies/$id.tsx"
+    },
+    "/strategies/advanced": {
+      "filePath": "strategies/advanced.tsx"
+    },
+    "/strategies/compare": {
+      "filePath": "strategies/compare.tsx"
+    },
+    "/strategies/simple": {
+      "filePath": "strategies/simple.tsx"
+    },
+    "/strategies/": {
+      "filePath": "strategies/index.tsx"
     }
   }
 }

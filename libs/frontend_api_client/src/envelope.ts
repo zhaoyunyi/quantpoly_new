@@ -56,6 +56,11 @@ export function unwrapEnvelope<T>(
   httpStatus: number,
 ): T {
   if (envelope.success) {
+    // 对于 T=void/undefined 的接口，后端可能省略 data 字段。
+    // 在 strictNullChecks 下 envelope.data 会被推断为 T | undefined，因此需要显式处理。
+    if (envelope.data === undefined) {
+      return undefined as T
+    }
     return envelope.data
   }
   throw createAppError(
