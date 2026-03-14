@@ -10,7 +10,7 @@
  */
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 
 import { ProtectedLayout } from "../../entry_wiring";
 import {
@@ -157,7 +157,7 @@ export function StrategySimplePage() {
         <header>
           <button
             type="button"
-            className="text-primary-500 hover:text-primary-700 text-body transition-all duration-[120ms] ease-out"
+            className="text-primary-500 hover:text-primary-700 text-body transition-all duration-120 ease-out"
             onClick={() => void navigate({ to: "/strategies" })}
           >
             ← 返回策略列表
@@ -188,7 +188,7 @@ export function StrategySimplePage() {
                     key={tpl.templateId}
                     type="button"
                     onClick={() => handleSelectTemplate(tpl.templateId)}
-                    className={`flex flex-col gap-xs p-md rounded-md border text-left transition-all duration-[120ms] ease-out hover:opacity-92 ${
+                    className={`flex flex-col gap-xs p-md rounded-md border text-left transition-all duration-120 ease-out hover:opacity-92 ${
                       selectedTemplateId === tpl.templateId
                         ? "border-primary-500 bg-primary-500/5"
                         : "border-secondary-300/20 hover:border-secondary-300/40"
@@ -217,7 +217,9 @@ export function StrategySimplePage() {
               <TextField
                 label="策略名称"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setName(e.target.value)
+                }
                 placeholder="输入策略名称"
                 error={fieldErrors["name"]}
               />
@@ -227,7 +229,9 @@ export function StrategySimplePage() {
                     key={key}
                     label={key}
                     value={params[key] ?? ""}
-                    onChange={(e) => handleParamChange(key, e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      handleParamChange(key, e.target.value)
+                    }
                     type="number"
                     error={fieldErrors[key]}
                     help={`类型: ${rule.type}${rule.min !== undefined ? ` · 最小: ${rule.min}` : ""}${rule.max !== undefined ? ` · 最大: ${rule.max}` : ""}`}

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 
 import { PublicLayout } from '@qp/shell'
 import { useAuth, type AppError } from '@qp/api-client'
@@ -136,7 +136,9 @@ export function LoginPage() {
           <TextField
             label="邮箱"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setEmail(e.target.value)
+            }
             placeholder="name@example.com"
             autoComplete="email"
             error={emailError}
@@ -144,7 +146,9 @@ export function LoginPage() {
           <TextField
             label="密码"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setPassword(e.target.value)
+            }
             type="password"
             autoComplete="current-password"
             help={passwordHelp}

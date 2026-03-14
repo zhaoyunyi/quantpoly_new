@@ -239,7 +239,7 @@ export function StrategyDetailPage() {
             <div className="flex items-center gap-sm">
               <button
                 type="button"
-                className="text-primary-500 hover:text-primary-700 text-body transition-all duration-[120ms] ease-out"
+                className="text-primary-500 hover:text-primary-700 text-body transition-all duration-120 ease-out"
                 onClick={() => void navigate({ to: "/strategies" })}
               >
                 ← 策略列表

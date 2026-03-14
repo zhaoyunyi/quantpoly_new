@@ -24,4 +24,4 @@ export const focusRingClass =
 export const disabledClass = 'opacity-40 cursor-not-allowed pointer-events-none'
 
 /** 过渡动画基准（120ms ease-out） */
-export const transitionClass = 'transition-all duration-[120ms] ease-out'
+export const transitionClass = 'transition-all duration-120 ease-out'

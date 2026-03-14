@@ -9,7 +9,7 @@
  */
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { ProtectedLayout } from "../../entry_wiring";
 import {
@@ -72,7 +72,9 @@ export function StrategiesListPage() {
   /* ─── 筛选/搜索 ─── */
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   /* ─── 创建对话框 ─── */
   const [createOpen, setCreateOpen] = useState(false);
@@ -275,7 +277,9 @@ export function StrategiesListPage() {
             label="搜索"
             placeholder="输入策略名称搜索…"
             value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              handleSearchChange(e.target.value)
+            }
             size="sm"
             className="w-64"
             startAdornment={

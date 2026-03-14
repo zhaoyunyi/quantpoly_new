@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 
 import { confirmPasswordReset, type AppError } from '@qp/api-client'
 import { PublicLayout } from '@qp/shell'
@@ -93,7 +93,9 @@ export function ResetPasswordPage() {
           <TextField
             label="重置令牌"
             value={token}
-            onChange={(e) => setToken(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setToken(e.target.value)
+            }
             placeholder="token"
             error={tokenError}
           />
@@ -101,7 +103,9 @@ export function ResetPasswordPage() {
           <TextField
             label="新密码"
             value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setNewPassword(e.target.value)
+            }
             type="password"
             autoComplete="new-password"
             help={passwordHelp}
@@ -121,4 +125,3 @@ export function ResetPasswordPage() {
     </PublicLayout>
   )
 }
-

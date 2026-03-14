@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 
 import { register, type AppError } from '@qp/api-client'
 import { PublicLayout } from '@qp/shell'
@@ -100,7 +100,9 @@ export function RegisterPage() {
           <TextField
             label="邮箱"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setEmail(e.target.value)
+            }
             placeholder="name@example.com"
             autoComplete="email"
             error={emailError}
@@ -109,7 +111,9 @@ export function RegisterPage() {
           <TextField
             label="密码"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setPassword(e.target.value)
+            }
             type="password"
             autoComplete="new-password"
             help={passwordHelp}
@@ -129,4 +133,3 @@ export function RegisterPage() {
     </PublicLayout>
   )
 }
-

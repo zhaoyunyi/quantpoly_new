@@ -6,7 +6,7 @@
  * 状态：readonly / edit
  */
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
 import { TextField, Button } from "@qp/ui";
 import type { StrategyTemplate, StrategyItem } from "@qp/api-client";
 
@@ -110,7 +110,7 @@ export function StrategyForm({
       <TextField
         label="策略名称"
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
         disabled={readonly || loading}
         error={fieldErrors["name"]}
         placeholder="输入策略名称"
@@ -128,13 +128,15 @@ export function StrategyForm({
           <select
             id={templateSelectId}
             value={template}
-            onChange={(e) => handleTemplateChange(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+              handleTemplateChange(e.target.value)
+            }
             disabled={readonly || loading}
             aria-invalid={!!fieldErrors["template"]}
             aria-describedby={
               fieldErrors["template"] ? templateErrorId : undefined
             }
-            className="h-10 px-3 bg-bg-card border border-secondary-300/40 rounded-sm text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:ring-offset-1 transition-all duration-[120ms] ease-out disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-10 px-3 bg-bg-card border border-secondary-300/40 rounded-sm text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:ring-offset-1 transition-all duration-120 ease-out disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <option value="">请选择模板</option>
             {templates.map((t) => (
@@ -172,7 +174,9 @@ export function StrategyForm({
               key={key}
               label={key}
               value={params[key] ?? ""}
-              onChange={(e) => handleParamChange(key, e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                handleParamChange(key, e.target.value)
+              }
               disabled={readonly || loading}
               error={fieldErrors[key]}
               help={`类型: ${rule.type}${rule.min !== undefined ? ` · 最小: ${rule.min}` : ""}${rule.max !== undefined ? ` · 最大: ${rule.max}` : ""}`}

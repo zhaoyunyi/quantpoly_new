@@ -159,7 +159,7 @@ export function StrategyComparePage() {
         <header>
           <button
             type="button"
-            className="text-primary-500 hover:text-primary-700 text-body transition-all duration-[120ms] ease-out"
+            className="text-primary-500 hover:text-primary-700 text-body transition-all duration-120 ease-out"
             onClick={() => void navigate({ to: "/strategies" })}
           >
             ← 返回策略列表
@@ -195,14 +195,14 @@ export function StrategyComparePage() {
                       key={s.id}
                       type="button"
                       onClick={() => toggleSelect(s.id)}
-                      className={`flex items-center gap-sm p-sm rounded-md border text-left transition-all duration-[120ms] ease-out ${
+                      className={`flex items-center gap-sm p-sm rounded-md border text-left transition-all duration-120 ease-out ${
                         isSelected
                           ? "border-primary-500 bg-primary-500/5"
                           : "border-secondary-300/20 hover:border-secondary-300/40"
                       }`}
                     >
                       <span
-                        className={`w-5 h-5 rounded-sm border flex items-center justify-center transition-all duration-[120ms] ease-out ${
+                        className={`w-5 h-5 rounded-sm border flex items-center justify-center transition-all duration-120 ease-out ${
                           isSelected
                             ? "bg-primary-700 border-primary-700 text-white"
                             : "border-secondary-300/40"

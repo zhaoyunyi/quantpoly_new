@@ -80,6 +80,7 @@ export function TableRow({
 /* ─── Table Header Cell ─── */
 
 export interface TableHeaderCellProps extends ThHTMLAttributes<HTMLTableCellElement> {
+  className?: string;
   children?: ReactNode;
   sortable?: boolean;
   sortDirection?: "asc" | "desc" | null;

@@ -58,13 +58,13 @@ export function StrategyTable({
           items.map((item) => (
             <TableRow key={item.id}>
               <TableCell>
-                <button
-                  type="button"
-                  className="text-primary-500 hover:text-primary-700 font-medium transition-all duration-[120ms] ease-out text-left"
-                  onClick={() => onView?.(item.id)}
-                >
-                  {item.name}
-                </button>
+                  <button
+                    type="button"
+                    className="text-primary-500 hover:text-primary-700 font-medium transition-all duration-120 ease-out text-left"
+                    onClick={() => onView?.(item.id)}
+                  >
+                    {item.name}
+                  </button>
               </TableCell>
               <TableCell>
                 <span className="text-caption text-text-secondary">

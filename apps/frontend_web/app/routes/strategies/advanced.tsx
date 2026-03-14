@@ -8,7 +8,7 @@
  */
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 
 import { ProtectedLayout } from "../../entry_wiring";
 import {
@@ -143,13 +143,13 @@ export function StrategyAdvancedPage() {
       <div className="flex flex-col gap-lg">
         {/* 标题 */}
         <header>
-          <button
-            type="button"
-            className="text-primary-500 hover:text-primary-700 text-body transition-all duration-[120ms] ease-out"
-            onClick={() => void navigate({ to: "/strategies" })}
-          >
-            ← 返回策略列表
-          </button>
+            <button
+              type="button"
+              className="text-primary-500 hover:text-primary-700 text-body transition-all duration-120 ease-out"
+              onClick={() => void navigate({ to: "/strategies" })}
+            >
+              ← 返回策略列表
+            </button>
           <h1 className="text-title-page mt-xs">高级分析</h1>
           <p className="text-body-secondary mt-xs">
             深度分析策略性能、参数优化与策略对比。
@@ -291,7 +291,9 @@ export function StrategyAdvancedPage() {
             label="分析周期（天）"
             type="number"
             value={analysisDays}
-            onChange={(e) => setAnalysisDays(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setAnalysisDays(e.target.value)
+            }
             help="1-365 天"
           />
         ) : (
@@ -317,7 +319,7 @@ function EntryCard({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col gap-xs p-lg bg-bg-card rounded-md shadow-card border border-secondary-300/20 text-left transition-all duration-[120ms] ease-out hover:opacity-92 hover:border-primary-500/30"
+      className="flex flex-col gap-xs p-lg bg-bg-card rounded-md shadow-card border border-secondary-300/20 text-left transition-all duration-120 ease-out hover:opacity-92 hover:border-primary-500/30"
     >
       <span className="text-title-card">{title}</span>
       <span className="text-body-secondary">{description}</span>

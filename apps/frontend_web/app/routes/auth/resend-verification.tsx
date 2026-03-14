@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 
 import { resendVerification, type AppError } from '@qp/api-client'
 import { PublicLayout } from '@qp/shell'
@@ -73,7 +73,9 @@ export function ResendVerificationPage() {
           <TextField
             label="邮箱"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setEmail(e.target.value)
+            }
             placeholder="name@example.com"
             autoComplete="email"
             error={emailError}
@@ -92,4 +94,3 @@ export function ResendVerificationPage() {
     </PublicLayout>
   )
 }
-
