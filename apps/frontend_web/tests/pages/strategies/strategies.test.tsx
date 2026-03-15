@@ -199,7 +199,7 @@ describe("/strategies (列表页)", () => {
 
     // 应用 status 筛选（立即触发请求）
     await user.click(screen.getByLabelText("状态"));
-    await user.click(screen.getByRole("option", { name: "草稿" }));
+    await user.click(await screen.findByRole("option", { name: "草稿" }));
 
     await waitFor(() => {
       expect(
