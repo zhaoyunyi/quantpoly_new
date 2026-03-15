@@ -51,7 +51,7 @@ const ACTIONS: QuickActionItem[] = [
   {
     label: '交易账户',
     description: '资产、仓位与订单',
-    href: '/accounts',
+    href: '/trading',
     icon: (
       <>
         <rect

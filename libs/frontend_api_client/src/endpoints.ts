@@ -542,6 +542,291 @@ export function getResearchResults(
   return get<ResearchResultsListing>(path)
 }
 
+/* ─── Trading Accounts ─── */
+
+export interface TradingAccount {
+  id: string
+  userId: string
+  accountName: string
+  isActive: boolean
+  createdAt: string
+}
+
+export interface CreateAccountPayload {
+  accountName: string
+  initialCapital?: number
+}
+
+export interface UpdateAccountPayload {
+  accountName?: string
+  isActive?: boolean
+}
+
+export interface AccountSummary {
+  account: TradingAccount
+  positions: Position[]
+  positionCount: number
+  totalReturnRatio: number
+  stats: { tradeCount: number; turnover: number }
+}
+
+export interface AccountOverview {
+  positionCount: number
+  totalMarketValue: number
+  unrealizedPnl: number
+  tradeCount: number
+  turnover: number
+  orderCount: number
+  pendingOrderCount: number
+  filledOrderCount: number
+  cancelledOrderCount: number
+  failedOrderCount: number
+  cashBalance: number
+}
+
+export interface AccountFilterConfig {
+  totalAccounts: number
+  totalAssets: RangeStats | null
+  profitLoss: RangeStats | null
+  profitLossRate: RangeStats | null
+  accountTypeCounts: Record<string, number>
+  statusCounts: Record<string, number>
+  riskLevelCounts: Record<string, number>
+  hasPositionsCount: number
+  hasFrozenBalanceCount: number
+}
+
+export interface RangeStats {
+  min: number
+  max: number
+  average: number
+}
+
+export interface Position {
+  id: string
+  userId: string
+  accountId: string
+  symbol: string
+  quantity: number
+  avgPrice: number
+  lastPrice: number
+}
+
+export interface PositionAnalysis {
+  symbol: string
+  quantity: number
+  avgPrice: number
+  lastPrice: number
+  marketValue: number
+  costValue: number
+  unrealizedPnl: number
+  unrealizedPnlRatio: number
+  weight: number
+}
+
+export type OrderSide = 'BUY' | 'SELL'
+export type OrderStatus = 'pending' | 'filled' | 'cancelled' | 'failed'
+
+export interface TradeOrder {
+  id: string
+  userId: string
+  accountId: string
+  symbol: string
+  side: OrderSide
+  quantity: number
+  price: number
+  status: OrderStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TradeRecord {
+  id: string
+  userId: string
+  accountId: string
+  orderId: string | null
+  symbol: string
+  side: OrderSide
+  quantity: number
+  price: number
+  createdAt: string
+}
+
+export interface CashFlow {
+  id: string
+  userId: string
+  accountId: string
+  amount: number
+  flowType: 'deposit' | 'withdraw' | 'trade_buy' | 'trade_sell'
+  relatedTradeId: string | null
+  createdAt: string
+}
+
+export interface CashFlowSummary {
+  flowCount: number
+  totalInflow: number
+  totalOutflow: number
+  netFlow: number
+  latestFlowAt: string | null
+}
+
+export interface BuySellPayload {
+  symbol: string
+  quantity: number
+  price: number
+}
+
+export interface BuySellResult {
+  order: TradeOrder
+  trade: TradeRecord
+  cashFlow: CashFlow
+  position: Position
+}
+
+export interface RiskMetrics {
+  accountId: string
+  riskScore: number
+  riskLevel: 'low' | 'medium' | 'high'
+  exposureRatio: number
+  leverage: number
+  unrealizedPnl: number
+  pendingOrderCount: number
+  evaluatedAt: string
+}
+
+export interface EquityCurvePoint {
+  timestamp: string
+  cashBalance: number
+  marketValue: number
+  equity: number
+}
+
+export interface TradeStats {
+  tradeCount: number
+  turnover: number
+}
+
+export interface RiskAssessment {
+  assessmentId: string
+  accountId: string
+  strategyId: string | null
+  riskScore: number
+  riskLevel: string
+  triggeredRuleIds: string[]
+  createdAt: string
+}
+
+export function getTradingAccounts(): Promise<TradingAccount[]> {
+  return get<TradingAccount[]>('/trading/accounts')
+}
+
+export function getTradingAccount(accountId: string): Promise<TradingAccount> {
+  const id = encodeURIComponent(accountId)
+  return get<TradingAccount>(`/trading/accounts/${id}`)
+}
+
+export function createTradingAccount(payload: CreateAccountPayload): Promise<TradingAccount> {
+  return post<TradingAccount>('/trading/accounts', payload)
+}
+
+export function updateTradingAccount(
+  accountId: string,
+  payload: UpdateAccountPayload,
+): Promise<TradingAccount> {
+  const id = encodeURIComponent(accountId)
+  return put<TradingAccount>(`/trading/accounts/${id}`, payload)
+}
+
+export function getAccountFilterConfig(): Promise<AccountFilterConfig> {
+  return get<AccountFilterConfig>('/trading/accounts/filter-config')
+}
+
+export function getAccountSummary(accountId: string): Promise<AccountSummary> {
+  const id = encodeURIComponent(accountId)
+  return get<AccountSummary>(`/trading/accounts/${id}/summary`)
+}
+
+export function getAccountOverview(accountId: string): Promise<AccountOverview> {
+  const id = encodeURIComponent(accountId)
+  return get<AccountOverview>(`/trading/accounts/${id}/overview`)
+}
+
+export function getPositions(accountId: string): Promise<Position[]> {
+  const id = encodeURIComponent(accountId)
+  return get<Position[]>(`/trading/accounts/${id}/positions`)
+}
+
+export function getPositionAnalysis(accountId: string): Promise<PositionAnalysis[]> {
+  const id = encodeURIComponent(accountId)
+  return get<PositionAnalysis[]>(`/trading/accounts/${id}/position-analysis`)
+}
+
+export function getOrders(accountId: string): Promise<TradeOrder[]> {
+  const id = encodeURIComponent(accountId)
+  return get<TradeOrder[]>(`/trading/accounts/${id}/orders`)
+}
+
+export function cancelOrder(accountId: string, orderId: string): Promise<TradeOrder> {
+  const aid = encodeURIComponent(accountId)
+  const oid = encodeURIComponent(orderId)
+  return post<TradeOrder>(`/trading/accounts/${aid}/orders/${oid}/cancel`)
+}
+
+export function buy(accountId: string, payload: BuySellPayload): Promise<BuySellResult> {
+  const id = encodeURIComponent(accountId)
+  return post<BuySellResult>(`/trading/accounts/${id}/buy`, payload)
+}
+
+export function sell(accountId: string, payload: BuySellPayload): Promise<BuySellResult> {
+  const id = encodeURIComponent(accountId)
+  return post<BuySellResult>(`/trading/accounts/${id}/sell`, payload)
+}
+
+export function getCashFlows(accountId: string): Promise<CashFlow[]> {
+  const id = encodeURIComponent(accountId)
+  return get<CashFlow[]>(`/trading/accounts/${id}/cash-flows`)
+}
+
+export function getCashFlowSummary(accountId: string): Promise<CashFlowSummary> {
+  const id = encodeURIComponent(accountId)
+  return get<CashFlowSummary>(`/trading/accounts/${id}/cash-flows/summary`)
+}
+
+export function deposit(accountId: string, amount: number): Promise<CashFlow> {
+  const id = encodeURIComponent(accountId)
+  return post<CashFlow>(`/trading/accounts/${id}/deposit`, { amount })
+}
+
+export function withdraw(accountId: string, amount: number): Promise<CashFlow> {
+  const id = encodeURIComponent(accountId)
+  return post<CashFlow>(`/trading/accounts/${id}/withdraw`, { amount })
+}
+
+export function getRiskMetrics(accountId: string): Promise<RiskMetrics> {
+  const id = encodeURIComponent(accountId)
+  return get<RiskMetrics>(`/trading/accounts/${id}/risk-metrics`)
+}
+
+export function getEquityCurve(accountId: string): Promise<EquityCurvePoint[]> {
+  const id = encodeURIComponent(accountId)
+  return get<EquityCurvePoint[]>(`/trading/accounts/${id}/equity-curve`)
+}
+
+export function getTradeStats(accountId: string): Promise<TradeStats> {
+  const id = encodeURIComponent(accountId)
+  return get<TradeStats>(`/trading/accounts/${id}/trade-stats`)
+}
+
+export function getRiskAssessment(accountId: string): Promise<RiskAssessment> {
+  const id = encodeURIComponent(accountId)
+  return get<RiskAssessment>(`/trading/accounts/${id}/risk-assessment`)
+}
+
+export function evaluateRiskAssessment(accountId: string): Promise<RiskAssessment> {
+  const id = encodeURIComponent(accountId)
+  return post<RiskAssessment>(`/trading/accounts/${id}/risk-assessment/evaluate`)
+}
+
 /* ─── Backtests Compare ─── */
 
 export interface BacktestCompareResult {

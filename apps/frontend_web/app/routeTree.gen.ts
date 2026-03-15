@@ -14,7 +14,10 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as MonitorImport } from './routes/monitor'
 import { Route as DashboardImport } from './routes/dashboard'
 import { Route as IndexImport } from './routes/index'
+import { Route as TradingIndexImport } from './routes/trading/index'
 import { Route as StrategiesIndexImport } from './routes/strategies/index'
+import { Route as TradingAnalyticsImport } from './routes/trading/analytics'
+import { Route as TradingAccountsImport } from './routes/trading/accounts'
 import { Route as StrategiesSimpleImport } from './routes/strategies/simple'
 import { Route as StrategiesCompareImport } from './routes/strategies/compare'
 import { Route as StrategiesAdvancedImport } from './routes/strategies/advanced'
@@ -46,9 +49,27 @@ const IndexRoute = IndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
+const TradingIndexRoute = TradingIndexImport.update({
+  id: '/trading/',
+  path: '/trading/',
+  getParentRoute: () => rootRoute,
+} as any)
+
 const StrategiesIndexRoute = StrategiesIndexImport.update({
   id: '/strategies/',
   path: '/strategies/',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const TradingAnalyticsRoute = TradingAnalyticsImport.update({
+  id: '/trading/analytics',
+  path: '/trading/analytics',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const TradingAccountsRoute = TradingAccountsImport.update({
+  id: '/trading/accounts',
+  path: '/trading/accounts',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -207,11 +228,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StrategiesSimpleImport
       parentRoute: typeof rootRoute
     }
+    '/trading/accounts': {
+      id: '/trading/accounts'
+      path: '/trading/accounts'
+      fullPath: '/trading/accounts'
+      preLoaderRoute: typeof TradingAccountsImport
+      parentRoute: typeof rootRoute
+    }
+    '/trading/analytics': {
+      id: '/trading/analytics'
+      path: '/trading/analytics'
+      fullPath: '/trading/analytics'
+      preLoaderRoute: typeof TradingAnalyticsImport
+      parentRoute: typeof rootRoute
+    }
     '/strategies/': {
       id: '/strategies/'
       path: '/strategies'
       fullPath: '/strategies'
       preLoaderRoute: typeof StrategiesIndexImport
+      parentRoute: typeof rootRoute
+    }
+    '/trading/': {
+      id: '/trading/'
+      path: '/trading'
+      fullPath: '/trading'
+      preLoaderRoute: typeof TradingIndexImport
       parentRoute: typeof rootRoute
     }
   }
@@ -233,7 +275,10 @@ export interface FileRoutesByFullPath {
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
+  '/trading/accounts': typeof TradingAccountsRoute
+  '/trading/analytics': typeof TradingAnalyticsRoute
   '/strategies': typeof StrategiesIndexRoute
+  '/trading': typeof TradingIndexRoute
 }
 
 export interface FileRoutesByTo {
@@ -250,7 +295,10 @@ export interface FileRoutesByTo {
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
+  '/trading/accounts': typeof TradingAccountsRoute
+  '/trading/analytics': typeof TradingAnalyticsRoute
   '/strategies': typeof StrategiesIndexRoute
+  '/trading': typeof TradingIndexRoute
 }
 
 export interface FileRoutesById {
@@ -268,7 +316,10 @@ export interface FileRoutesById {
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
+  '/trading/accounts': typeof TradingAccountsRoute
+  '/trading/analytics': typeof TradingAnalyticsRoute
   '/strategies/': typeof StrategiesIndexRoute
+  '/trading/': typeof TradingIndexRoute
 }
 
 export interface FileRouteTypes {
@@ -287,7 +338,10 @@ export interface FileRouteTypes {
     | '/strategies/advanced'
     | '/strategies/compare'
     | '/strategies/simple'
+    | '/trading/accounts'
+    | '/trading/analytics'
     | '/strategies'
+    | '/trading'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -303,7 +357,10 @@ export interface FileRouteTypes {
     | '/strategies/advanced'
     | '/strategies/compare'
     | '/strategies/simple'
+    | '/trading/accounts'
+    | '/trading/analytics'
     | '/strategies'
+    | '/trading'
   id:
     | '__root__'
     | '/'
@@ -319,7 +376,10 @@ export interface FileRouteTypes {
     | '/strategies/advanced'
     | '/strategies/compare'
     | '/strategies/simple'
+    | '/trading/accounts'
+    | '/trading/analytics'
     | '/strategies/'
+    | '/trading/'
   fileRoutesById: FileRoutesById
 }
 
@@ -337,7 +397,10 @@ export interface RootRouteChildren {
   StrategiesAdvancedRoute: typeof StrategiesAdvancedRoute
   StrategiesCompareRoute: typeof StrategiesCompareRoute
   StrategiesSimpleRoute: typeof StrategiesSimpleRoute
+  TradingAccountsRoute: typeof TradingAccountsRoute
+  TradingAnalyticsRoute: typeof TradingAnalyticsRoute
   StrategiesIndexRoute: typeof StrategiesIndexRoute
+  TradingIndexRoute: typeof TradingIndexRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
@@ -354,7 +417,10 @@ const rootRouteChildren: RootRouteChildren = {
   StrategiesAdvancedRoute: StrategiesAdvancedRoute,
   StrategiesCompareRoute: StrategiesCompareRoute,
   StrategiesSimpleRoute: StrategiesSimpleRoute,
+  TradingAccountsRoute: TradingAccountsRoute,
+  TradingAnalyticsRoute: TradingAnalyticsRoute,
   StrategiesIndexRoute: StrategiesIndexRoute,
+  TradingIndexRoute: TradingIndexRoute,
 }
 
 export const routeTree = rootRoute
@@ -380,7 +446,10 @@ export const routeTree = rootRoute
         "/strategies/advanced",
         "/strategies/compare",
         "/strategies/simple",
-        "/strategies/"
+        "/trading/accounts",
+        "/trading/analytics",
+        "/strategies/",
+        "/trading/"
       ]
     },
     "/": {
@@ -422,8 +491,17 @@ export const routeTree = rootRoute
     "/strategies/simple": {
       "filePath": "strategies/simple.tsx"
     },
+    "/trading/accounts": {
+      "filePath": "trading/accounts.tsx"
+    },
+    "/trading/analytics": {
+      "filePath": "trading/analytics.tsx"
+    },
     "/strategies/": {
       "filePath": "strategies/index.tsx"
+    },
+    "/trading/": {
+      "filePath": "trading/index.tsx"
     }
   }
 }

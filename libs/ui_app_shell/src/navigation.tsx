@@ -71,7 +71,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     label: '交易账户',
-    path: '/accounts',
+    path: '/trading',
     icon: (
       <>
         <rect

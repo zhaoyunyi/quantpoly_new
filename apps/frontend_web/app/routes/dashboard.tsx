@@ -158,7 +158,7 @@ function SummaryKpis({
         title="账户"
         value={formatInt(s.accounts.total)}
         subvalue={`活跃 ${formatInt(s.accounts.active)}`}
-        href="/accounts"
+        href="/trading"
       />
       <KpiCard
         title="策略"
