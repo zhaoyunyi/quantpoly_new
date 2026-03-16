@@ -9,10 +9,10 @@
  * - 资金操作（充值/提现）
  */
 
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useCallback, useEffect, useState } from 'react'
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 
-import { ProtectedLayout } from '../../entry_wiring'
+import { ProtectedLayout } from "../../entry_wiring";
 import {
   getTradingAccounts,
   getTradingAccountsAggregate,
@@ -21,14 +21,14 @@ import {
   updateTradingAccount,
   deposit,
   withdraw,
-} from '@qp/api-client'
+} from "@qp/api-client";
 import type {
   TradingAccount,
   TradingAccountsAggregate,
   AccountFilterConfig,
   RangeStats,
   AppError,
-} from '@qp/api-client'
+} from "@qp/api-client";
 import {
   Button,
   TextField,
@@ -43,152 +43,158 @@ import {
   TableCell,
   TableEmpty,
   useToast,
-} from '@qp/ui'
+} from "@qp/ui";
 
-export const Route = createFileRoute('/trading/accounts')({
+export const Route = createFileRoute("/trading/accounts")({
   component: TradingAccountsPage,
-})
+});
 
 function fmt(n: number): string {
-  return n.toLocaleString('zh-CN', {
+  return n.toLocaleString("zh-CN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  });
 }
 
 export function TradingAccountsPage() {
-  const navigate = useNavigate()
-  const toast = useToast()
+  const navigate = useNavigate();
+  const toast = useToast();
 
-  const [accounts, setAccounts] = useState<TradingAccount[]>([])
-  const [aggregate, setAggregate] = useState<TradingAccountsAggregate | null>(null)
-  const [filterConfig, setFilterConfig] = useState<AccountFilterConfig | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
+  const [aggregate, setAggregate] = useState<TradingAccountsAggregate | null>(
+    null,
+  );
+  const [filterConfig, setFilterConfig] = useState<AccountFilterConfig | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   /* 创建 */
-  const [createOpen, setCreateOpen] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newCapital, setNewCapital] = useState('')
-  const [creating, setCreating] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newCapital, setNewCapital] = useState("");
+  const [creating, setCreating] = useState(false);
 
   /* 编辑 */
-  const [editTarget, setEditTarget] = useState<TradingAccount | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editing, setEditing] = useState(false)
+  const [editTarget, setEditTarget] = useState<TradingAccount | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editing, setEditing] = useState(false);
 
   /* 充值/提现 */
-  const [fundTarget, setFundTarget] = useState<TradingAccount | null>(null)
-  const [fundAction, setFundAction] = useState<'deposit' | 'withdraw'>('deposit')
-  const [fundAmount, setFundAmount] = useState('')
-  const [funding, setFunding] = useState(false)
+  const [fundTarget, setFundTarget] = useState<TradingAccount | null>(null);
+  const [fundAction, setFundAction] = useState<"deposit" | "withdraw">(
+    "deposit",
+  );
+  const [fundAmount, setFundAmount] = useState("");
+  const [funding, setFunding] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
       const [accs, agg, fc] = await Promise.all([
         getTradingAccounts(),
         getTradingAccountsAggregate(),
         getAccountFilterConfig(),
-      ])
-      setAccounts(accs)
-      setAggregate(agg)
-      setFilterConfig(fc)
+      ]);
+      setAccounts(accs);
+      setAggregate(agg);
+      setFilterConfig(fc);
     } catch (err) {
-      setError((err as AppError).message || '加载失败')
+      setError((err as AppError).message || "加载失败");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load();
+  }, [load]);
 
   /* 创建账户 */
   const handleCreate = async () => {
-    if (!newName.trim()) return
-    setCreating(true)
+    if (!newName.trim()) return;
+    setCreating(true);
     try {
-      const capital = parseFloat(newCapital)
+      const capital = parseFloat(newCapital);
       await createTradingAccount({
         accountName: newName.trim(),
         initialCapital: Number.isNaN(capital) ? undefined : capital,
-      })
-      toast.show('账户创建成功', 'success')
-      setCreateOpen(false)
-      setNewName('')
-      setNewCapital('')
-      void load()
+      });
+      toast.show("账户创建成功", "success");
+      setCreateOpen(false);
+      setNewName("");
+      setNewCapital("");
+      void load();
     } catch (err) {
-      toast.show((err as AppError).message || '创建失败', 'error')
+      toast.show((err as AppError).message || "创建失败", "error");
     } finally {
-      setCreating(false)
+      setCreating(false);
     }
-  }
+  };
 
   /* 编辑账户 */
   const handleEdit = async () => {
-    if (!editTarget) return
-    setEditing(true)
+    if (!editTarget) return;
+    setEditing(true);
     try {
       await updateTradingAccount(editTarget.id, {
         accountName: editName.trim() || undefined,
-      })
-      toast.show('账户已更新', 'success')
-      setEditTarget(null)
-      void load()
+      });
+      toast.show("账户已更新", "success");
+      setEditTarget(null);
+      void load();
     } catch (err) {
-      toast.show((err as AppError).message || '更新失败', 'error')
+      toast.show((err as AppError).message || "更新失败", "error");
     } finally {
-      setEditing(false)
+      setEditing(false);
     }
-  }
+  };
 
   const handleToggleActive = async (account: TradingAccount) => {
     try {
       await updateTradingAccount(account.id, {
         isActive: !account.isActive,
-      })
-      toast.show(account.isActive ? '账户已停用' : '账户已启用', 'success')
-      void load()
+      });
+      toast.show(account.isActive ? "账户已停用" : "账户已启用", "success");
+      void load();
     } catch (err) {
-      toast.show((err as AppError).message || '操作失败', 'error')
+      toast.show((err as AppError).message || "操作失败", "error");
     }
-  }
+  };
 
   /* 充值/提现 */
   const handleFund = async () => {
-    if (!fundTarget) return
-    const amount = parseFloat(fundAmount)
+    if (!fundTarget) return;
+    const amount = parseFloat(fundAmount);
     if (Number.isNaN(amount) || amount <= 0) {
-      toast.show('请输入有效金额', 'warning')
-      return
+      toast.show("请输入有效金额", "warning");
+      return;
     }
-    setFunding(true)
+    setFunding(true);
     try {
-      if (fundAction === 'deposit') {
-        await deposit(fundTarget.id, amount)
-        toast.show('充值成功', 'success')
+      if (fundAction === "deposit") {
+        await deposit(fundTarget.id, amount);
+        toast.show("充值成功", "success");
       } else {
-        await withdraw(fundTarget.id, amount)
-        toast.show('提现成功', 'success')
+        await withdraw(fundTarget.id, amount);
+        toast.show("提现成功", "success");
       }
-      setFundTarget(null)
-      setFundAmount('')
-      void load()
+      setFundTarget(null);
+      setFundAmount("");
+      void load();
     } catch (err) {
-      const appErr = err as AppError
-      if (appErr.code === 'INSUFFICIENT_FUNDS') {
-        toast.show('可用资金不足', 'error')
+      const appErr = err as AppError;
+      if (appErr.code === "INSUFFICIENT_FUNDS") {
+        toast.show("可用资金不足", "error");
       } else {
-        toast.show(appErr.message || '操作失败', 'error')
+        toast.show(appErr.message || "操作失败", "error");
       }
     } finally {
-      setFunding(false)
+      setFunding(false);
     }
-  }
+  };
 
   return (
     <ProtectedLayout>
@@ -198,8 +204,8 @@ export function TradingAccountsPage() {
           <div className="flex-1 min-w-0">
             <button
               type="button"
-              className="text-primary-500 hover:text-primary-700 text-body transition-all duration-[120ms] ease-out"
-              onClick={() => void navigate({ to: '/trading' })}
+              className="text-primary-500 hover:text-primary-700 text-body transition-all duration-120 ease-out"
+              onClick={() => void navigate({ to: "/trading" })}
             >
               ← 返回交易
             </button>
@@ -217,7 +223,10 @@ export function TradingAccountsPage() {
         {aggregate && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-md">
             <SummaryCard title="账户总数" value={`${aggregate.accountCount}`} />
-            <SummaryCard title="总权益" value={`¥${fmt(aggregate.totalEquity)}`} />
+            <SummaryCard
+              title="总权益"
+              value={`¥${fmt(aggregate.totalEquity)}`}
+            />
             <SummaryCard
               title="未实现盈亏"
               value={`¥${fmt(aggregate.totalUnrealizedPnl)}`}
@@ -235,7 +244,10 @@ export function TradingAccountsPage() {
           <section className="bg-bg-card rounded-md shadow-card border border-secondary-300/20 p-lg">
             <h2 className="text-title-section mb-md">过滤配置</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-md">
-              <SummaryCard title="账户数量" value={`${filterConfig.totalAccounts}`} />
+              <SummaryCard
+                title="账户数量"
+                value={`${filterConfig.totalAccounts}`}
+              />
               <SummaryCard
                 title="有持仓账户"
                 value={`${filterConfig.hasPositionsCount}`}
@@ -270,7 +282,7 @@ export function TradingAccountsPage() {
                 title="账户类型"
                 value={Object.entries(filterConfig.accountTypeCounts)
                   .map(([k, v]) => `${k} ${v}`)
-                  .join(' · ')}
+                  .join(" · ")}
               />
             </div>
           </section>
@@ -319,16 +331,16 @@ export function TradingAccountsPage() {
                         <span
                           className={`inline-block px-sm py-xxs rounded-full text-caption ${
                             acc.isActive
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-secondary-200 text-secondary-600'
+                              ? "bg-green-100 text-green-800"
+                              : "bg-secondary-200 text-secondary-600"
                           }`}
                         >
-                          {acc.isActive ? '活跃' : '停用'}
+                          {acc.isActive ? "活跃" : "停用"}
                         </span>
                       </TableCell>
                       <TableCell>
                         <span className="text-caption text-text-muted">
-                          {new Date(acc.createdAt).toLocaleDateString('zh-CN')}
+                          {new Date(acc.createdAt).toLocaleDateString("zh-CN")}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -337,8 +349,8 @@ export function TradingAccountsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              setEditTarget(acc)
-                              setEditName(acc.accountName)
+                              setEditTarget(acc);
+                              setEditName(acc.accountName);
                             }}
                           >
                             编辑
@@ -348,15 +360,15 @@ export function TradingAccountsPage() {
                             size="sm"
                             onClick={() => void handleToggleActive(acc)}
                           >
-                            {acc.isActive ? '停用' : '启用'}
+                            {acc.isActive ? "停用" : "启用"}
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              setFundTarget(acc)
-                              setFundAction('deposit')
-                              setFundAmount('')
+                              setFundTarget(acc);
+                              setFundAction("deposit");
+                              setFundAmount("");
                             }}
                           >
                             充值
@@ -365,9 +377,9 @@ export function TradingAccountsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              setFundTarget(acc)
-                              setFundAction('withdraw')
-                              setFundAmount('')
+                              setFundTarget(acc);
+                              setFundAction("withdraw");
+                              setFundAmount("");
                             }}
                           >
                             提现
@@ -412,30 +424,34 @@ export function TradingAccountsPage() {
         }
       >
         <div className="flex flex-col gap-md">
-          <TextField
-            label="账户名称"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="我的交易账户"
-          />
-          <TextField
-            label="初始资金（可选）"
-            type="number"
-            value={newCapital}
-            onChange={(e) => setNewCapital(e.target.value)}
-            placeholder="100000"
-            help="不填则默认 0"
-          />
-        </div>
+	          <TextField
+	            label="账户名称"
+	            value={newName}
+	            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+	              setNewName(e.target.value)
+	            }
+	            placeholder="我的交易账户"
+	          />
+	          <TextField
+	            label="初始资金（可选）"
+	            type="number"
+	            value={newCapital}
+	            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+	              setNewCapital(e.target.value)
+	            }
+	            placeholder="100000"
+	            help="不填则默认 0"
+	          />
+	        </div>
       </Dialog>
 
       {/* 编辑账户对话框 */}
-      <Dialog
-        open={!!editTarget}
-        onOpenChange={(open) => {
-          if (!open) setEditTarget(null)
-        }}
-        title="编辑账户"
+	      <Dialog
+	        open={!!editTarget}
+	        onOpenChange={(open) => {
+	          if (!open) setEditTarget(null);
+	        }}
+	        title="编辑账户"
         footer={
           <>
             <Button
@@ -450,22 +466,24 @@ export function TradingAccountsPage() {
             </Button>
           </>
         }
-      >
-        <TextField
-          label="账户名称"
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-        />
-      </Dialog>
+	      >
+	        <TextField
+	          label="账户名称"
+	          value={editName}
+	          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+	            setEditName(e.target.value)
+	          }
+	        />
+	      </Dialog>
 
       {/* 充值/提现对话框 */}
       <Dialog
         open={!!fundTarget}
         onOpenChange={(open) => {
-          if (!open) setFundTarget(null)
+          if (!open) setFundTarget(null);
         }}
-        title={fundAction === 'deposit' ? '充值' : '提现'}
-        description={`对账户「${fundTarget?.accountName ?? ''}」进行${fundAction === 'deposit' ? '充值' : '提现'}操作。`}
+        title={fundAction === "deposit" ? "充值" : "提现"}
+        description={`对账户「${fundTarget?.accountName ?? ""}」进行${fundAction === "deposit" ? "充值" : "提现"}操作。`}
         footer={
           <>
             <Button
@@ -480,17 +498,19 @@ export function TradingAccountsPage() {
             </Button>
           </>
         }
-      >
-        <TextField
-          label="金额"
-          type="number"
-          value={fundAmount}
-          onChange={(e) => setFundAmount(e.target.value)}
-          placeholder="0.00"
-        />
-      </Dialog>
+	      >
+	        <TextField
+	          label="金额"
+	          type="number"
+	          value={fundAmount}
+	          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+	            setFundAmount(e.target.value)
+	          }
+	          placeholder="0.00"
+	        />
+	      </Dialog>
     </ProtectedLayout>
-  )
+  );
 }
 
 function SummaryCard({
@@ -499,19 +519,19 @@ function SummaryCard({
   tone,
   sub,
 }: {
-  title: string
-  value: string
-  tone?: number
-  sub?: string
+  title: string;
+  value: string;
+  tone?: number;
+  sub?: string;
 }) {
   const toneClass =
     tone !== undefined
       ? tone > 0
-        ? 'state-up'
+        ? "state-up"
         : tone < 0
-          ? 'state-down'
-          : ''
-      : ''
+          ? "state-down"
+          : ""
+      : "";
   return (
     <div className="bg-bg-card rounded-md shadow-card border border-secondary-300/20 p-md">
       <p className="text-caption">{title}</p>
@@ -520,25 +540,25 @@ function SummaryCard({
       </div>
       {sub ? <p className="text-body-secondary mt-xs">{sub}</p> : null}
     </div>
-  )
+  );
 }
 
 function fmtRangeCurrency(value: RangeStats | null): string {
-  if (!value) return '—'
-  return `¥${fmt(value.min)} ~ ¥${fmt(value.max)}`
+  if (!value) return "—";
+  return `¥${fmt(value.min)} ~ ¥${fmt(value.max)}`;
 }
 
 function fmtRangeAvgCurrency(value: RangeStats | null): string | undefined {
-  if (!value) return undefined
-  return `均值 ¥${fmt(value.average)}`
+  if (!value) return undefined;
+  return `均值 ¥${fmt(value.average)}`;
 }
 
 function fmtRangePercent(value: RangeStats | null): string {
-  if (!value) return '—'
-  return `${(value.min * 100).toFixed(1)}% ~ ${(value.max * 100).toFixed(1)}%`
+  if (!value) return "—";
+  return `${(value.min * 100).toFixed(1)}% ~ ${(value.max * 100).toFixed(1)}%`;
 }
 
 function fmtRangeAvgPercent(value: RangeStats | null): string | undefined {
-  if (!value) return undefined
-  return `均值 ${(value.average * 100).toFixed(1)}%`
+  if (!value) return undefined;
+  return `均值 ${(value.average * 100).toFixed(1)}%`;
 }

@@ -4,7 +4,7 @@
  * 展示充值、提现、买入、卖出等资金变动记录。
  */
 
-import type { CashFlow } from '@qp/api-client'
+import type { CashFlow } from "@qp/api-client";
 import {
   Table,
   TableHead,
@@ -13,25 +13,25 @@ import {
   TableHeaderCell,
   TableCell,
   TableEmpty,
-} from '@qp/ui'
+} from "@qp/ui";
 
 export interface CashFlowTableProps {
-  flows: CashFlow[]
-  loading?: boolean
+  flows: CashFlow[];
+  loading?: boolean;
 }
 
 const FLOW_LABEL: Record<string, string> = {
-  deposit: '充值',
-  withdraw: '提现',
-  trade_buy: '买入支出',
-  trade_sell: '卖出收入',
-}
+  deposit: "充值",
+  withdraw: "提现",
+  trade_buy: "买入支出",
+  trade_sell: "卖出收入",
+};
 
 function fmt(n: number): string {
-  return n.toLocaleString('zh-CN', {
+  return n.toLocaleString("zh-CN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  });
 }
 
 export function CashFlowTable({ flows, loading }: CashFlowTableProps) {
@@ -57,15 +57,15 @@ export function CashFlowTable({ flows, loading }: CashFlowTableProps) {
               </TableCell>
               <TableCell className="text-right">
                 <span
-                  className={`text-data-mono ${f.amount >= 0 ? 'state-up' : 'state-down'}`}
+                  className={`text-data-mono ${f.amount >= 0 ? "state-up" : "state-down"}`}
                 >
-                  {f.amount >= 0 ? '+' : ''}
+                  {f.amount >= 0 ? "+" : ""}
                   {fmt(f.amount)}
                 </span>
               </TableCell>
               <TableCell>
                 <span className="text-caption text-text-muted">
-                  {new Date(f.createdAt).toLocaleString('zh-CN')}
+                  {new Date(f.createdAt).toLocaleString("zh-CN")}
                 </span>
               </TableCell>
             </TableRow>
@@ -73,5 +73,5 @@ export function CashFlowTable({ flows, loading }: CashFlowTableProps) {
         )}
       </TableBody>
     </Table>
-  )
+  );
 }

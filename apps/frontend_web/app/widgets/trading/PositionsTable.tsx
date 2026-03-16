@@ -4,7 +4,7 @@
  * 展示当前持仓的标的、数量、成本价、现价、市值、盈亏。
  */
 
-import type { Position } from '@qp/api-client'
+import type { Position } from "@qp/api-client";
 import {
   Table,
   TableHead,
@@ -13,18 +13,18 @@ import {
   TableHeaderCell,
   TableCell,
   TableEmpty,
-} from '@qp/ui'
+} from "@qp/ui";
 
 export interface PositionsTableProps {
-  positions: Position[]
-  loading?: boolean
+  positions: Position[];
+  loading?: boolean;
 }
 
 function fmt(n: number): string {
-  return n.toLocaleString('zh-CN', {
+  return n.toLocaleString("zh-CN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  });
 }
 
 export function PositionsTable({ positions, loading }: PositionsTableProps) {
@@ -45,15 +45,10 @@ export function PositionsTable({ positions, loading }: PositionsTableProps) {
           <TableEmpty colSpan={6} message="暂无持仓" />
         ) : (
           positions.map((p) => {
-            const marketValue = p.quantity * p.lastPrice
-            const costValue = p.quantity * p.avgPrice
-            const pnl = marketValue - costValue
-            const pnlClass =
-              pnl > 0
-                ? 'state-up'
-                : pnl < 0
-                  ? 'state-down'
-                  : ''
+            const marketValue = p.quantity * p.lastPrice;
+            const costValue = p.quantity * p.avgPrice;
+            const pnl = marketValue - costValue;
+            const pnlClass = pnl > 0 ? "state-up" : pnl < 0 ? "state-down" : "";
 
             return (
               <TableRow key={p.id}>
@@ -72,21 +67,19 @@ export function PositionsTable({ positions, loading }: PositionsTableProps) {
                   <span className="text-data-mono">{fmt(p.lastPrice)}</span>
                 </TableCell>
                 <TableCell className="text-right">
-                  <span className="text-data-mono">
-                    ¥{fmt(marketValue)}
-                  </span>
+                  <span className="text-data-mono">¥{fmt(marketValue)}</span>
                 </TableCell>
                 <TableCell className="text-right">
                   <span className={`text-data-mono ${pnlClass}`}>
-                    {pnl >= 0 ? '+' : ''}
+                    {pnl >= 0 ? "+" : ""}
                     {fmt(pnl)}
                   </span>
                 </TableCell>
               </TableRow>
-            )
+            );
           })
         )}
       </TableBody>
     </Table>
-  )
+  );
 }

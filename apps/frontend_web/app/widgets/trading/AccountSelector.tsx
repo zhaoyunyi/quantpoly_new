@@ -4,16 +4,16 @@
  * 异步加载账户列表，支持选中回调。
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from "react";
 
-import { getTradingAccounts } from '@qp/api-client'
-import type { TradingAccount } from '@qp/api-client'
-import { Select, Skeleton, useToast } from '@qp/ui'
+import { getTradingAccounts } from "@qp/api-client";
+import type { TradingAccount } from "@qp/api-client";
+import { Select, Skeleton, useToast } from "@qp/ui";
 
 export interface AccountSelectorProps {
-  value: string
-  onValueChange: (accountId: string) => void
-  className?: string
+  value: string;
+  onValueChange: (accountId: string) => void;
+  className?: string;
 }
 
 export function AccountSelector({
@@ -21,34 +21,34 @@ export function AccountSelector({
   onValueChange,
   className,
 }: AccountSelectorProps) {
-  const toast = useToast()
-  const [accounts, setAccounts] = useState<TradingAccount[]>([])
-  const [loading, setLoading] = useState(true)
+  const toast = useToast();
+  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    setLoading(true)
+    setLoading(true);
     try {
-      const data = await getTradingAccounts()
-      setAccounts(data)
+      const data = await getTradingAccounts();
+      setAccounts(data);
     } catch {
-      toast.show('加载账户失败', 'error')
+      toast.show("加载账户失败", "error");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [toast])
+  }, [toast]);
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load();
+  }, [load]);
 
   if (loading) {
-    return <Skeleton width="200px" height="40px" />
+    return <Skeleton width="200px" height="40px" />;
   }
 
   const options = accounts.map((a) => ({
     value: a.id,
-    label: `${a.accountName}${a.isActive ? '' : '（已停用）'}`,
-  }))
+    label: `${a.accountName}${a.isActive ? "" : "（已停用）"}`,
+  }));
 
   return (
     <Select
@@ -59,5 +59,5 @@ export function AccountSelector({
       placeholder="选择账户"
       className={className}
     />
-  )
+  );
 }

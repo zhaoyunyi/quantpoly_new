@@ -4,7 +4,7 @@
  * 展示订单的标的、方向、数量、价格、状态，支持取消操作。
  */
 
-import type { TradeOrder } from '@qp/api-client'
+import type { TradeOrder } from "@qp/api-client";
 import {
   Table,
   TableHead,
@@ -14,34 +14,34 @@ import {
   TableCell,
   TableEmpty,
   Button,
-} from '@qp/ui'
+} from "@qp/ui";
 
 export interface OrdersTableProps {
-  orders: TradeOrder[]
-  loading?: boolean
-  onCancel?: (orderId: string) => void
-  cancelling?: string | null
+  orders: TradeOrder[];
+  loading?: boolean;
+  onCancel?: (orderId: string) => void;
+  cancelling?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: '待处理',
-  filled: '已成交',
-  cancelled: '已取消',
-  failed: '失败',
-}
+  pending: "待处理",
+  filled: "已成交",
+  cancelled: "已取消",
+  failed: "失败",
+};
 
 const STATUS_CLASS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  filled: 'bg-green-100 text-green-800',
-  cancelled: 'bg-secondary-200 text-secondary-600',
-  failed: 'bg-red-100 text-red-800',
-}
+  pending: "bg-yellow-100 text-yellow-800",
+  filled: "bg-green-100 text-green-800",
+  cancelled: "bg-secondary-200 text-secondary-600",
+  failed: "bg-red-100 text-red-800",
+};
 
 function fmt(n: number): string {
-  return n.toLocaleString('zh-CN', {
+  return n.toLocaleString("zh-CN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  });
 }
 
 export function OrdersTable({
@@ -60,7 +60,9 @@ export function OrdersTable({
           <TableHeaderCell className="text-right">价格</TableHeaderCell>
           <TableHeaderCell>状态</TableHeaderCell>
           <TableHeaderCell>时间</TableHeaderCell>
-          {onCancel && <TableHeaderCell className="text-right">操作</TableHeaderCell>}
+          {onCancel && (
+            <TableHeaderCell className="text-right">操作</TableHeaderCell>
+          )}
         </TableRow>
       </TableHead>
       <TableBody>
@@ -77,10 +79,12 @@ export function OrdersTable({
               <TableCell>
                 <span
                   className={
-                    o.side === 'BUY' ? 'state-up font-medium' : 'state-down font-medium'
+                    o.side === "BUY"
+                      ? "state-up font-medium"
+                      : "state-down font-medium"
                   }
                 >
-                  {o.side === 'BUY' ? '买入' : '卖出'}
+                  {o.side === "BUY" ? "买入" : "卖出"}
                 </span>
               </TableCell>
               <TableCell className="text-right">
@@ -91,19 +95,19 @@ export function OrdersTable({
               </TableCell>
               <TableCell>
                 <span
-                  className={`inline-block px-sm py-xxs rounded-full text-caption ${STATUS_CLASS[o.status] ?? 'bg-secondary-100 text-secondary-600'}`}
+                  className={`inline-block px-sm py-xxs rounded-full text-caption ${STATUS_CLASS[o.status] ?? "bg-secondary-100 text-secondary-600"}`}
                 >
                   {STATUS_LABEL[o.status] ?? o.status}
                 </span>
               </TableCell>
               <TableCell>
                 <span className="text-caption text-text-muted">
-                  {new Date(o.createdAt).toLocaleString('zh-CN')}
+                  {new Date(o.createdAt).toLocaleString("zh-CN")}
                 </span>
               </TableCell>
               {onCancel && (
                 <TableCell className="text-right">
-                  {o.status === 'pending' && (
+                  {o.status === "pending" && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -120,5 +124,5 @@ export function OrdersTable({
         )}
       </TableBody>
     </Table>
-  )
+  );
 }
