@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 CURRENT_VERSION = 1
@@ -15,6 +15,22 @@ CURRENT_VERSION = 1
 def _to_camel(string: str) -> str:
     parts = string.split("_")
     return parts[0] + "".join(word.capitalize() for word in parts[1:])
+
+
+def _normalize_theme_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    data = deepcopy(dict(payload))
+    dark_mode = data.pop("darkMode", data.pop("dark_mode", None))
+    if data.get("mode") is None and dark_mode is not None:
+        data["mode"] = "dark" if bool(dark_mode) else "light"
+    return data
+
+
+def _normalize_preferences_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    data = deepcopy(dict(payload))
+    theme = data.get("theme")
+    if isinstance(theme, Mapping):
+        data["theme"] = _normalize_theme_payload(theme)
+    return data
 
 
 class PreferencesValidationError(ValueError):
@@ -27,13 +43,25 @@ class AdvancedPreferencesPermissionError(PermissionError):
 
 class ThemePreferences(BaseModel):
     primary_color: str = Field(default="#1677ff")
-    dark_mode: bool = Field(default=False)
+    mode: Literal["light", "dark", "system"] = Field(default="system")
 
     model_config = ConfigDict(
         extra="forbid",
         alias_generator=_to_camel,
         populate_by_name=True,
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_mode_fields(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        return _normalize_theme_payload(value)
+
+    @computed_field(alias="darkMode", return_type=bool)
+    @property
+    def dark_mode(self) -> bool:
+        return self.mode == "dark"
 
 
 class AccountPreferences(BaseModel):
@@ -171,16 +199,17 @@ def default_preferences() -> Preferences:
 def migrate_preferences(preferences: Preferences | Mapping[str, Any]) -> Preferences:
     incoming = preferences
     if isinstance(preferences, Mapping):
+        base = default_preferences().model_dump(by_alias=True, exclude_computed_fields=True)
         incoming = Preferences.model_validate(
-            deep_merge(default_preferences().model_dump(by_alias=True), preferences)
+            deep_merge(base, _normalize_preferences_payload(preferences))
         )
 
     if incoming.version >= CURRENT_VERSION:
         return incoming
 
     merged = deep_merge(
-        default_preferences().model_dump(by_alias=True),
-        incoming.model_dump(by_alias=True),
+        default_preferences().model_dump(by_alias=True, exclude_computed_fields=True),
+        incoming.model_dump(by_alias=True, exclude_computed_fields=True),
     )
     merged["version"] = CURRENT_VERSION
     merged["lastUpdated"] = datetime.now(timezone.utc).isoformat()
@@ -204,7 +233,11 @@ def apply_patch(
     if "advanced" in patch and user_level < 2:
         raise AdvancedPreferencesPermissionError("advanced requires elevated user level")
 
-    merged = deep_merge(preferences.model_dump(by_alias=True), patch)
+    normalized_patch = _normalize_preferences_payload(patch)
+    merged = deep_merge(
+        preferences.model_dump(by_alias=True, exclude_computed_fields=True),
+        normalized_patch,
+    )
     merged["version"] = preferences.version
     merged["lastUpdated"] = datetime.now(timezone.utc).isoformat()
 

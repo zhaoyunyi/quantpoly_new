@@ -997,7 +997,22 @@ export function compareBacktests(
   return post<BacktestCompareResult>('/backtests/compare', { taskIds })
 }
 
-export type UserPreferences = Record<string, unknown>
+export interface UserPreferencesTheme {
+  mode?: 'light' | 'dark' | 'system'
+  darkMode?: boolean
+  primaryColor?: string
+}
+
+export interface UserPreferences {
+  version: number
+  theme: UserPreferencesTheme
+  account?: Record<string, unknown>
+  notifications?: Record<string, unknown>
+  data?: Record<string, unknown>
+  advanced?: Record<string, unknown> | null
+  lastUpdated?: string
+  syncEnabled?: boolean
+}
 
 export interface ChangePasswordResult {
   revokedSessions: number

@@ -24,6 +24,7 @@ def test_default_preferences_contains_contract_fields():
     prefs = default_preferences()
 
     assert prefs.theme is not None
+    assert prefs.theme.mode == "system"
     assert prefs.account is not None
     assert prefs.notifications is not None
     assert prefs.data is not None
@@ -44,6 +45,7 @@ def test_migrate_legacy_partial_preferences_payload():
 
     assert migrated.version == CURRENT_VERSION
     assert migrated.theme.primary_color == "#000000"
+    assert migrated.theme.mode == "light"
     assert migrated.account is not None
     assert migrated.notifications is not None
     assert migrated.data is not None
@@ -67,6 +69,19 @@ def test_deep_merge_keeps_unpatched_fields():
 
     assert patched.theme.primary_color == "#FF0000"
     assert patched.theme.dark_mode == base.theme.dark_mode
+
+
+def test_patch_theme_mode_updates_dark_mode_compatibility_field():
+    from user_preferences.domain import default_preferences, apply_patch
+
+    patched = apply_patch(
+        default_preferences(),
+        {"theme": {"mode": "dark"}},
+        user_level=1,
+    )
+
+    assert patched.theme.mode == "dark"
+    assert patched.theme.dark_mode is True
 
 
 def test_unknown_field_rejected():

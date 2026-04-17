@@ -67,6 +67,21 @@ def test_patch_deep_merge_keeps_other_fields():
     assert patched["theme"]["darkMode"] == base["theme"]["darkMode"]
 
 
+def test_patch_theme_mode_is_accepted_and_updates_dark_mode_compatibility():
+    app, _ = _build_app(user_level=1)
+    client = TestClient(app)
+
+    resp = client.patch(
+        "/users/me/preferences",
+        json={"theme": {"mode": "dark"}},
+    )
+
+    assert resp.status_code == 200
+    patched = resp.json()["data"]
+    assert patched["theme"]["mode"] == "dark"
+    assert patched["theme"]["darkMode"] is True
+
+
 def test_patch_concurrent_like_update_keeps_unrelated_fields():
     app, _ = _build_app(user_level=2)
     client = TestClient(app)
@@ -128,6 +143,21 @@ def test_reset_export_import_roundtrip():
     assert reset["theme"]["darkMode"] is False
 
     imported = client.post("/users/me/preferences/import", json=exported).json()["data"]
+    assert imported["theme"]["darkMode"] is True
+
+
+def test_import_legacy_dark_mode_payload_maps_to_mode():
+    app, _ = _build_app(user_level=2)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/users/me/preferences/import",
+        json={"version": 1, "theme": {"primaryColor": "#445566", "darkMode": True}},
+    )
+
+    assert resp.status_code == 200
+    imported = resp.json()["data"]
+    assert imported["theme"]["mode"] == "dark"
     assert imported["theme"]["darkMode"] is True
 
 
