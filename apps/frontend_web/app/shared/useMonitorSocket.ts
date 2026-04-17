@@ -9,6 +9,7 @@ export interface MonitorSocketState {
   connection: MonitorConnectionState
   signals: TradingSignal[]
   alerts: RiskAlert[]
+  reconnect: () => void
 }
 
 function toWsUrl(baseUrl: string, path: string): string {
@@ -69,6 +70,7 @@ export function useMonitorSocket(options?: {
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const connectRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!enabled) {
@@ -232,9 +234,11 @@ export function useMonitorSocket(options?: {
     }
 
     connect()
+    connectRef.current = connect
 
     return () => {
       cancelled = true
+      connectRef.current = null
       clearTimers()
       closeSocket()
     }
@@ -246,5 +250,19 @@ export function useMonitorSocket(options?: {
     maxReconnectAttempts,
   ])
 
-  return { connection, signals, alerts }
+  function reconnect() {
+    reconnectAttemptRef.current = 0
+    const ws = wsRef.current
+    wsRef.current = null
+    if (ws) {
+      try {
+        ws.close()
+      } catch {
+        // ignore
+      }
+    }
+    connectRef.current?.()
+  }
+
+  return { connection, signals, alerts, reconnect }
 }

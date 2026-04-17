@@ -44,17 +44,11 @@ import {
   TableEmpty,
   useToast,
 } from "@qp/ui";
+import { formatCurrency } from "../../shared/format";
 
 export const Route = createFileRoute("/trading/accounts")({
   component: TradingAccountsPage,
 });
-
-function fmt(n: number): string {
-  return n.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 export function TradingAccountsPage() {
   const navigate = useNavigate();
@@ -225,11 +219,11 @@ export function TradingAccountsPage() {
             <SummaryCard title="账户总数" value={`${aggregate.accountCount}`} />
             <SummaryCard
               title="总权益"
-              value={`¥${fmt(aggregate.totalEquity)}`}
+              value={`¥${formatCurrency(aggregate.totalEquity)}`}
             />
             <SummaryCard
               title="未实现盈亏"
-              value={`¥${fmt(aggregate.totalUnrealizedPnl)}`}
+              value={`¥${formatCurrency(aggregate.totalUnrealizedPnl)}`}
               tone={aggregate.totalUnrealizedPnl}
             />
             <SummaryCard
@@ -331,7 +325,7 @@ export function TradingAccountsPage() {
                         <span
                           className={`inline-block px-sm py-xxs rounded-full text-caption ${
                             acc.isActive
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-state-success-bg text-state-success-text"
                               : "bg-secondary-200 text-secondary-600"
                           }`}
                         >
@@ -545,12 +539,12 @@ function SummaryCard({
 
 function fmtRangeCurrency(value: RangeStats | null): string {
   if (!value) return "—";
-  return `¥${fmt(value.min)} ~ ¥${fmt(value.max)}`;
+  return `¥${formatCurrency(value.min)} ~ ¥${formatCurrency(value.max)}`;
 }
 
 function fmtRangeAvgCurrency(value: RangeStats | null): string | undefined {
   if (!value) return undefined;
-  return `均值 ¥${fmt(value.average)}`;
+  return `均值 ¥${formatCurrency(value.average)}`;
 }
 
 function fmtRangePercent(value: RangeStats | null): string {

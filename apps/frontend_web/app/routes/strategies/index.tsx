@@ -36,6 +36,7 @@ import {
   EmptyState,
   useToast,
 } from "@qp/ui";
+import { Search } from "lucide-react";
 import { StrategyTable } from "../../widgets/strategies/StrategyTable";
 import {
   StrategyForm,
@@ -283,27 +284,7 @@ export function StrategiesListPage() {
             size="sm"
             className="w-64"
             startAdornment={
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <circle
-                  cx="7"
-                  cy="7"
-                  r="5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-                <path
-                  d="M11 11l3.5 3.5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
+              <Search className="size-3.5" aria-hidden="true" />
             }
           />
           <Select
@@ -326,6 +307,7 @@ export function StrategiesListPage() {
           <EmptyState
             title="加载失败"
             description={error.message || "无法获取策略列表"}
+            variant="error"
             action={
               <Button variant="secondary" onClick={reload}>
                 重试

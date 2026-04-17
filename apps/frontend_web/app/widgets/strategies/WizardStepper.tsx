@@ -6,6 +6,7 @@
  */
 
 import { cn, transitionClass } from "@qp/ui";
+import { Check } from "lucide-react";
 
 export interface WizardStep {
   label: string;
@@ -47,21 +48,7 @@ export function WizardStepper({
               aria-current={isActive ? "step" : undefined}
             >
               {isCompleted ? (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M3 8l4 4 6-6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <Check className="size-3.5" aria-hidden="true" />
               ) : (
                 idx + 1
               )}

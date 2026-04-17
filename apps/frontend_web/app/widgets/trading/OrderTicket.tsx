@@ -10,6 +10,8 @@ import { useState, type ChangeEvent } from "react";
 import { buy, sell } from "@qp/api-client";
 import type { AppError, OrderSide } from "@qp/api-client";
 import { Button, TextField, useToast } from "@qp/ui";
+import { formatCurrency } from "../../shared/format";
+import { OrderConfirmDialog } from "./OrderConfirmDialog";
 
 export interface OrderTicketProps {
   accountId: string;
@@ -29,8 +31,15 @@ export function OrderTicket({ accountId, onSuccess }: OrderTicketProps) {
   const [price, setPrice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingOrder, setPendingOrder] = useState<{
+    side: OrderSide;
+    symbol: string;
+    quantity: number;
+    price: number;
+  } | null>(null);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const qty = parseFloat(quantity);
     const prc = parseFloat(price);
     if (
@@ -43,20 +52,37 @@ export function OrderTicket({ accountId, onSuccess }: OrderTicketProps) {
       setError("请填写完整的下单信息（标的、数量 > 0、价格 > 0）");
       return;
     }
+    setError(null);
+    setPendingOrder({ side, symbol: symbol.trim(), quantity: qty, price: prc });
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmedSubmit = async () => {
+    if (!pendingOrder) return;
     setSubmitting(true);
     setError(null);
     try {
-      const fn = side === "BUY" ? buy : sell;
-      await fn(accountId, { symbol: symbol.trim(), quantity: qty, price: prc });
-      toast.show(side === "BUY" ? "买入成功" : "卖出成功", "success");
+      const fn = pendingOrder.side === "BUY" ? buy : sell;
+      await fn(accountId, {
+        symbol: pendingOrder.symbol,
+        quantity: pendingOrder.quantity,
+        price: pendingOrder.price,
+      });
+      toast.show(
+        pendingOrder.side === "BUY" ? "买入成功" : "卖出成功",
+        "success",
+      );
       setSymbol("");
       setQuantity("");
       setPrice("");
+      setConfirmOpen(false);
+      setPendingOrder(null);
       onSuccess?.();
     } catch (err) {
       const appErr = err as AppError;
       const mapped = ERROR_MAP[appErr.code ?? ""];
       setError(mapped ?? appErr.message ?? "下单失败");
+      setConfirmOpen(false);
     } finally {
       setSubmitting(false);
     }
@@ -130,10 +156,7 @@ export function OrderTicket({ accountId, onSuccess }: OrderTicketProps) {
               预估金额：
               <span className="text-data-mono">
                 ¥
-                {(parseFloat(quantity) * parseFloat(price)).toLocaleString(
-                  "zh-CN",
-                  { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                )}
+                {formatCurrency(parseFloat(quantity) * parseFloat(price))}
               </span>
             </p>
           )}
@@ -146,12 +169,28 @@ export function OrderTicket({ accountId, onSuccess }: OrderTicketProps) {
 
         <Button
           loading={submitting}
-          onClick={() => void handleSubmit()}
+          onClick={handleSubmit}
           className="w-full"
         >
           {side === "BUY" ? "确认买入" : "确认卖出"}
         </Button>
       </div>
+
+      {pendingOrder && (
+        <OrderConfirmDialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            setConfirmOpen(open);
+            if (!open) setPendingOrder(null);
+          }}
+          side={pendingOrder.side}
+          symbol={pendingOrder.symbol}
+          quantity={pendingOrder.quantity}
+          price={pendingOrder.price}
+          onConfirm={() => void handleConfirmedSubmit()}
+          loading={submitting}
+        />
+      )}
     </div>
   );
 }

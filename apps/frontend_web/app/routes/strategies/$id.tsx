@@ -40,6 +40,7 @@ import {
   type StrategyFormData,
 } from "../../widgets/strategies/StrategyForm";
 import { BacktestInlineList } from "../../widgets/strategies/BacktestInlineList";
+import { formatInt, formatPercent, formatDate } from "../../shared/format";
 
 export const Route = createFileRoute("/strategies/$id")({
   component: StrategyDetailPage,
@@ -324,11 +325,11 @@ export function StrategyDetailPage() {
               <StatItem label="运行中" value={btStats.runningCount} />
               <StatItem
                 label="平均收益率"
-                value={fmtPct(btStats.averageReturnRate)}
+                value={formatPercent(btStats.averageReturnRate)}
               />
               <StatItem
                 label="平均最大回撤"
-                value={fmtPct(btStats.averageMaxDrawdown)}
+                value={formatPercent(btStats.averageMaxDrawdown)}
                 risk={btStats.averageMaxDrawdown > 0.2}
               />
             </div>
@@ -386,25 +387,8 @@ function StatItem({
         className={`text-data-secondary ${risk ? "state-risk" : ""}`}
         data-mono
       >
-        {typeof value === "number" ? value.toLocaleString("zh-CN") : value}
+        {typeof value === "number" ? formatInt(value) : value}
       </span>
     </div>
   );
-}
-
-function formatDate(isoStr: string): string {
-  try {
-    return new Date(isoStr).toLocaleDateString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-  } catch {
-    return isoStr;
-  }
-}
-
-function fmtPct(val: number): string {
-  if (!Number.isFinite(val)) return "0.00%";
-  return `${(val * 100).toFixed(2)}%`;
 }

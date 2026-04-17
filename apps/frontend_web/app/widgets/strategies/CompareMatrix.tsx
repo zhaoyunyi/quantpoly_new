@@ -23,12 +23,47 @@ export interface CompareMatrixProps {
   strategyNames: string[];
   metrics: CompareMetricRow[];
   loading?: boolean;
+  /** 是否高亮最优/最差值，默认 true */
+  highlightBestWorst?: boolean;
+}
+
+/** 指标名包含这些关键词时，越低越好 */
+const LOWER_IS_BETTER_PATTERN = /drawdown|回撤|risk|风险/i;
+
+function parseComparableNumber(value: string): number {
+  return parseFloat(value.replace(/,/g, "").trim());
+}
+
+function getHighlightIndices(
+  values: string[],
+  lowerIsBetter: boolean,
+): { bestIdx: number; worstIdx: number } | null {
+  const parsed = values.map(parseComparableNumber);
+  const validIndices = parsed
+    .map((n, i) => (Number.isNaN(n) ? -1 : i))
+    .filter((i) => i >= 0);
+  if (validIndices.length < 2) return null;
+
+  let bestIdx = validIndices[0];
+  let worstIdx = validIndices[0];
+  for (const i of validIndices) {
+    if (lowerIsBetter) {
+      if (parsed[i] < parsed[bestIdx]) bestIdx = i;
+      if (parsed[i] > parsed[worstIdx]) worstIdx = i;
+    } else {
+      if (parsed[i] > parsed[bestIdx]) bestIdx = i;
+      if (parsed[i] < parsed[worstIdx]) worstIdx = i;
+    }
+  }
+  if (bestIdx === worstIdx) return null;
+  return { bestIdx, worstIdx };
 }
 
 export function CompareMatrix({
   strategyNames,
   metrics,
   loading,
+  highlightBestWorst = true,
 }: CompareMatrixProps) {
   if (loading) {
     return (
@@ -51,18 +86,35 @@ export function CompareMatrix({
         </TableRow>
       </TableHead>
       <TableBody>
-        {metrics.map((row) => (
-          <TableRow key={row.label}>
-            <TableCell>
-              <span className="text-body font-medium">{row.label}</span>
-            </TableCell>
-            {row.values.map((val, idx) => (
-              <TableCell key={idx}>
-                <span className="text-data-mono">{val}</span>
+        {metrics.map((row) => {
+          const lowerIsBetter = LOWER_IS_BETTER_PATTERN.test(row.label);
+          const hl =
+            highlightBestWorst
+              ? getHighlightIndices(row.values, lowerIsBetter)
+              : null;
+
+          return (
+            <TableRow key={row.label}>
+              <TableCell>
+                <span className="text-body font-medium">{row.label}</span>
               </TableCell>
-            ))}
-          </TableRow>
-        ))}
+              {row.values.map((val, idx) => {
+                let cls = "text-data-mono";
+                if (hl) {
+                  if (idx === hl.bestIdx)
+                    cls = "text-data-mono text-state-up font-medium";
+                  else if (idx === hl.worstIdx)
+                    cls = "text-data-mono text-state-down";
+                }
+                return (
+                  <TableCell key={idx}>
+                    <span className={cls}>{val}</span>
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );

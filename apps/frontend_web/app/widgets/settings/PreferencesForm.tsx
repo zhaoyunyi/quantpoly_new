@@ -329,7 +329,7 @@ function ToggleRow({
       >
         <span
           className={cn(
-            "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm",
+            "pointer-events-none block h-4 w-4 rounded-full bg-text-on-primary shadow-sm",
             transitionClass,
             checked ? "translate-x-5" : "translate-x-0.5",
           )}

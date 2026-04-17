@@ -23,6 +23,7 @@ import {
 } from "@qp/api-client";
 import type { BacktestTask, BacktestResult, AppError } from "@qp/api-client";
 import { Button, Skeleton, EmptyState, useToast } from "@qp/ui";
+import { formatDate, formatPercent } from "../../shared/format";
 import { BacktestStatusBadge } from "../../widgets/backtests/BacktestStatusBadge";
 import { BacktestResultPanel } from "../../widgets/backtests/BacktestResultPanel";
 import { BacktestActions } from "../../widgets/backtests/BacktestActions";
@@ -301,7 +302,7 @@ export function BacktestDetailPage() {
                   </span>
                   {rt.metrics?.returnRate != null && (
                     <span className="text-data-mono text-caption ml-auto">
-                      收益 {fmtPct(rt.metrics.returnRate as number)}
+                      收益 {formatPercent(rt.metrics.returnRate as number)}
                     </span>
                   )}
                 </button>
@@ -319,23 +320,3 @@ export function BacktestDetailPage() {
   );
 }
 
-/* ─── 辅助函数 ─── */
-
-function formatDate(isoStr: string): string {
-  try {
-    return new Date(isoStr).toLocaleDateString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return isoStr;
-  }
-}
-
-function fmtPct(val: number): string {
-  if (!Number.isFinite(val)) return "0.00%";
-  return `${(val * 100).toFixed(2)}%`;
-}

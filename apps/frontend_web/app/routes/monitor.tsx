@@ -24,6 +24,7 @@ import {
 } from '@qp/api-client'
 import { Button, Skeleton, TextField, useToast } from '@qp/ui'
 
+import { formatInt } from '../shared/format'
 import { ProtectedLayout } from '../entry_wiring'
 import { useLoadable } from '../shared/useLoadable'
 import { useMonitorSocket } from '../shared/useMonitorSocket'
@@ -31,6 +32,7 @@ import { DegradedBanner } from '../widgets/dashboard/DegradedBanner'
 import { InlineErrorCard } from '../widgets/dashboard/InlineErrorCard'
 import { Panel } from '../widgets/dashboard/Panel'
 import { AlertList } from '../widgets/monitoring/AlertList'
+import { DataSourceBadge } from '../widgets/monitoring/DataSourceBadge'
 import { MonitorConnectionBadge } from '../widgets/monitoring/MonitorConnectionBadge'
 import { OperationalSummaryBar } from '../widgets/monitoring/OperationalSummaryBar'
 import { SignalList } from '../widgets/monitoring/SignalList'
@@ -97,6 +99,8 @@ export function MonitorPage() {
 
   const degradedEnabled = !!summary.data?.degraded?.enabled
   const degradedReasons = summary.data?.degraded?.reasons ?? []
+
+  const dataSource: 'ws' | 'rest' = ws.connection === 'connected' ? 'ws' : 'rest'
 
   const useLiveSignals = signalSource === 'pending'
   const signals = useLiveSignals && ws.signals.length > 0 ? ws.signals : signalsState.data ?? EMPTY_SIGNALS
@@ -316,14 +320,26 @@ export function MonitorPage() {
             </p>
           </div>
           <div className="shrink-0">
-            <MonitorConnectionBadge state={ws.connection} />
+            <MonitorConnectionBadge state={ws.connection} onReconnect={() => ws.reconnect()} />
           </div>
         </header>
+
+        {ws.connection === 'degraded' && (
+          <div className="bg-state-warning-bg border border-state-warning-text/20 rounded-md p-md flex items-center justify-between" role="alert">
+            <div>
+              <p className="text-body font-medium text-state-warning-text">实时连接已断开</p>
+              <p className="text-caption text-text-secondary">当前使用 REST 轮询获取数据，更新间隔约 10 秒。</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => ws.reconnect()}>
+              重新连接
+            </Button>
+          </div>
+        )}
 
         {degradedEnabled && <DegradedBanner reasons={degradedReasons} />}
 
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-md">
-          <Panel title="Signals" subtitle="待处理与检索信号（/signals、/signals/search、/signals/pending）">
+          <Panel title={<span className="inline-flex items-center gap-xs">Signals <DataSourceBadge source={dataSource} /></span>} subtitle="待处理与检索信号（/signals、/signals/search、/signals/pending）">
             <div className="mb-md flex flex-col gap-sm">
               <div className="flex flex-wrap items-center gap-xs">
                 <Button
@@ -422,7 +438,7 @@ export function MonitorPage() {
             )}
           </Panel>
 
-          <Panel title="Alerts" subtitle="未解决告警与统计（/risk/alerts、/risk/alerts/stats）">
+          <Panel title={<span className="inline-flex items-center gap-xs">Alerts <DataSourceBadge source={dataSource} /></span>} subtitle="未解决告警与统计（/risk/alerts、/risk/alerts/stats）">
             <AlertStatsGrid
               state={alertStats}
               onRetry={() => void alertStats.reload()}
@@ -578,6 +594,3 @@ function AlertStatItem({
   )
 }
 
-function formatInt(value: number): string {
-  return Number.isFinite(value) ? Math.trunc(value).toLocaleString('zh-CN') : '0'
-}

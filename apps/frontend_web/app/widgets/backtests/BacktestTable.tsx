@@ -14,6 +14,7 @@ import {
   TableCell,
   TableEmpty,
 } from "@qp/ui";
+import { Check } from "lucide-react";
 import type { BacktestTask } from "@qp/api-client";
 import { BacktestStatusBadge } from "./BacktestStatusBadge";
 import { BacktestActions } from "./BacktestActions";
@@ -81,21 +82,7 @@ export function BacktestTable({
                       aria-label={isSelected ? "取消选择" : "选择"}
                     >
                       {isSelected && (
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          aria-hidden="true"
-                        >
-                          <path
-                            d="M3 8l4 4 6-6"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Check className="size-3" aria-hidden="true" />
                       )}
                     </button>
                   </TableCell>

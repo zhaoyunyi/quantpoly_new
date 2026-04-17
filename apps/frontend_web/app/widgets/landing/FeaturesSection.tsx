@@ -5,10 +5,12 @@
  * 不堆砌视觉效果，克制呈现。
  */
 
+import { Ruler, BarChart3, ShieldCheck, Radio, type LucideIcon } from 'lucide-react'
+
 interface FeatureItem {
   title: string;
   description: string;
-  icon: string;
+  icon: LucideIcon;
 }
 
 const FEATURES: FeatureItem[] = [
@@ -16,33 +18,31 @@ const FEATURES: FeatureItem[] = [
     title: "策略管理",
     description:
       "构建、版本化与追踪你的量化策略，完整记录每一次变更与决策依据。",
-    icon: "📐",
+    icon: Ruler,
   },
   {
     title: "回测引擎",
     description:
       "基于历史数据验证策略表现，提供收益率、回撤、胜率等核心指标分析。",
-    icon: "📊",
+    icon: BarChart3,
   },
   {
     title: "风控中心",
     description: "实时告警与多维度风险监控，让异常暴露在造成损失之前。",
-    icon: "🛡️",
+    icon: ShieldCheck,
   },
   {
     title: "实时监控",
     description: "聚合信号、任务与账户状态，一目了然掌握全局运行态势。",
-    icon: "📡",
+    icon: Radio,
   },
 ];
 
-function FeatureCard({ title, description, icon }: FeatureItem) {
+function FeatureCard({ title, description, icon: Icon }: FeatureItem) {
   return (
     <div className="bg-bg-card rounded-md shadow-card border border-secondary-300/20 p-lg flex flex-col gap-sm">
       <div className="flex items-center gap-sm">
-        <span className="text-h2" aria-hidden="true">
-          {icon}
-        </span>
+        <Icon className="size-6 text-primary-700 shrink-0" aria-hidden="true" />
         <h3 className="text-title-card">{title}</h3>
       </div>
       <p className="text-body-secondary">{description}</p>

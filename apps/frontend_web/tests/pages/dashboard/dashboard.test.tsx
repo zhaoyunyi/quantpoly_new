@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 
 import { AppProviders, bootstrapApiClient } from '../../../app/entry_wiring'
 
@@ -265,5 +265,443 @@ describe('/dashboard', () => {
         '/auth/login?next=%2Fdashboard%3Ffoo%3D1',
       )
     })
+  })
+
+  it('given_dashboard_when_rendered_then_shows_last_updated_timestamp', async () => {
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith('/users/me')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                id: 'u-1',
+                email: 'u1@example.com',
+                displayName: 'U1',
+                isActive: true,
+                emailVerified: true,
+                role: 'user',
+                level: 1,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/monitor/summary')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                type: 'monitor.summary',
+                generatedAt: '2026-01-01T00:00:00Z',
+                metadata: { version: 'v2', latencyMs: 10, sources: {} },
+                accounts: { total: 1, active: 1 },
+                strategies: { total: 0, active: 0 },
+                backtests: { total: 0, pending: 0, running: 0, completed: 0, failed: 0, cancelled: 0 },
+                tasks: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
+                signals: { total: 0, pending: 0, expired: 0 },
+                alerts: { total: 0, open: 0, critical: 0 },
+                degraded: { enabled: false, reasons: [] },
+                isEmpty: false,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/trading/accounts/aggregate')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                userId: 'u-1',
+                accountCount: 1,
+                totalCashBalance: 0,
+                totalMarketValue: 0,
+                totalUnrealizedPnl: 0,
+                totalEquity: 0,
+                totalTradeCount: 0,
+                totalTurnover: 0,
+                pendingOrderCount: 0,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/backtests/statistics')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                pendingCount: 0, runningCount: 0, completedCount: 0,
+                failedCount: 0, cancelledCount: 0, totalCount: 0,
+                averageReturnRate: 0, averageMaxDrawdown: 0, averageWinRate: 0,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/risk/alerts/stats')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: { total: 0, open: 0, acknowledged: 0, resolved: 0, bySeverity: {} },
+            }),
+        })
+      }
+
+      if (url.endsWith('/signals/dashboard')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: { total: 0, pending: 0, expired: 0, executed: 0, cancelled: 0, byAccount: [] },
+            }),
+        })
+      }
+
+      throw new Error(`unexpected fetch url: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', mockFetch)
+
+    const mod = await import('../../../app/routes/dashboard')
+
+    render(
+      <AppProviders>
+        <mod.DashboardPage />
+      </AppProviders>,
+    )
+
+    await waitFor(() => {
+      expect(
+        mockFetch.mock.calls.some(([u]) => String(u).endsWith('/monitor/summary')),
+      ).toBe(true)
+    })
+
+    expect(screen.getByText(/最后更新/)).toBeInTheDocument()
+  })
+
+  it('given_refresh_button_when_clicked_then_reloads_all_data', async () => {
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith('/users/me')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                id: 'u-1',
+                email: 'u1@example.com',
+                displayName: 'U1',
+                isActive: true,
+                emailVerified: true,
+                role: 'user',
+                level: 1,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/monitor/summary')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                type: 'monitor.summary',
+                generatedAt: '2026-01-01T00:00:00Z',
+                metadata: { version: 'v2', latencyMs: 10, sources: {} },
+                accounts: { total: 1, active: 1 },
+                strategies: { total: 0, active: 0 },
+                backtests: { total: 0, pending: 0, running: 0, completed: 0, failed: 0, cancelled: 0 },
+                tasks: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
+                signals: { total: 0, pending: 0, expired: 0 },
+                alerts: { total: 0, open: 0, critical: 0 },
+                degraded: { enabled: false, reasons: [] },
+                isEmpty: false,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/trading/accounts/aggregate')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                userId: 'u-1',
+                accountCount: 1,
+                totalCashBalance: 0,
+                totalMarketValue: 0,
+                totalUnrealizedPnl: 0,
+                totalEquity: 0,
+                totalTradeCount: 0,
+                totalTurnover: 0,
+                pendingOrderCount: 0,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/backtests/statistics')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                pendingCount: 0, runningCount: 0, completedCount: 0,
+                failedCount: 0, cancelledCount: 0, totalCount: 0,
+                averageReturnRate: 0, averageMaxDrawdown: 0, averageWinRate: 0,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/risk/alerts/stats')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: { total: 0, open: 0, acknowledged: 0, resolved: 0, bySeverity: {} },
+            }),
+        })
+      }
+
+      if (url.endsWith('/signals/dashboard')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: { total: 0, pending: 0, expired: 0, executed: 0, cancelled: 0, byAccount: [] },
+            }),
+        })
+      }
+
+      throw new Error(`unexpected fetch url: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', mockFetch)
+
+    const mod = await import('../../../app/routes/dashboard')
+
+    render(
+      <AppProviders>
+        <mod.DashboardPage />
+      </AppProviders>,
+    )
+
+    await waitFor(() => {
+      expect(
+        mockFetch.mock.calls.some(([u]) => String(u).endsWith('/monitor/summary')),
+      ).toBe(true)
+    })
+
+    const summaryCallsBefore = mockFetch.mock.calls.filter(
+      ([u]) => String(u).endsWith('/monitor/summary'),
+    ).length
+
+    const refreshBtn = screen.getByRole('button', { name: '刷新' })
+    fireEvent.click(refreshBtn)
+
+    await waitFor(() => {
+      const summaryCallsAfter = mockFetch.mock.calls.filter(
+        ([u]) => String(u).endsWith('/monitor/summary'),
+      ).length
+      expect(summaryCallsAfter).toBeGreaterThan(summaryCallsBefore)
+    })
+  })
+
+  it('given_degraded_summary_when_render_then_shows_delay_warning', async () => {
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith('/users/me')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                id: 'u-1',
+                email: 'u1@example.com',
+                displayName: 'U1',
+                isActive: true,
+                emailVerified: true,
+                role: 'user',
+                level: 1,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/monitor/summary')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                type: 'monitor.summary',
+                generatedAt: '2026-01-01T00:00:00Z',
+                metadata: { version: 'v2', latencyMs: 10, sources: { accounts: 'degraded' } },
+                accounts: { total: 0, active: 0 },
+                strategies: { total: 0, active: 0 },
+                backtests: { total: 0, pending: 0, running: 0, completed: 0, failed: 0, cancelled: 0 },
+                tasks: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 },
+                signals: { total: 0, pending: 0, expired: 0 },
+                alerts: { total: 0, open: 0, critical: 0 },
+                degraded: { enabled: true, reasons: ['accounts_unavailable'] },
+                isEmpty: true,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/trading/accounts/aggregate')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                userId: 'u-1',
+                accountCount: 0,
+                totalCashBalance: 0,
+                totalMarketValue: 0,
+                totalUnrealizedPnl: 0,
+                totalEquity: 0,
+                totalTradeCount: 0,
+                totalTurnover: 0,
+                pendingOrderCount: 0,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/backtests/statistics')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: {
+                pendingCount: 0, runningCount: 0, completedCount: 0,
+                failedCount: 0, cancelledCount: 0, totalCount: 0,
+                averageReturnRate: 0, averageMaxDrawdown: 0, averageWinRate: 0,
+              },
+            }),
+        })
+      }
+
+      if (url.endsWith('/risk/alerts/stats')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: { total: 0, open: 0, acknowledged: 0, resolved: 0, bySeverity: {} },
+            }),
+        })
+      }
+
+      if (url.endsWith('/signals/dashboard')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: () =>
+            Promise.resolve({
+              success: true,
+              message: 'ok',
+              data: { total: 0, pending: 0, expired: 0, executed: 0, cancelled: 0, byAccount: [] },
+            }),
+        })
+      }
+
+      throw new Error(`unexpected fetch url: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', mockFetch)
+
+    const mod = await import('../../../app/routes/dashboard')
+
+    render(
+      <AppProviders>
+        <mod.DashboardPage />
+      </AppProviders>,
+    )
+
+    await waitFor(() => {
+      expect(
+        mockFetch.mock.calls.some(([u]) => String(u).endsWith('/monitor/summary')),
+      ).toBe(true)
+    })
+
+    expect(screen.getByText(/数据可能存在延迟/)).toBeInTheDocument()
   })
 })

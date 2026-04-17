@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@qp/ui'
 
 export interface PanelProps {
-  title: string
+  title: ReactNode
   subtitle?: string
   action?: ReactNode
   children: ReactNode

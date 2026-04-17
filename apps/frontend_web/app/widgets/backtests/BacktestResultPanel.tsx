@@ -7,6 +7,7 @@
 
 import { Button, Skeleton, EmptyState } from "@qp/ui";
 import type { BacktestResult, BacktestStatus } from "@qp/api-client";
+import { formatPercent, formatCurrency, formatInt } from "../../shared/format";
 
 export interface BacktestResultPanelProps {
   result: BacktestResult | null;
@@ -119,15 +120,15 @@ export function BacktestResultPanel({
     <div className="flex flex-col gap-lg">
       {/* 指标卡片 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-md">
-        <MetricCard label="收益率" value={fmtPct(metrics.returnRate)} />
+        <MetricCard label="收益率" value={formatPercent(metrics.returnRate ?? 0)} />
         <MetricCard
           label="最大回撤"
-          value={fmtPct(metrics.maxDrawdown)}
+          value={formatPercent(metrics.maxDrawdown ?? 0)}
           risk={(metrics.maxDrawdown ?? 0) > 0.2}
         />
-        <MetricCard label="夏普比率" value={fmtNum(metrics.sharpeRatio)} />
-        <MetricCard label="交易次数" value={fmtInt(metrics.tradeCount)} />
-        <MetricCard label="胜率" value={fmtPct(metrics.winRate)} />
+        <MetricCard label="夏普比率" value={formatCurrency(metrics.sharpeRatio ?? 0)} />
+        <MetricCard label="交易次数" value={formatInt(metrics.tradeCount ?? 0)} />
+        <MetricCard label="胜率" value={formatPercent(metrics.winRate ?? 0)} />
       </div>
 
       {/* 图表占位 */}
@@ -138,25 +139,4 @@ export function BacktestResultPanel({
       </div>
     </div>
   );
-}
-
-function fmtPct(val: unknown): string {
-  if (val === null || val === undefined) return "-";
-  const num = Number(val);
-  if (!Number.isFinite(num)) return "-";
-  return `${(num * 100).toFixed(2)}%`;
-}
-
-function fmtNum(val: unknown): string {
-  if (val === null || val === undefined) return "-";
-  const num = Number(val);
-  if (!Number.isFinite(num)) return "-";
-  return num.toFixed(2);
-}
-
-function fmtInt(val: unknown): string {
-  if (val === null || val === undefined) return "-";
-  const num = Number(val);
-  if (!Number.isFinite(num)) return "-";
-  return num.toLocaleString("zh-CN");
 }

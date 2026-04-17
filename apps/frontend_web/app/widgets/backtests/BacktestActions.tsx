@@ -13,8 +13,8 @@ export interface BacktestActionsProps {
   taskId: string;
   status: BacktestStatus;
   displayName: string | null;
-  onCancel?: (taskId: string) => void;
-  onRetry?: (taskId: string) => void;
+  onCancel?: (taskId: string) => void | Promise<void>;
+  onRetry?: (taskId: string) => void | Promise<void>;
   onRename?: (taskId: string, newName: string) => void;
   onDelete?: (taskId: string) => void;
   /** 是否以紧凑内联模式渲染（表格行内） */
@@ -33,10 +33,24 @@ export function BacktestActions({
 }: BacktestActionsProps) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(displayName ?? "");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const canCancel = status === "pending" || status === "running";
   const canRetry = status === "failed" || status === "cancelled";
   const canDelete = status !== "running";
+  const busy = busyAction !== null;
+
+  const wrap = (action: string, fn?: (id: string) => void | Promise<void>) => {
+    if (!fn) return undefined;
+    return async () => {
+      setBusyAction(action);
+      try {
+        await fn(taskId);
+      } finally {
+        setBusyAction(null);
+      }
+    };
+  };
 
   const handleRenameSubmit = () => {
     if (renameValue.trim()) {
@@ -55,7 +69,9 @@ export function BacktestActions({
           <Button
             variant={variant}
             size={size}
-            onClick={() => onCancel?.(taskId)}
+            loading={busyAction === "cancel"}
+            disabled={busy && busyAction !== "cancel"}
+            onClick={() => void wrap("cancel", onCancel)?.()}
           >
             取消
           </Button>
@@ -64,7 +80,9 @@ export function BacktestActions({
           <Button
             variant={variant}
             size={size}
-            onClick={() => onRetry?.(taskId)}
+            loading={busyAction === "retry"}
+            disabled={busy && busyAction !== "retry"}
+            onClick={() => void wrap("retry", onRetry)?.()}
           >
             重试
           </Button>
@@ -72,6 +90,7 @@ export function BacktestActions({
         <Button
           variant={variant}
           size={size}
+          disabled={busy}
           onClick={() => {
             setRenameValue(displayName ?? "");
             setRenameOpen(true);
@@ -83,6 +102,7 @@ export function BacktestActions({
           <Button
             variant={variant}
             size={size}
+            disabled={busy}
             onClick={() => onDelete?.(taskId)}
           >
             删除

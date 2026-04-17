@@ -88,6 +88,43 @@ export function StrategySimplePage() {
     setStep(1);
   };
 
+  const validateField = (
+    key: string,
+    value: string,
+    rule: { min?: number; max?: number; type?: string },
+  ) => {
+    const num = parseFloat(value);
+    if (
+      rule.type === "number" ||
+      rule.min !== undefined ||
+      rule.max !== undefined
+    ) {
+      if (Number.isNaN(num)) {
+        setFieldErrors((prev) => ({ ...prev, [key]: "请输入有效数字" }));
+        return;
+      }
+      if (rule.min !== undefined && num < rule.min) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          [key]: `最小值为 ${rule.min}`,
+        }));
+        return;
+      }
+      if (rule.max !== undefined && num > rule.max) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          [key]: `最大值为 ${rule.max}`,
+        }));
+        return;
+      }
+    }
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const handleParamChange = (key: string, value: string) => {
     setParams((prev) => ({ ...prev, [key]: value }));
   };
@@ -232,6 +269,9 @@ export function StrategySimplePage() {
                     onChange={(e: ChangeEvent<HTMLInputElement>) =>
                       handleParamChange(key, e.target.value)
                     }
+                    onBlur={() =>
+                      validateField(key, params[key] ?? "", rule)
+                    }
                     type="number"
                     error={fieldErrors[key]}
                     help={`类型: ${rule.type}${rule.min !== undefined ? ` · 最小: ${rule.min}` : ""}${rule.max !== undefined ? ` · 最大: ${rule.max}` : ""}`}
@@ -247,7 +287,12 @@ export function StrategySimplePage() {
                 <Button variant="secondary" onClick={() => setStep(0)}>
                   上一步
                 </Button>
-                <Button onClick={handleGoToConfirm} disabled={!name.trim()}>
+                <Button
+                  onClick={handleGoToConfirm}
+                  disabled={
+                    !name.trim() || Object.keys(fieldErrors).length > 0
+                  }
+                >
                   下一步
                 </Button>
               </div>

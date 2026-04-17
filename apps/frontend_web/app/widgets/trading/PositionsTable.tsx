@@ -13,7 +13,9 @@ import {
   TableHeaderCell,
   TableCell,
   TableEmpty,
+  Button,
 } from "@qp/ui";
+import { exportCsv } from "../../shared/exportCsv";
 
 export interface PositionsTableProps {
   positions: Position[];
@@ -28,8 +30,29 @@ function fmt(n: number): string {
 }
 
 export function PositionsTable({ positions, loading }: PositionsTableProps) {
+  const handleExport = () => {
+    exportCsv(
+      `positions-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['标的', '数量', '成本价', '最新价', '市值', '未实现盈亏'],
+      positions.map((p) => [
+        p.symbol,
+        String(p.quantity),
+        String(p.avgPrice),
+        String(p.lastPrice),
+        String(p.quantity * p.lastPrice),
+        String((p.lastPrice - p.avgPrice) * p.quantity),
+      ]),
+    )
+  }
+
   return (
-    <Table>
+    <div>
+      <div className="flex justify-end mb-sm">
+        <Button variant="ghost" size="sm" onClick={handleExport}>
+          导出 CSV
+        </Button>
+      </div>
+      <Table>
       <TableHead>
         <TableRow>
           <TableHeaderCell>标的</TableHeaderCell>
@@ -81,5 +104,6 @@ export function PositionsTable({ positions, loading }: PositionsTableProps) {
         )}
       </TableBody>
     </Table>
+    </div>
   );
 }

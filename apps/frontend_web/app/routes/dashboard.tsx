@@ -17,7 +17,9 @@ import type {
   AppError,
 } from '@qp/api-client'
 import { Skeleton } from '@qp/ui'
-import { useLoadable } from '../shared/useLoadable'
+import { usePolling } from '../shared/usePolling'
+import { LastUpdated } from '../shared/LastUpdated'
+import { formatInt, formatCurrency, formatPercent } from '../shared/format'
 import { DegradedBanner } from '../widgets/dashboard/DegradedBanner'
 import { InlineErrorCard } from '../widgets/dashboard/InlineErrorCard'
 import { KpiCard, type KpiTone } from '../widgets/dashboard/KpiCard'
@@ -30,11 +32,12 @@ export const Route = createFileRoute('/dashboard')({
 })
 
 export function DashboardPage() {
-  const summary = useLoadable<MonitorSummary>(getMonitorSummary)
-  const aggregate = useLoadable<TradingAccountsAggregate>(getTradingAccountsAggregate)
-  const backtestStats = useLoadable<BacktestStatistics>(getBacktestStatistics)
-  const riskAlertStats = useLoadable<RiskAlertStats>(getRiskAlertStats)
-  const signalsDashboard = useLoadable<SignalsDashboard>(getSignalsDashboard)
+  const POLL_INTERVAL = 60_000
+  const summary = usePolling<MonitorSummary>(getMonitorSummary, POLL_INTERVAL, true)
+  const aggregate = usePolling<TradingAccountsAggregate>(getTradingAccountsAggregate, POLL_INTERVAL, true)
+  const backtestStats = usePolling<BacktestStatistics>(getBacktestStatistics, POLL_INTERVAL, true)
+  const riskAlertStats = usePolling<RiskAlertStats>(getRiskAlertStats, POLL_INTERVAL, true)
+  const signalsDashboard = usePolling<SignalsDashboard>(getSignalsDashboard, POLL_INTERVAL, true)
 
   const degradedEnabled = !!summary.data?.degraded?.enabled
   const degradedReasons = summary.data?.degraded?.reasons ?? []
@@ -59,6 +62,25 @@ export function DashboardPage() {
             )}
           </div>
         </header>
+
+        <div className="flex items-center gap-md flex-wrap">
+          <LastUpdated
+            lastUpdatedAt={summary.lastUpdatedAt}
+            onRefresh={() => {
+              void summary.reload()
+              void aggregate.reload()
+              void backtestStats.reload()
+              void riskAlertStats.reload()
+              void signalsDashboard.reload()
+            }}
+            loading={summary.loading}
+          />
+          {degradedEnabled && (
+            <span className="text-caption text-state-risk">
+              部分数据源已降级，数据可能存在延迟
+            </span>
+          )}
+        </div>
 
         {degradedEnabled && <DegradedBanner reasons={degradedReasons} />}
 
@@ -246,10 +268,10 @@ function AggregatePanel({
     <div className="grid grid-cols-2 gap-md">
       <Metric label="账户数" value={formatInt(a.accountCount)} />
       <Metric label="待处理订单" value={formatInt(a.pendingOrderCount)} tone={a.pendingOrderCount > 0 ? 'risk' : 'default'} />
-      <Metric label="总权益" value={formatNumber(a.totalEquity)} />
-      <Metric label="现金余额" value={formatNumber(a.totalCashBalance)} />
-      <Metric label="持仓市值" value={formatNumber(a.totalMarketValue)} />
-      <Metric label="未实现盈亏" value={formatNumber(a.totalUnrealizedPnl)} tone={pnlTone} />
+      <Metric label="总权益" value={formatCurrency(a.totalEquity)} />
+      <Metric label="现金余额" value={formatCurrency(a.totalCashBalance)} />
+      <Metric label="持仓市值" value={formatCurrency(a.totalMarketValue)} />
+      <Metric label="未实现盈亏" value={formatCurrency(a.totalUnrealizedPnl)} tone={pnlTone} />
     </div>
   )
 }
@@ -451,18 +473,4 @@ function Metric({
       </span>
     </div>
   )
-}
-
-function formatInt(value: number): string {
-  return Number.isFinite(value) ? Math.trunc(value).toLocaleString('zh-CN') : '0'
-}
-
-function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) return '0.00'
-  return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function formatPercent(value: number): string {
-  if (!Number.isFinite(value)) return '0.00%'
-  return `${(value * 100).toFixed(2)}%`
 }

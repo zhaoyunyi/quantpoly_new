@@ -32,6 +32,7 @@ import type {
   AppError,
 } from "@qp/api-client";
 import { Button, Dialog, Select, Skeleton, EmptyState, useToast } from "@qp/ui";
+import { formatInt, formatPercent } from "../../shared/format";
 import { BacktestTable } from "../../widgets/backtests/BacktestTable";
 import {
   BacktestCreateDialog,
@@ -330,21 +331,21 @@ export function BacktestsListPage() {
           <section className="bg-bg-card rounded-md shadow-card border border-secondary-300/20 p-lg">
             <h2 className="text-title-section mb-md">统计概览</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-md">
-              <StatItem label="总计" value={stats.totalCount} />
-              <StatItem label="排队中" value={stats.pendingCount} />
-              <StatItem label="运行中" value={stats.runningCount} />
-              <StatItem label="已完成" value={stats.completedCount} />
-              <StatItem label="失败" value={stats.failedCount} />
+              <StatItem label="总计" value={formatInt(stats.totalCount)} />
+              <StatItem label="排队中" value={formatInt(stats.pendingCount)} />
+              <StatItem label="运行中" value={formatInt(stats.runningCount)} />
+              <StatItem label="已完成" value={formatInt(stats.completedCount)} />
+              <StatItem label="失败" value={formatInt(stats.failedCount)} />
               <StatItem
                 label="平均收益率"
-                value={fmtPct(stats.averageReturnRate)}
+                value={formatPercent(stats.averageReturnRate)}
               />
               <StatItem
                 label="平均最大回撤"
-                value={fmtPct(stats.averageMaxDrawdown)}
+                value={formatPercent(stats.averageMaxDrawdown)}
                 risk={stats.averageMaxDrawdown > 0.2}
               />
-              <StatItem label="平均胜率" value={fmtPct(stats.averageWinRate)} />
+              <StatItem label="平均胜率" value={formatPercent(stats.averageWinRate)} />
             </div>
           </section>
         )}
@@ -394,6 +395,7 @@ export function BacktestsListPage() {
           <EmptyState
             title="加载失败"
             description={error.message || "无法获取回测列表"}
+            variant="error"
             action={
               <Button variant="secondary" onClick={reload}>
                 重试
@@ -476,7 +478,7 @@ function StatItem({
   risk,
 }: {
   label: string;
-  value: number | string;
+  value: string;
   risk?: boolean;
 }) {
   return (
@@ -486,7 +488,7 @@ function StatItem({
         className={`text-data-secondary ${risk ? "state-risk" : ""}`}
         data-mono
       >
-        {typeof value === "number" ? value.toLocaleString("zh-CN") : value}
+        {value}
       </span>
     </div>
   );
@@ -527,11 +529,6 @@ function DeleteConfirmDialog({
       </p>
     </Dialog>
   );
-}
-
-function fmtPct(val: number): string {
-  if (!Number.isFinite(val)) return "0.00%";
-  return `${(val * 100).toFixed(2)}%`;
 }
 
 function formatMetricValue(val: unknown): string {

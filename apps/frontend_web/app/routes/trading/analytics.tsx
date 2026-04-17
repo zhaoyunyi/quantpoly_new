@@ -32,20 +32,15 @@ import type {
   AppError,
 } from "@qp/api-client";
 import { Button, Skeleton, EmptyState, useToast } from "@qp/ui";
+import { AlertCircle } from "lucide-react";
 import { AccountSelector } from "../../widgets/trading/AccountSelector";
 import { CashFlowTable } from "../../widgets/trading/CashFlowTable";
 import { EquityCurveChart } from "../../widgets/trading/EquityCurveChart";
+import { formatCurrency } from "../../shared/format";
 
 export const Route = createFileRoute("/trading/analytics")({
   component: TradingAnalyticsPage,
 });
-
-function fmt(n: number): string {
-  return n.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 const RISK_LEVEL_LABEL: Record<string, string> = {
   low: "低风险",
@@ -54,9 +49,9 @@ const RISK_LEVEL_LABEL: Record<string, string> = {
 };
 
 const RISK_LEVEL_CLASS: Record<string, string> = {
-  low: "bg-green-100 text-green-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-red-100 text-red-800",
+  low: "bg-state-success-bg text-state-success-text",
+  medium: "bg-state-warning-bg text-state-warning-text",
+  high: "bg-state-error-bg text-state-error-text",
 };
 
 export function TradingAnalyticsPage() {
@@ -221,7 +216,7 @@ export function TradingAnalyticsPage() {
                   />
                   <MetricItem
                     label="成交额"
-                    value={`¥${fmt(tradeStats.turnover)}`}
+                    value={`¥${formatCurrency(tradeStats.turnover)}`}
                   />
                 </div>
               </section>
@@ -233,16 +228,16 @@ export function TradingAnalyticsPage() {
                 <h2 className="text-title-section">资金流水</h2>
                 {cashFlowSummary && (
                   <div className="flex gap-lg text-caption text-text-secondary">
-                    <span>流入 ¥{fmt(cashFlowSummary.totalInflow)}</span>
+                    <span>流入 ¥{formatCurrency(cashFlowSummary.totalInflow)}</span>
                     <span>
-                      流出 ¥{fmt(Math.abs(cashFlowSummary.totalOutflow))}
+                      流出 ¥{formatCurrency(Math.abs(cashFlowSummary.totalOutflow))}
                     </span>
                     <span
                       className={
                         cashFlowSummary.netFlow >= 0 ? "state-up" : "state-down"
                       }
                     >
-                      净流 ¥{fmt(cashFlowSummary.netFlow)}
+                      净流 ¥{formatCurrency(cashFlowSummary.netFlow)}
                     </span>
                   </div>
                 )}
@@ -266,32 +261,11 @@ export function TradingAnalyticsPage() {
 
               {riskPending ? (
                 <div
-                  className="flex items-center gap-sm p-md rounded-md bg-yellow-50 border border-yellow-200"
+                  className="flex items-center gap-sm p-md rounded-md bg-state-warning-bg border border-state-warning-border"
                   role="alert"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    aria-hidden="true"
-                    className="text-yellow-600 shrink-0"
-                  >
-                    <circle
-                      cx="8"
-                      cy="8"
-                      r="7"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                    <path
-                      d="M8 5v3.5M8 10.5v.5"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <span className="text-body text-yellow-800">
+                  <AlertCircle className="size-4 text-state-warning-text shrink-0" aria-hidden="true" />
+                  <span className="text-body text-state-warning-text">
                     风险评估快照正在生成中，请稍后刷新查看结果。
                   </span>
                 </div>

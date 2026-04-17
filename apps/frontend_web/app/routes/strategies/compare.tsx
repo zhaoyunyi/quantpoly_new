@@ -19,10 +19,13 @@ import {
 } from "@qp/api-client";
 import type { StrategyItem, StrategyBacktest, AppError } from "@qp/api-client";
 import { Button, Skeleton, EmptyState, useToast } from "@qp/ui";
+import { Check } from "lucide-react";
 import {
   CompareMatrix,
   type CompareMetricRow,
 } from "../../widgets/strategies/CompareMatrix";
+import { exportCsv } from "../../shared/exportCsv";
+import { formatMetric } from "../../shared/format";
 
 export const Route = createFileRoute("/strategies/compare")({
   component: StrategyComparePage,
@@ -124,7 +127,7 @@ export function StrategyComparePage() {
       const metricRows: CompareMetricRow[] = Array.from(metricKeys).map(
         (key) => ({
           label: key,
-          values: result.metrics.map((m) => formatMetricValue(m[key])),
+          values: result.metrics.map((m) => formatMetric(m[key])),
         }),
       );
 
@@ -138,18 +141,11 @@ export function StrategyComparePage() {
 
   const handleExportCsv = () => {
     if (!compareResult) return;
-    const header = ["指标", ...compareResult.names].join(",");
-    const rows = compareResult.metrics.map((row) =>
-      [row.label, ...row.values].join(","),
+    exportCsv(
+      "strategy-compare.csv",
+      ["指标", ...compareResult.names],
+      compareResult.metrics.map((row) => [row.label, ...row.values]),
     );
-    const csv = [header, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "strategy-compare.csv";
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -209,21 +205,7 @@ export function StrategyComparePage() {
                         }`}
                       >
                         {isSelected && (
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M3 8l4 4 6-6"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
+                          <Check className="size-3" aria-hidden="true" />
                         )}
                       </span>
                       <div className="flex-1 min-w-0">
@@ -277,14 +259,4 @@ export function StrategyComparePage() {
       </div>
     </ProtectedLayout>
   );
-}
-
-function formatMetricValue(val: unknown): string {
-  if (val === null || val === undefined) return "-";
-  if (typeof val === "number") {
-    return Number.isFinite(val)
-      ? val.toLocaleString("zh-CN", { maximumFractionDigits: 4 })
-      : "-";
-  }
-  return String(val);
 }

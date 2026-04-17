@@ -5,6 +5,8 @@
  */
 
 import type { TradeOrder } from "@qp/api-client";
+import { formatCurrency } from "../../shared/format";
+import { exportCsv } from "../../shared/exportCsv";
 import {
   Table,
   TableHead,
@@ -31,18 +33,11 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_CLASS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  filled: "bg-green-100 text-green-800",
+  pending: "bg-state-warning-bg text-state-warning-text",
+  filled: "bg-state-success-bg text-state-success-text",
   cancelled: "bg-secondary-200 text-secondary-600",
-  failed: "bg-red-100 text-red-800",
+  failed: "bg-state-error-bg text-state-error-text",
 };
-
-function fmt(n: number): string {
-  return n.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 export function OrdersTable({
   orders,
@@ -50,8 +45,31 @@ export function OrdersTable({
   onCancel,
   cancelling,
 }: OrdersTableProps) {
+  const handleExport = () => {
+    exportCsv(
+      `orders-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['标的', '方向', '数量', '价格', '状态', '时间'],
+      orders.map((o) => [
+        o.symbol,
+        o.side === 'BUY' ? '买入' : '卖出',
+        String(o.quantity),
+        String(o.price),
+        STATUS_LABEL[o.status] ?? o.status,
+        new Date(o.createdAt).toLocaleString('zh-CN'),
+      ]),
+    )
+  }
+
   return (
-    <Table>
+    <div>
+      {orders.length > 0 && (
+        <div className="flex justify-end mb-sm">
+          <Button variant="ghost" size="sm" onClick={handleExport}>
+            导出 CSV
+          </Button>
+        </div>
+      )}
+      <Table>
       <TableHead>
         <TableRow>
           <TableHeaderCell>标的</TableHeaderCell>
@@ -91,7 +109,7 @@ export function OrdersTable({
                 <span className="text-data-mono">{o.quantity}</span>
               </TableCell>
               <TableCell className="text-right">
-                <span className="text-data-mono">{fmt(o.price)}</span>
+                <span className="text-data-mono">{formatCurrency(o.price)}</span>
               </TableCell>
               <TableCell>
                 <span
@@ -124,5 +142,6 @@ export function OrdersTable({
         )}
       </TableBody>
     </Table>
+    </div>
   );
 }

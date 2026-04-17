@@ -15,6 +15,7 @@ import {
   TableEmpty,
   Button,
 } from "@qp/ui";
+import { useState } from "react";
 import type { StrategyItem } from "@qp/api-client";
 import { StrategyStatusBadge } from "./StrategyStatusBadge";
 
@@ -23,9 +24,9 @@ export interface StrategyTableProps {
   loading?: boolean;
   onView?: (id: string) => void;
   onEdit?: (id: string) => void;
-  onActivate?: (id: string) => void;
-  onDeactivate?: (id: string) => void;
-  onArchive?: (id: string) => void;
+  onActivate?: (id: string) => void | Promise<void>;
+  onDeactivate?: (id: string) => void | Promise<void>;
+  onArchive?: (id: string) => void | Promise<void>;
   onDelete?: (id: string) => void;
 }
 
@@ -115,23 +116,44 @@ function RowActions({
   item: StrategyItem;
   onView?: (id: string) => void;
   onEdit?: (id: string) => void;
-  onActivate?: (id: string) => void;
-  onDeactivate?: (id: string) => void;
-  onArchive?: (id: string) => void;
+  onActivate?: (id: string) => void | Promise<void>;
+  onDeactivate?: (id: string) => void | Promise<void>;
+  onArchive?: (id: string) => void | Promise<void>;
   onDelete?: (id: string) => void;
 }) {
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const busy = busyAction !== null;
+
+  const wrap = (action: string, fn?: (id: string) => void | Promise<void>) => {
+    if (!fn) return undefined;
+    return async () => {
+      setBusyAction(action);
+      try {
+        await fn(item.id);
+      } finally {
+        setBusyAction(null);
+      }
+    };
+  };
+
   return (
     <div className="inline-flex items-center gap-1">
-      <Button variant="ghost" size="sm" onClick={() => onView?.(item.id)}>
+      <Button variant="ghost" size="sm" disabled={busy} onClick={() => onView?.(item.id)}>
         查看
       </Button>
       {item.status !== "archived" && (
-        <Button variant="ghost" size="sm" onClick={() => onEdit?.(item.id)}>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => onEdit?.(item.id)}>
           编辑
         </Button>
       )}
       {(item.status === "draft" || item.status === "inactive") && (
-        <Button variant="ghost" size="sm" onClick={() => onActivate?.(item.id)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          loading={busyAction === "activate"}
+          disabled={busy && busyAction !== "activate"}
+          onClick={() => void wrap("activate", onActivate)?.()}
+        >
           激活
         </Button>
       )}
@@ -139,18 +161,26 @@ function RowActions({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onDeactivate?.(item.id)}
+          loading={busyAction === "deactivate"}
+          disabled={busy && busyAction !== "deactivate"}
+          onClick={() => void wrap("deactivate", onDeactivate)?.()}
         >
           停用
         </Button>
       )}
       {item.status !== "archived" && (
-        <Button variant="ghost" size="sm" onClick={() => onArchive?.(item.id)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          loading={busyAction === "archive"}
+          disabled={busy && busyAction !== "archive"}
+          onClick={() => void wrap("archive", onArchive)?.()}
+        >
           归档
         </Button>
       )}
       {item.status !== "archived" && (
-        <Button variant="ghost" size="sm" onClick={() => onDelete?.(item.id)}>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => onDelete?.(item.id)}>
           删除
         </Button>
       )}
