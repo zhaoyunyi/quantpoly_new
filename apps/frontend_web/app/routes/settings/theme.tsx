@@ -7,7 +7,7 @@
  * - 写入 preferences.theme
  */
 
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 
 import { ProtectedLayout } from "../../entry_wiring";
@@ -57,16 +57,16 @@ export function ThemePage() {
         <header>
           <h1 className="text-title-page">主题外观</h1>
           <p className="text-body-secondary mt-xs">
-            自定义应用的外观模式与品牌色调。
+            自定义应用的外观模式与品牌色调。主题模式切换即时生效，主色调需手动保存。
           </p>
         </header>
 
         {/* 子页面导航 */}
         <nav className="flex gap-sm border-b border-secondary-300/20 pb-0">
           {SETTINGS_NAV.map((item) => (
-            <a
+            <Link
               key={item.path}
-              href={item.path}
+              to={item.path}
               className={[
                 "px-md py-sm text-body font-medium border-b-2 -mb-px transition-colors duration-120",
                 item.active
@@ -75,7 +75,7 @@ export function ThemePage() {
               ].join(" ")}
             >
               {item.label}
-            </a>
+            </Link>
           ))}
         </nav>
 

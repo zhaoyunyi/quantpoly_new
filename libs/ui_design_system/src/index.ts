@@ -7,6 +7,9 @@
 // 工具
 export { cn, focusRingClass, disabledClass, transitionClass } from './utils'
 
+// Theme
+export { ThemeProvider, useTheme } from './ThemeProvider'
+
 // Button
 export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from './Button'
 

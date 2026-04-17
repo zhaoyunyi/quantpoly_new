@@ -94,16 +94,91 @@ export interface EmptyStateProps {
   action?: ReactNode;
   /** 自定义图标 */
   icon?: ReactNode;
+  /** 场景变体：first-use 首次使用 / no-results 无结果 / error 错误 */
+  variant?: "first-use" | "no-results" | "error";
   className?: string;
 }
+
+const VARIANT_ICONS: Record<
+  NonNullable<EmptyStateProps["variant"]>,
+  ReactNode
+> = {
+  "first-use": (
+    <svg
+      width="40"
+      height="40"
+      viewBox="0 0 40 40"
+      fill="none"
+      className="text-text-muted mb-md"
+      aria-hidden="true"
+    >
+      <path
+        d="M20 4l3 8h8l-6.5 5 2.5 8L20 19.5 13 25l2.5-8L9 12h8l3-8z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M20 30v6M14 33l1.5-2M26 33l-1.5-2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  "no-results": (
+    <svg
+      width="40"
+      height="40"
+      viewBox="0 0 40 40"
+      fill="none"
+      className="text-text-muted mb-md"
+      aria-hidden="true"
+    >
+      <circle cx="18" cy="18" r="10" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M26 26l8 8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  error: (
+    <svg
+      width="40"
+      height="40"
+      viewBox="0 0 40 40"
+      fill="none"
+      className="text-text-muted mb-md"
+      aria-hidden="true"
+    >
+      <path
+        d="M20 6L4 34h32L20 6z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M20 16v8M20 28h.01"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+};
 
 export function EmptyState({
   title = "暂无数据",
   description,
   action,
   icon,
+  variant = "no-results",
   className,
 }: EmptyStateProps) {
+  const variantIcon = VARIANT_ICONS[variant];
+
   return (
     <div
       className={cn(
@@ -111,34 +186,7 @@ export function EmptyState({
         className,
       )}
     >
-      {icon ?? (
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 48 48"
-          fill="none"
-          className="text-text-muted opacity-40 mb-md"
-          aria-hidden="true"
-        >
-          <rect
-            x="6"
-            y="10"
-            width="36"
-            height="28"
-            rx="4"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <path d="M6 20h36" stroke="currentColor" strokeWidth="1.5" />
-          <circle
-            cx="24"
-            cy="30"
-            r="4"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-        </svg>
-      )}
+      {icon ?? variantIcon}
       <h3 className="text-title-card text-text-secondary">{title}</h3>
       {description && (
         <p className="text-body-secondary mt-xs max-w-sm">{description}</p>

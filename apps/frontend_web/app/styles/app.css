@@ -2,45 +2,157 @@
  * QuantPoly · Tailwind CSS v4 Theme
  * 理性可信 · 克制科技感 · 可解释
  *
- * 色相统一：H ≈ 215°–220° 靛蓝灰轴
+ * 色相统一：H ≈ 255°–270° 靛蓝灰轴（OKLCH）
+ * 权威来源：design-tokens/tokens.json
  * ============================================ */
 
 @import 'tailwindcss' source('../');
 @source "../../../../libs/**/*.{ts,tsx}";
 
-/* ─── Custom Theme ─── */
+/* ─── Light Theme (default) ─── */
+:root {
+  color-scheme: light;
+
+  --color-primary-900: oklch(0.32 0.069 259);
+  --color-primary-700: oklch(0.46 0.103 255);
+  --color-primary-500: oklch(0.52 0.107 253);
+
+  --color-secondary-500: oklch(0.57 0.079 269);
+  --color-secondary-300: oklch(0.72 0.061 259);
+
+  --color-bg-page: oklch(0.98 0.004 271);
+  --color-bg-card: oklch(1.00 0 0);
+  --color-bg-subtle: oklch(0.95 0.009 265);
+
+  --color-text-primary: oklch(0.26 0.030 265);
+  --color-text-secondary: oklch(0.51 0.032 258);
+  --color-text-muted: oklch(0.55 0.029 262);
+  --color-text-on-primary: oklch(1.00 0 0);
+
+  --color-state-up: oklch(0.53 0.100 23);
+  --color-state-down: oklch(0.55 0.067 160);
+  --color-state-risk: oklch(0.64 0.119 60);
+  --color-state-disabled: oklch(0.83 0.017 259);
+
+  --color-state-warning-bg: oklch(0.96 0.04 85);
+  --color-state-warning-text: oklch(0.45 0.12 60);
+  --color-state-warning-border: oklch(0.85 0.08 75);
+
+  --color-state-success-bg: oklch(0.95 0.05 160);
+  --color-state-success-text: oklch(0.40 0.10 160);
+
+  --color-state-success-border: oklch(0.75 0.06 160);
+
+  --color-state-error-bg: oklch(0.95 0.05 25);
+  --color-state-error-text: oklch(0.45 0.15 25);
+
+  --color-state-error-border: oklch(0.80 0.10 25);
+
+  --color-chart-primary: oklch(0.46 0.103 255);
+  --color-chart-secondary: oklch(0.57 0.079 269);
+  --color-chart-grid: oklch(0.92 0.013 262);
+  --color-chart-axis: oklch(0.63 0.029 260);
+
+  --color-border: oklch(0.82 0.012 262);
+  --color-ring: oklch(0.52 0.107 253);
+
+  --shadow-card: 0 4px 12px oklch(0 0 0 / 0.06);
+}
+
+/* ─── Dark Theme ─── */
+.dark {
+  color-scheme: dark;
+
+  --color-primary-900: oklch(0.80 0.08 259);
+  --color-primary-700: oklch(0.68 0.10 255);
+  --color-primary-500: oklch(0.72 0.10 253);
+
+  --color-secondary-500: oklch(0.70 0.07 269);
+  --color-secondary-300: oklch(0.80 0.05 259);
+
+  --color-bg-page: oklch(0.16 0.01 260);
+  --color-bg-card: oklch(0.22 0.01 260);
+  --color-bg-subtle: oklch(0.25 0.01 260);
+
+  --color-text-primary: oklch(0.93 0.005 260);
+  --color-text-secondary: oklch(0.72 0.02 260);
+  --color-text-muted: oklch(0.62 0.02 262);
+  --color-text-on-primary: oklch(0.20 0.03 255);
+
+  --color-state-up: oklch(0.65 0.12 23);
+  --color-state-down: oklch(0.65 0.08 160);
+  --color-state-risk: oklch(0.72 0.12 60);
+  --color-state-disabled: oklch(0.40 0.015 260);
+
+  --color-state-warning-bg: oklch(0.25 0.03 60);
+  --color-state-warning-text: oklch(0.78 0.10 60);
+  --color-state-warning-border: oklch(0.40 0.06 60);
+
+  --color-state-success-bg: oklch(0.25 0.03 160);
+  --color-state-success-text: oklch(0.75 0.08 160);
+
+  --color-state-success-border: oklch(0.40 0.05 160);
+
+  --color-state-error-bg: oklch(0.25 0.04 25);
+  --color-state-error-text: oklch(0.75 0.12 25);
+
+  --color-state-error-border: oklch(0.40 0.08 25);
+
+  --color-chart-primary: oklch(0.68 0.10 255);
+  --color-chart-secondary: oklch(0.70 0.07 269);
+  --color-chart-grid: oklch(0.30 0.01 262);
+  --color-chart-axis: oklch(0.55 0.025 260);
+
+  --color-border: oklch(0.42 0.015 260);
+  --color-ring: oklch(0.72 0.10 253);
+
+  --shadow-card: 0 4px 12px oklch(0 0 0 / 0.25);
+}
+
+/* ─── Tailwind Theme Registration ─── */
 @theme {
-  /* ── Color / Brand / Primary ── H≈218° 靛蓝系 */
-  --color-primary-900: #1B3255;
-  --color-primary-700: #2D5990;
-  --color-primary-500: #4A7DB8;
+  --color-primary-900: var(--color-primary-900);
+  --color-primary-700: var(--color-primary-700);
+  --color-primary-500: var(--color-primary-500);
 
-  /* ── Color / Brand / Secondary ── H≈220° 冷青灰 */
-  --color-secondary-500: #6374A5;
-  --color-secondary-300: #8DA5CA;
+  --color-secondary-500: var(--color-secondary-500);
+  --color-secondary-300: var(--color-secondary-300);
 
-  /* ── Color / Background ── 统一蓝灰底调 */
-  --color-bg-page: #F7F8FB;
-  --color-bg-card: #FFFFFF;
-  --color-bg-subtle: #EDF0F6;
+  --color-bg-page: var(--color-bg-page);
+  --color-bg-card: var(--color-bg-card);
+  --color-bg-subtle: var(--color-bg-subtle);
 
-  /* ── Color / Text ── 蓝灰调文本层级 */
-  --color-text-primary: #1D2433;
-  --color-text-secondary: #5B6779;
-  --color-text-muted: #8C96A8;
-  --color-text-on-primary: #FFFFFF; /* 主色背景上的文字色（bg-primary-700/900） */
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-on-primary: var(--color-text-on-primary);
 
-  /* ── Color / State ── 低饱和功能色 */
-  --color-state-up: #9E5350;
-  --color-state-down: #4D7D63;
-  --color-state-risk: #BF7838;
-  --color-state-disabled: #C1C8D3;
+  --color-state-up: var(--color-state-up);
+  --color-state-down: var(--color-state-down);
+  --color-state-risk: var(--color-state-risk);
+  --color-state-disabled: var(--color-state-disabled);
 
-  /* ── Color / Chart ── */
-  --color-chart-primary: #2D5990;
-  --color-chart-secondary: #6374A5;
-  --color-chart-grid: #E0E5EE;
-  --color-chart-axis: #96A1B3;
+  --color-state-warning-bg: var(--color-state-warning-bg);
+  --color-state-warning-text: var(--color-state-warning-text);
+  --color-state-warning-border: var(--color-state-warning-border);
+
+  --color-state-success-bg: var(--color-state-success-bg);
+  --color-state-success-text: var(--color-state-success-text);
+
+  --color-state-success-border: var(--color-state-success-border);
+
+  --color-state-error-bg: var(--color-state-error-bg);
+  --color-state-error-text: var(--color-state-error-text);
+
+  --color-state-error-border: var(--color-state-error-border);
+
+  --color-chart-primary: var(--color-chart-primary);
+  --color-chart-secondary: var(--color-chart-secondary);
+  --color-chart-grid: var(--color-chart-grid);
+  --color-chart-axis: var(--color-chart-axis);
+
+  --color-border: var(--color-border);
+  --color-ring: var(--color-ring);
 
   /* ── Font / Family ── */
   --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -66,7 +178,7 @@
   --radius-md: 8px;
 
   /* ── Shadow ── */
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-card: var(--shadow-card);
 
   /* ── Transition ── */
   --transition-base: 120ms ease-out;

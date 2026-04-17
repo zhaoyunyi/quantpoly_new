@@ -21,26 +21,36 @@ def test_frontend_web_uses_tanstack_start_scaffold() -> None:
     assert any(pkg.startswith("@tanstack/") for pkg in all_dependencies)
 
 
-def test_frontend_web_pins_tanstack_start_versions() -> None:
+def test_frontend_web_uses_single_npm_lockfile_baseline() -> None:
+    pnpm_lock = Path("apps/frontend_web/pnpm-lock.yaml")
+    assert not pnpm_lock.exists(), "前端当前命令与文档基线使用 npm，不应同时保留 pnpm-lock.yaml"
+
+
+def test_frontend_web_package_lock_stays_in_sync_with_declared_dependencies() -> None:
     package_json_path = Path("apps/frontend_web/package.json")
+    package_lock_path = Path("apps/frontend_web/package-lock.json")
+
     package_data = json.loads(package_json_path.read_text(encoding="utf-8"))
+    lock_data = json.loads(package_lock_path.read_text(encoding="utf-8"))
 
     dependencies = package_data.get("dependencies", {})
-    assert dependencies.get("@tanstack/react-start") == "1.117.2"
-    assert dependencies.get("@tanstack/react-router") == "1.117.1"
-    assert dependencies.get("vinxi") == "0.5.3"
+    root_package = lock_data.get("packages", {}).get("", {})
+    root_dependencies = root_package.get("dependencies", {})
+    locked_packages = lock_data.get("packages", {})
 
-    overrides = package_data.get("overrides", {})
-    assert overrides.get("@tanstack/router-generator") == "1.117.1"
-    assert overrides.get("@tanstack/react-start-client") == "1.117.1"
-    assert overrides.get("@tanstack/react-start-server") == "1.117.1"
-    assert overrides.get("@tanstack/react-start-config") == "1.117.2"
-    assert overrides.get("@tanstack/router-plugin") == "1.117.2"
+    assert root_dependencies.get("@tanstack/react-start") == dependencies.get(
+        "@tanstack/react-start"
+    )
+    assert root_dependencies.get("@tanstack/react-router") == dependencies.get(
+        "@tanstack/react-router"
+    )
+    assert root_dependencies.get("lucide-react") == dependencies.get("lucide-react")
+    assert "node_modules/lucide-react" in locked_packages
 
 
-def test_frontend_web_client_entry_exports_default() -> None:
+def test_frontend_web_uses_vite_runtime_config_instead_of_vinxi_client_entry() -> None:
+    vite_config = Path("apps/frontend_web/vite.config.ts")
     client_entry = Path("apps/frontend_web/app/client.tsx")
-    assert client_entry.exists(), "缺少 app/client.tsx（vinxi client handler）"
 
-    content = client_entry.read_text(encoding="utf-8")
-    assert "export default" in content, "client handler 缺少默认导出，可能导致 vinxi build 警告或运行时异常"
+    assert vite_config.exists(), "缺少 vite.config.ts，当前前端运行时基线应为 TanStack Start + Vite"
+    assert not client_entry.exists(), "当前前端已不应继续保留旧 Vinxi client entry"
