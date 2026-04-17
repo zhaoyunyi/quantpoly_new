@@ -8,328 +8,140 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-// Import Routes
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as MonitorRouteImport } from './routes/monitor'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as TradingIndexRouteImport } from './routes/trading/index'
+import { Route as StrategiesIndexRouteImport } from './routes/strategies/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as BacktestsIndexRouteImport } from './routes/backtests/index'
+import { Route as TradingAnalyticsRouteImport } from './routes/trading/analytics'
+import { Route as TradingAccountsRouteImport } from './routes/trading/accounts'
+import { Route as StrategiesSimpleRouteImport } from './routes/strategies/simple'
+import { Route as StrategiesCompareRouteImport } from './routes/strategies/compare'
+import { Route as StrategiesAdvancedRouteImport } from './routes/strategies/advanced'
+import { Route as StrategiesIdRouteImport } from './routes/strategies/$id'
+import { Route as SettingsThemeRouteImport } from './routes/settings/theme'
+import { Route as SettingsAccountRouteImport } from './routes/settings/account'
+import { Route as BacktestsIdRouteImport } from './routes/backtests/$id'
+import { Route as AuthVerifyEmailRouteImport } from './routes/auth/verify-email'
+import { Route as AuthResetPasswordRouteImport } from './routes/auth/reset-password'
+import { Route as AuthResendVerificationRouteImport } from './routes/auth/resend-verification'
+import { Route as AuthRegisterRouteImport } from './routes/auth/register'
+import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthForgotPasswordRouteImport } from './routes/auth/forgot-password'
 
-import { Route as rootRoute } from './routes/__root'
-import { Route as MonitorImport } from './routes/monitor'
-import { Route as DashboardImport } from './routes/dashboard'
-import { Route as IndexImport } from './routes/index'
-import { Route as TradingIndexImport } from './routes/trading/index'
-import { Route as StrategiesIndexImport } from './routes/strategies/index'
-import { Route as SettingsIndexImport } from './routes/settings/index'
-import { Route as BacktestsIndexImport } from './routes/backtests/index'
-import { Route as TradingAnalyticsImport } from './routes/trading/analytics'
-import { Route as TradingAccountsImport } from './routes/trading/accounts'
-import { Route as StrategiesSimpleImport } from './routes/strategies/simple'
-import { Route as StrategiesCompareImport } from './routes/strategies/compare'
-import { Route as StrategiesAdvancedImport } from './routes/strategies/advanced'
-import { Route as StrategiesIdImport } from './routes/strategies/$id'
-import { Route as SettingsThemeImport } from './routes/settings/theme'
-import { Route as SettingsAccountImport } from './routes/settings/account'
-import { Route as BacktestsIdImport } from './routes/backtests/$id'
-import { Route as AuthVerifyEmailImport } from './routes/auth/verify-email'
-import { Route as AuthResetPasswordImport } from './routes/auth/reset-password'
-import { Route as AuthResendVerificationImport } from './routes/auth/resend-verification'
-import { Route as AuthRegisterImport } from './routes/auth/register'
-import { Route as AuthLoginImport } from './routes/auth/login'
-import { Route as AuthForgotPasswordImport } from './routes/auth/forgot-password'
-
-// Create/Update Routes
-
-const MonitorRoute = MonitorImport.update({
+const MonitorRoute = MonitorRouteImport.update({
   id: '/monitor',
   path: '/monitor',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const DashboardRoute = DashboardImport.update({
+const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const IndexRoute = IndexImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const TradingIndexRoute = TradingIndexImport.update({
+const TradingIndexRoute = TradingIndexRouteImport.update({
   id: '/trading/',
   path: '/trading/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const StrategiesIndexRoute = StrategiesIndexImport.update({
+const StrategiesIndexRoute = StrategiesIndexRouteImport.update({
   id: '/strategies/',
   path: '/strategies/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const SettingsIndexRoute = SettingsIndexImport.update({
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const BacktestsIndexRoute = BacktestsIndexImport.update({
+const BacktestsIndexRoute = BacktestsIndexRouteImport.update({
   id: '/backtests/',
   path: '/backtests/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const TradingAnalyticsRoute = TradingAnalyticsImport.update({
+const TradingAnalyticsRoute = TradingAnalyticsRouteImport.update({
   id: '/trading/analytics',
   path: '/trading/analytics',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const TradingAccountsRoute = TradingAccountsImport.update({
+const TradingAccountsRoute = TradingAccountsRouteImport.update({
   id: '/trading/accounts',
   path: '/trading/accounts',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const StrategiesSimpleRoute = StrategiesSimpleImport.update({
+const StrategiesSimpleRoute = StrategiesSimpleRouteImport.update({
   id: '/strategies/simple',
   path: '/strategies/simple',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const StrategiesCompareRoute = StrategiesCompareImport.update({
+const StrategiesCompareRoute = StrategiesCompareRouteImport.update({
   id: '/strategies/compare',
   path: '/strategies/compare',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const StrategiesAdvancedRoute = StrategiesAdvancedImport.update({
+const StrategiesAdvancedRoute = StrategiesAdvancedRouteImport.update({
   id: '/strategies/advanced',
   path: '/strategies/advanced',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const StrategiesIdRoute = StrategiesIdImport.update({
+const StrategiesIdRoute = StrategiesIdRouteImport.update({
   id: '/strategies/$id',
   path: '/strategies/$id',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const SettingsThemeRoute = SettingsThemeImport.update({
+const SettingsThemeRoute = SettingsThemeRouteImport.update({
   id: '/settings/theme',
   path: '/settings/theme',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const SettingsAccountRoute = SettingsAccountImport.update({
+const SettingsAccountRoute = SettingsAccountRouteImport.update({
   id: '/settings/account',
   path: '/settings/account',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const BacktestsIdRoute = BacktestsIdImport.update({
+const BacktestsIdRoute = BacktestsIdRouteImport.update({
   id: '/backtests/$id',
   path: '/backtests/$id',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthVerifyEmailRoute = AuthVerifyEmailImport.update({
+const AuthVerifyEmailRoute = AuthVerifyEmailRouteImport.update({
   id: '/auth/verify-email',
   path: '/auth/verify-email',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthResetPasswordRoute = AuthResetPasswordImport.update({
+const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
   id: '/auth/reset-password',
   path: '/auth/reset-password',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthResendVerificationRoute = AuthResendVerificationImport.update({
+const AuthResendVerificationRoute = AuthResendVerificationRouteImport.update({
   id: '/auth/resend-verification',
   path: '/auth/resend-verification',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthRegisterRoute = AuthRegisterImport.update({
+const AuthRegisterRoute = AuthRegisterRouteImport.update({
   id: '/auth/register',
   path: '/auth/register',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthLoginRoute = AuthLoginImport.update({
+const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
   path: '/auth/login',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthForgotPasswordRoute = AuthForgotPasswordImport.update({
+const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
   id: '/auth/forgot-password',
   path: '/auth/forgot-password',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-// Populate the FileRoutesByPath interface
-
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexImport
-      parentRoute: typeof rootRoute
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardImport
-      parentRoute: typeof rootRoute
-    }
-    '/monitor': {
-      id: '/monitor'
-      path: '/monitor'
-      fullPath: '/monitor'
-      preLoaderRoute: typeof MonitorImport
-      parentRoute: typeof rootRoute
-    }
-    '/auth/forgot-password': {
-      id: '/auth/forgot-password'
-      path: '/auth/forgot-password'
-      fullPath: '/auth/forgot-password'
-      preLoaderRoute: typeof AuthForgotPasswordImport
-      parentRoute: typeof rootRoute
-    }
-    '/auth/login': {
-      id: '/auth/login'
-      path: '/auth/login'
-      fullPath: '/auth/login'
-      preLoaderRoute: typeof AuthLoginImport
-      parentRoute: typeof rootRoute
-    }
-    '/auth/register': {
-      id: '/auth/register'
-      path: '/auth/register'
-      fullPath: '/auth/register'
-      preLoaderRoute: typeof AuthRegisterImport
-      parentRoute: typeof rootRoute
-    }
-    '/auth/resend-verification': {
-      id: '/auth/resend-verification'
-      path: '/auth/resend-verification'
-      fullPath: '/auth/resend-verification'
-      preLoaderRoute: typeof AuthResendVerificationImport
-      parentRoute: typeof rootRoute
-    }
-    '/auth/reset-password': {
-      id: '/auth/reset-password'
-      path: '/auth/reset-password'
-      fullPath: '/auth/reset-password'
-      preLoaderRoute: typeof AuthResetPasswordImport
-      parentRoute: typeof rootRoute
-    }
-    '/auth/verify-email': {
-      id: '/auth/verify-email'
-      path: '/auth/verify-email'
-      fullPath: '/auth/verify-email'
-      preLoaderRoute: typeof AuthVerifyEmailImport
-      parentRoute: typeof rootRoute
-    }
-    '/backtests/$id': {
-      id: '/backtests/$id'
-      path: '/backtests/$id'
-      fullPath: '/backtests/$id'
-      preLoaderRoute: typeof BacktestsIdImport
-      parentRoute: typeof rootRoute
-    }
-    '/settings/account': {
-      id: '/settings/account'
-      path: '/settings/account'
-      fullPath: '/settings/account'
-      preLoaderRoute: typeof SettingsAccountImport
-      parentRoute: typeof rootRoute
-    }
-    '/settings/theme': {
-      id: '/settings/theme'
-      path: '/settings/theme'
-      fullPath: '/settings/theme'
-      preLoaderRoute: typeof SettingsThemeImport
-      parentRoute: typeof rootRoute
-    }
-    '/strategies/$id': {
-      id: '/strategies/$id'
-      path: '/strategies/$id'
-      fullPath: '/strategies/$id'
-      preLoaderRoute: typeof StrategiesIdImport
-      parentRoute: typeof rootRoute
-    }
-    '/strategies/advanced': {
-      id: '/strategies/advanced'
-      path: '/strategies/advanced'
-      fullPath: '/strategies/advanced'
-      preLoaderRoute: typeof StrategiesAdvancedImport
-      parentRoute: typeof rootRoute
-    }
-    '/strategies/compare': {
-      id: '/strategies/compare'
-      path: '/strategies/compare'
-      fullPath: '/strategies/compare'
-      preLoaderRoute: typeof StrategiesCompareImport
-      parentRoute: typeof rootRoute
-    }
-    '/strategies/simple': {
-      id: '/strategies/simple'
-      path: '/strategies/simple'
-      fullPath: '/strategies/simple'
-      preLoaderRoute: typeof StrategiesSimpleImport
-      parentRoute: typeof rootRoute
-    }
-    '/trading/accounts': {
-      id: '/trading/accounts'
-      path: '/trading/accounts'
-      fullPath: '/trading/accounts'
-      preLoaderRoute: typeof TradingAccountsImport
-      parentRoute: typeof rootRoute
-    }
-    '/trading/analytics': {
-      id: '/trading/analytics'
-      path: '/trading/analytics'
-      fullPath: '/trading/analytics'
-      preLoaderRoute: typeof TradingAnalyticsImport
-      parentRoute: typeof rootRoute
-    }
-    '/backtests/': {
-      id: '/backtests/'
-      path: '/backtests'
-      fullPath: '/backtests'
-      preLoaderRoute: typeof BacktestsIndexImport
-      parentRoute: typeof rootRoute
-    }
-    '/settings/': {
-      id: '/settings/'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsIndexImport
-      parentRoute: typeof rootRoute
-    }
-    '/strategies/': {
-      id: '/strategies/'
-      path: '/strategies'
-      fullPath: '/strategies'
-      preLoaderRoute: typeof StrategiesIndexImport
-      parentRoute: typeof rootRoute
-    }
-    '/trading/': {
-      id: '/trading/'
-      path: '/trading'
-      fullPath: '/trading'
-      preLoaderRoute: typeof TradingIndexImport
-      parentRoute: typeof rootRoute
-    }
-  }
-}
-
-// Create and export the route tree
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -350,12 +162,11 @@ export interface FileRoutesByFullPath {
   '/strategies/simple': typeof StrategiesSimpleRoute
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
-  '/backtests': typeof BacktestsIndexRoute
-  '/settings': typeof SettingsIndexRoute
-  '/strategies': typeof StrategiesIndexRoute
-  '/trading': typeof TradingIndexRoute
+  '/backtests/': typeof BacktestsIndexRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/strategies/': typeof StrategiesIndexRoute
+  '/trading/': typeof TradingIndexRoute
 }
-
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
@@ -380,9 +191,8 @@ export interface FileRoutesByTo {
   '/strategies': typeof StrategiesIndexRoute
   '/trading': typeof TradingIndexRoute
 }
-
 export interface FileRoutesById {
-  __root__: typeof rootRoute
+  __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/monitor': typeof MonitorRoute
@@ -406,7 +216,6 @@ export interface FileRoutesById {
   '/strategies/': typeof StrategiesIndexRoute
   '/trading/': typeof TradingIndexRoute
 }
-
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
@@ -428,10 +237,10 @@ export interface FileRouteTypes {
     | '/strategies/simple'
     | '/trading/accounts'
     | '/trading/analytics'
-    | '/backtests'
-    | '/settings'
-    | '/strategies'
-    | '/trading'
+    | '/backtests/'
+    | '/settings/'
+    | '/strategies/'
+    | '/trading/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -482,7 +291,6 @@ export interface FileRouteTypes {
     | '/trading/'
   fileRoutesById: FileRoutesById
 }
-
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
@@ -506,6 +314,165 @@ export interface RootRouteChildren {
   SettingsIndexRoute: typeof SettingsIndexRoute
   StrategiesIndexRoute: typeof StrategiesIndexRoute
   TradingIndexRoute: typeof TradingIndexRoute
+}
+
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/monitor': {
+      id: '/monitor'
+      path: '/monitor'
+      fullPath: '/monitor'
+      preLoaderRoute: typeof MonitorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trading/': {
+      id: '/trading/'
+      path: '/trading'
+      fullPath: '/trading/'
+      preLoaderRoute: typeof TradingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/strategies/': {
+      id: '/strategies/'
+      path: '/strategies'
+      fullPath: '/strategies/'
+      preLoaderRoute: typeof StrategiesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/backtests/': {
+      id: '/backtests/'
+      path: '/backtests'
+      fullPath: '/backtests/'
+      preLoaderRoute: typeof BacktestsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trading/analytics': {
+      id: '/trading/analytics'
+      path: '/trading/analytics'
+      fullPath: '/trading/analytics'
+      preLoaderRoute: typeof TradingAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trading/accounts': {
+      id: '/trading/accounts'
+      path: '/trading/accounts'
+      fullPath: '/trading/accounts'
+      preLoaderRoute: typeof TradingAccountsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/strategies/simple': {
+      id: '/strategies/simple'
+      path: '/strategies/simple'
+      fullPath: '/strategies/simple'
+      preLoaderRoute: typeof StrategiesSimpleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/strategies/compare': {
+      id: '/strategies/compare'
+      path: '/strategies/compare'
+      fullPath: '/strategies/compare'
+      preLoaderRoute: typeof StrategiesCompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/strategies/advanced': {
+      id: '/strategies/advanced'
+      path: '/strategies/advanced'
+      fullPath: '/strategies/advanced'
+      preLoaderRoute: typeof StrategiesAdvancedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/strategies/$id': {
+      id: '/strategies/$id'
+      path: '/strategies/$id'
+      fullPath: '/strategies/$id'
+      preLoaderRoute: typeof StrategiesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/theme': {
+      id: '/settings/theme'
+      path: '/settings/theme'
+      fullPath: '/settings/theme'
+      preLoaderRoute: typeof SettingsThemeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/account': {
+      id: '/settings/account'
+      path: '/settings/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof SettingsAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/backtests/$id': {
+      id: '/backtests/$id'
+      path: '/backtests/$id'
+      fullPath: '/backtests/$id'
+      preLoaderRoute: typeof BacktestsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/verify-email': {
+      id: '/auth/verify-email'
+      path: '/auth/verify-email'
+      fullPath: '/auth/verify-email'
+      preLoaderRoute: typeof AuthVerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/reset-password': {
+      id: '/auth/reset-password'
+      path: '/auth/reset-password'
+      fullPath: '/auth/reset-password'
+      preLoaderRoute: typeof AuthResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/resend-verification': {
+      id: '/auth/resend-verification'
+      path: '/auth/resend-verification'
+      fullPath: '/auth/resend-verification'
+      preLoaderRoute: typeof AuthResendVerificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/register': {
+      id: '/auth/register'
+      path: '/auth/register'
+      fullPath: '/auth/register'
+      preLoaderRoute: typeof AuthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/login': {
+      id: '/auth/login'
+      path: '/auth/login'
+      fullPath: '/auth/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/forgot-password': {
+      id: '/auth/forgot-password'
+      path: '/auth/forgot-password'
+      fullPath: '/auth/forgot-password'
+      preLoaderRoute: typeof AuthForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+  }
 }
 
 const rootRouteChildren: RootRouteChildren = {
@@ -532,107 +499,15 @@ const rootRouteChildren: RootRouteChildren = {
   StrategiesIndexRoute: StrategiesIndexRoute,
   TradingIndexRoute: TradingIndexRoute,
 }
-
-export const routeTree = rootRoute
+export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
-/* ROUTE_MANIFEST_START
-{
-  "routes": {
-    "__root__": {
-      "filePath": "__root.tsx",
-      "children": [
-        "/",
-        "/dashboard",
-        "/monitor",
-        "/auth/forgot-password",
-        "/auth/login",
-        "/auth/register",
-        "/auth/resend-verification",
-        "/auth/reset-password",
-        "/auth/verify-email",
-        "/backtests/$id",
-        "/settings/account",
-        "/settings/theme",
-        "/strategies/$id",
-        "/strategies/advanced",
-        "/strategies/compare",
-        "/strategies/simple",
-        "/trading/accounts",
-        "/trading/analytics",
-        "/backtests/",
-        "/settings/",
-        "/strategies/",
-        "/trading/"
-      ]
-    },
-    "/": {
-      "filePath": "index.tsx"
-    },
-    "/dashboard": {
-      "filePath": "dashboard.tsx"
-    },
-    "/monitor": {
-      "filePath": "monitor.tsx"
-    },
-    "/auth/forgot-password": {
-      "filePath": "auth/forgot-password.tsx"
-    },
-    "/auth/login": {
-      "filePath": "auth/login.tsx"
-    },
-    "/auth/register": {
-      "filePath": "auth/register.tsx"
-    },
-    "/auth/resend-verification": {
-      "filePath": "auth/resend-verification.tsx"
-    },
-    "/auth/reset-password": {
-      "filePath": "auth/reset-password.tsx"
-    },
-    "/auth/verify-email": {
-      "filePath": "auth/verify-email.tsx"
-    },
-    "/backtests/$id": {
-      "filePath": "backtests/$id.tsx"
-    },
-    "/settings/account": {
-      "filePath": "settings/account.tsx"
-    },
-    "/settings/theme": {
-      "filePath": "settings/theme.tsx"
-    },
-    "/strategies/$id": {
-      "filePath": "strategies/$id.tsx"
-    },
-    "/strategies/advanced": {
-      "filePath": "strategies/advanced.tsx"
-    },
-    "/strategies/compare": {
-      "filePath": "strategies/compare.tsx"
-    },
-    "/strategies/simple": {
-      "filePath": "strategies/simple.tsx"
-    },
-    "/trading/accounts": {
-      "filePath": "trading/accounts.tsx"
-    },
-    "/trading/analytics": {
-      "filePath": "trading/analytics.tsx"
-    },
-    "/backtests/": {
-      "filePath": "backtests/index.tsx"
-    },
-    "/settings/": {
-      "filePath": "settings/index.tsx"
-    },
-    "/strategies/": {
-      "filePath": "strategies/index.tsx"
-    },
-    "/trading/": {
-      "filePath": "trading/index.tsx"
-    }
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
   }
 }
-ROUTE_MANIFEST_END */

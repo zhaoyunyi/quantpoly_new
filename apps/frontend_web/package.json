@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vinxi dev --port 3300",
-    "build": "vinxi build",
-    "start": "vinxi start",
+    "dev": "vite dev",
+    "build": "vite build",
+    "start": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -15,35 +15,22 @@
   "dependencies": {
     "@base-ui/react": "^1.2.0",
     "@tailwindcss/vite": "^4.1.18",
-    "@tanstack/react-router": "1.117.1",
-    "@tanstack/react-start": "1.117.2",
+    "@tanstack/react-router": "1.168.22",
+    "@tanstack/react-start": "1.167.41",
     "clsx": "^2.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwindcss": "^4.1.18",
-    "vinxi": "0.5.3"
-  },
-  "overrides": {
-    "@tanstack/react-router": "1.117.1",
-    "@tanstack/router-core": "1.117.1",
-    "@tanstack/router-generator": "1.117.1",
-    "@tanstack/router-plugin": "1.117.2",
-    "@tanstack/start-client-core": "1.117.1",
-    "@tanstack/start-server-core": "1.117.1",
-    "@tanstack/react-start-client": "1.117.1",
-    "@tanstack/react-start-server": "1.117.1",
-    "@tanstack/react-start-config": "1.117.2",
-    "@tanstack/react-start-plugin": "1.115.0",
-    "@tanstack/server-functions-plugin": "1.115.0",
-    "@tanstack/start-server-functions-handler": "1.117.1"
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.0",
     "@playwright/test": "^1.58.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.0.8",
     "jsdom": "^28.0.0",
+    "vite": "^7.1.12",
     "vitest": "^4.0.18"
   }
 }

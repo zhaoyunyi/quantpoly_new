@@ -5,6 +5,8 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+apps/frontend_web/dist/
+apps/frontend_web/test-results/
 README.md
 !docs/README.md
 !docs/guides/README.md
