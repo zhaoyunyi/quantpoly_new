@@ -249,6 +249,30 @@ class TestRouteNormalization:
 class TestPasswordReset:
     """Test密码找回与重置流程。"""
 
+    def test_password_reset_audit_log_masks_email(self, caplog):
+        app = create_app(password_reset_test_mode=True)
+        client = TestClient(app)
+
+        client.post(
+            "/auth/register",
+            json={"email": "audit-reset@example.com", "password": "StrongPass123!"},
+        )
+        client.post(
+            "/auth/verify-email",
+            json={"email": "audit-reset@example.com"},
+        )
+
+        with caplog.at_level("INFO", logger="user_auth.password_reset"):
+            resp = client.post(
+                "/auth/password-reset/request",
+                json={"email": "audit-reset@example.com"},
+            )
+
+        assert resp.status_code == 200
+        assert "audit-reset@example.com" not in caplog.text
+        assert "emailHash" in caplog.text
+        assert "emailDomain" in caplog.text
+
     def test_reset_password_flow_invalidates_old_password(self):
         app = create_app(password_reset_test_mode=True)
         client = TestClient(app)

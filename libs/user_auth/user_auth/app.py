@@ -201,9 +201,14 @@ def _register_routes(
         cookie_secure = True
 
     def _audit_password_reset(*, email: str, user_id: str | None, outcome: str) -> None:
+        normalized = (email or "").strip().lower()
+        email_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12] if normalized else ""
+        email_domain = normalized.split("@", 1)[1] if "@" in normalized else ""
+
         event = {
             "event": "password_reset",
-            "email": email,
+            "emailHash": email_hash,
+            "emailDomain": email_domain,
             "userId": user_id,
             "outcome": outcome,
         }
