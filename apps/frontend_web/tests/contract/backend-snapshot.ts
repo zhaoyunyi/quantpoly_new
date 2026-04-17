@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import fs from 'node:fs'
+import { resolveBackendPythonForRepoRoot } from '../../testing/runtimePaths'
 
 export interface SnapshotResponse {
   status: number
@@ -25,18 +25,12 @@ function resolveRepoRoot(fromDir: string): string {
   return path.resolve(fromDir, '../../../../')
 }
 
-function resolvePythonBin(repoRoot: string): string {
-  const venvPython = path.join(repoRoot, '.venv', 'bin', 'python')
-  if (fs.existsSync(venvPython)) return venvPython
-  return 'python3'
-}
-
 export function loadBackendSnapshot(): BackendSnapshot {
   const here = path.dirname(fileURLToPath(import.meta.url))
   const repoRoot = resolveRepoRoot(here)
   const scriptPath = path.join(here, 'backend_snapshot.py')
 
-  const python = resolvePythonBin(repoRoot)
+  const python = resolveBackendPythonForRepoRoot(repoRoot)
   const stdout = execFileSync(python, [scriptPath], {
     cwd: repoRoot,
     env: {
@@ -50,4 +44,3 @@ export function loadBackendSnapshot(): BackendSnapshot {
 
   return JSON.parse(stdout) as BackendSnapshot
 }
-

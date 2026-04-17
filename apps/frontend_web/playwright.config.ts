@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { resolveBackendPythonCommand } from './testing/runtimePaths'
 
 // 避免与常见本地服务（含其他 vinxi/vite 项目）端口冲突
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3002)
@@ -7,6 +8,7 @@ const BACKEND_HOST = 'localhost'
 const BACKEND_PORT = Number(process.env.PLAYWRIGHT_BACKEND_PORT ?? 8001)
 const baseURL = `http://${FRONTEND_HOST}:${PORT}`
 const backendURL = `http://${BACKEND_HOST}:${BACKEND_PORT}`
+const backendPython = resolveBackendPythonCommand(import.meta.dirname)
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -25,7 +27,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `../../.venv/bin/python ../../scripts/run_backend_server.py --host ${BACKEND_HOST} --port ${BACKEND_PORT}`,
+      command: `${backendPython} ../../scripts/run_backend_server.py --host ${BACKEND_HOST} --port ${BACKEND_PORT}`,
       url: `${backendURL}/health`,
       // E2E requires deterministic in-memory state; avoid reusing an arbitrary local backend.
       reuseExistingServer: false,

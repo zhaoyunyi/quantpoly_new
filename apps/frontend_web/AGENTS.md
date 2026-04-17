@@ -11,15 +11,20 @@
 
 - `app/`：TanStack Start 路由与页面源码
 - `tests/`：前端测试目录（按需扩展）
-- `app.config.ts`：TanStack Start 应用配置
+- `vite.config.ts`：TanStack Start 官方 Vite 集成配置
+- `testing/`：测试运行时与浏览器测试辅助工具
 - `package.json`：前端依赖与脚本
 
 ## 3. 框架与命令
 
 - 当前前端框架：`TanStack Start`（React）
+- 当前运行时基线：`Vite + @tanstack/react-start/plugin/vite`
 - 开发启动：`cd apps/frontend_web && npm run dev`
 - 生产构建：`cd apps/frontend_web && npm run build`
-- 本地预览：`cd apps/frontend_web && npm run start`
+- 本地预览：先执行 `cd apps/frontend_web && npm run build`，再执行 `cd apps/frontend_web && npm run start`
+- 关键浏览器回归：
+  - `cd apps/frontend_web && npm run test:e2e -- tests/e2e/auth-dashboard.spec.ts`
+  - `cd apps/frontend_web && npm run test:e2e -- tests/e2e/runtime-smoke.spec.ts`
 
 ## 4. 设计系统与 Tokens
 
@@ -34,5 +39,13 @@
 
 ## 6. 安全提示（开发阶段）
 
-- `npm audit` 目前会提示上游依赖存在高危漏洞（涉及 `vinxi/h3/esbuild` 等）。
+- `npm audit` 目前仍会提示上游依赖存在高危漏洞，需要单独治理后再考虑生产暴露。
 - 在漏洞处理完成前，不建议将本前端构建产物用于生产环境对外提供服务。
+
+## 7. 已知 Warning（迁移后）
+
+- `npm run build` 已不再出现 `node:fs/node:path externalized for browser compatibility`。
+- 当前保留的非阻断 warning：
+  - client bundle `chunk size > 500 kB`：属于体积优化问题，不影响运行时正确性。
+  - SSR build 中 `@tanstack/start-*` 的 unused imports：属于上游构建输出 warning，当前接受。
+  - dev / Playwright 启动时的 `tanstack-router` route-file named export code-splitting warning：提示可进一步拆分页面导出，当前不阻断迁移。
