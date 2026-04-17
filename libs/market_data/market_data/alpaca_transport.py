@@ -183,9 +183,13 @@ class AlpacaHTTPTransport:
         *,
         config: AlpacaTransportConfig,
         request_executor: Callable[..., tuple[int, Any]] | None = None,
+        asset_catalog_cache_ttl_seconds: float = 300.0,
     ) -> None:
         self._config = config
         self._request_executor = request_executor or _default_request_executor
+        self._asset_catalog_cache_ttl_seconds = max(0.0, float(asset_catalog_cache_ttl_seconds))
+        self._asset_catalog_cache: list[dict[str, Any]] | None = None
+        self._asset_catalog_cached_at = 0.0
 
         self._healthy = True
         self._status = "ok"
@@ -267,14 +271,7 @@ class AlpacaHTTPTransport:
         return lowered in symbol or lowered in name
 
     def _search_assets(self, *, keyword: str, limit: int) -> dict[str, Any]:
-        payload = self._request_json(
-            path="/v2/assets",
-            params={
-                "status": "active",
-                "asset_class": "us_equity",
-            },
-        )
-        raw_items = payload if isinstance(payload, list) else payload.get("assets", [])
+        raw_items = self._catalog_assets()
         items: list[dict[str, Any]] = []
 
         for item in raw_items:
@@ -300,6 +297,45 @@ class AlpacaHTTPTransport:
                 break
 
         return {"items": items}
+
+    def _catalog_assets(self) -> list[dict[str, Any]]:
+        now = time.monotonic()
+        if (
+            self._asset_catalog_cache is not None
+            and self._asset_catalog_cache_ttl_seconds > 0
+            and now - self._asset_catalog_cached_at <= self._asset_catalog_cache_ttl_seconds
+        ):
+            return list(self._asset_catalog_cache)
+
+        payload = self._request_json(
+            path="/v2/assets",
+            params={
+                "status": "active",
+                "asset_class": "us_equity",
+            },
+        )
+        raw_items = payload if isinstance(payload, list) else payload.get("assets", [])
+        items = [item for item in raw_items if isinstance(item, dict)]
+        self._asset_catalog_cache = list(items)
+        self._asset_catalog_cached_at = now
+        return list(items)
+
+    def _asset_detail(self, *, symbol: str) -> dict[str, Any]:
+        payload = self._request_json(
+            path=f"/v2/assets/{symbol}",
+            params={},
+        )
+
+        item = payload if isinstance(payload, dict) else {}
+        return {
+            "symbol": str(item.get("symbol", symbol)).upper(),
+            "name": str(item.get("name") or symbol),
+            "exchange": item.get("exchange"),
+            "currency": item.get("currency", "USD"),
+            "assetClass": item.get("class", item.get("assetClass", "us_equity")),
+            "tradable": bool(item.get("tradable", True)),
+            "fractionable": bool(item.get("fractionable", False)),
+        }
 
     def _quote_snapshot(self, *, symbol: str) -> dict[str, Any]:
         payload = self._request_json(
@@ -385,6 +421,9 @@ class AlpacaHTTPTransport:
                 timeframe=str(kwargs.get("timeframe", "1Day")),
                 limit=int(kwargs["limit"]) if kwargs.get("limit") is not None else None,
             )
+        if op == "asset_detail":
+            symbol = str(kwargs.get("symbol", "")).upper().strip()
+            return self._asset_detail(symbol=symbol)
         raise ValueError(f"unsupported alpaca operation: {operation}")
 
     def health(self) -> dict[str, Any]:

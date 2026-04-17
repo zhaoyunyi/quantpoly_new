@@ -62,3 +62,25 @@ def test_service_should_raise_asset_not_found_error():
         service.get_catalog_asset_detail(user_id="u-1", symbol="TSLA")
 
     assert exc_info.value.code == "ASSET_NOT_FOUND"
+
+
+def test_service_should_prefer_provider_asset_detail_over_catalog_scan():
+    class _AssetDetailProvider(_Provider):
+        def get_asset_detail(self, *, symbol: str):
+            return MarketAsset(
+                symbol=symbol.upper(),
+                name="Apple Detail",
+                exchange="NASDAQ",
+                asset_class="us_equity",
+                tradable=True,
+            )
+
+        def list_assets(self, *, limit: int):
+            raise AssertionError("list_assets should not be called when asset detail is supported")
+
+    service = MarketDataService(provider=_AssetDetailProvider())
+
+    detail = service.get_catalog_asset_detail(user_id="u-1", symbol="aapl")
+
+    assert detail.symbol == "AAPL"
+    assert detail.name == "Apple Detail"

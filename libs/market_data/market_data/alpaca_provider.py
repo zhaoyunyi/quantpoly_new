@@ -82,6 +82,19 @@ class AlpacaProvider:
     def list_assets(self, *, limit: int) -> list[MarketAsset]:
         return self.search(keyword="", limit=limit)
 
+    def get_asset_detail(self, *, symbol: str) -> MarketAsset:
+        payload = self._call_with_retry("asset_detail", symbol=symbol.upper())
+        normalized = str(payload.get("symbol", symbol)).upper()
+        return MarketAsset(
+            symbol=normalized,
+            name=payload.get("name", normalized),
+            exchange=payload.get("exchange"),
+            currency=payload.get("currency", "USD"),
+            asset_class=payload.get("assetClass", "us_equity"),
+            tradable=bool(payload.get("tradable", True)),
+            fractionable=bool(payload.get("fractionable", False)),
+        )
+
     def quote(self, *, symbol: str) -> MarketQuote:
         payload = self._call_with_retry("quote", symbol=symbol.upper())
         return MarketQuote(

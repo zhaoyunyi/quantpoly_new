@@ -148,6 +148,32 @@ class MarketDataService:
         asset_class: str | None = None,
     ) -> MarketAsset:
         normalized_symbol = self._normalize_symbol(symbol)
+        if hasattr(self._provider, "get_asset_detail"):
+            try:
+                item = self._provider.get_asset_detail(symbol=normalized_symbol)
+            except Exception as exc:  # noqa: BLE001
+                raise self._map_provider_error(exc) from exc
+
+            exchange = (item.exchange or "").strip().upper()
+            normalized_market = (market or "").strip().upper()
+            if normalized_market and exchange != normalized_market:
+                raise MarketDataError(
+                    code="ASSET_NOT_FOUND",
+                    message=f"asset not found: {normalized_symbol}",
+                    retryable=False,
+                )
+
+            current_asset_class = str(item.asset_class or "").strip().lower()
+            normalized_asset_class = (asset_class or "").strip().lower()
+            if normalized_asset_class and current_asset_class != normalized_asset_class:
+                raise MarketDataError(
+                    code="ASSET_NOT_FOUND",
+                    message=f"asset not found: {normalized_symbol}",
+                    retryable=False,
+                )
+
+            return item
+
         items = self.list_catalog(
             user_id=user_id,
             limit=2000,
