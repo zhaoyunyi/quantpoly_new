@@ -28,7 +28,15 @@
 
 说明：前端目录、UI 规范、架构规范、设计令牌规范入口。
 
-## 5. 快速命令
+## 5. AI 协作索引
+
+- `docs/guides/README.md`
+- `docs/guides/ai-collaboration.md`
+- `docs/guides/ai-context-index.md`
+
+说明：承接根 `AGENTS.md` / `CLAUDE.md` 的公共背景、目录索引与协作入口。
+
+## 6. 快速命令
 
 ```bash
 # 能力门禁

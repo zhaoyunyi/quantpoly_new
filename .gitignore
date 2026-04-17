@@ -1,4 +1,5 @@
 .DS_Store
+.jj/
 .worktrees/
 .tmux-logs/
 __pycache__/
@@ -6,6 +7,7 @@ __pycache__/
 *.pyc
 README.md
 !docs/README.md
+!docs/guides/README.md
 
 # Local deployment secrets (never commit)
 deploy/secrets/ops_tokens.local.env
