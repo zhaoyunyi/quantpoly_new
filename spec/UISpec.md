@@ -1,269 +1,401 @@
-# UI 规范（UISpec）
+# QuantPoly 设计系统规范（UISpec）
 
-## 1. 设计理念
-
-QuantPoly 的视觉风格追求 **理性可信 · 克制科技感 · 可解释**。
-
-- **让数据说话**：视觉不吸引注意，只辅助理解
-- **结论优先原则**：先呈现结论，再展开细节
-- **克制使用装饰色**：红绿仅限数值标注，辅助色 ≤ 15%
-- **永远附带免责声明**
+> **版本**：2.0 · **更新日期**：2026-04-18
+>
+> 本规范是 QuantPoly 前端 UI/UX 的**唯一事实来源（Single Source of Truth）**。
+> 所有前端代码、Design Token、UI 组件和页面实现都必须遵守本规范；AI 编码助手在生成或修改前端代码时同样适用。
 
 ---
 
-## 2. 技术栈
+## 0. 设计原则
 
-| 层级      | 技术选型                        |
-| --------- | ------------------------------- |
-| 框架      | TanStack Start + React 19      |
-| 构建      | Vinxi 0.5.3 (Vite)             |
-| 样式      | Tailwind CSS v4 (@theme)        |
-| 无头组件  | Base UI (@base-ui/react 1.2)    |
-| 类名工具  | clsx                            |
+- **理性可信**：视觉的第一目标是建立可信度，而不是制造刺激。
+- **结论优先**：页面应先展示用户最关心的结论或状态，再展开数据与细节。
+- **可解释**：关键指标、风险信息、异常提示必须可被解释，不依赖隐含语义。
+- **克制科技感**：避免过度装饰、重渐变、夸张阴影或过饱和色彩。
+- **可访问性优先**：所有交互元素必须具备键盘可达与清晰焦点反馈。
 
 ---
 
-## 3. 色彩系统
+## 0.1 Token 两层架构
 
-### 3.1 色相统一原则
+当前项目采用两层 UI 约束架构：
 
-- 全局色相锚定 **H ≈ 215°–220°**（靛蓝灰轴）
-- 品牌主色、辅助色、背景色、文本色、图表色均共享此色相轴
-- 状态功能色（上涨/下跌/风险）允许脱离色相轴，但保持低饱和
+1. **Design Token 层**：定义在 `apps/frontend_web/app/styles/app.css` 的 `@theme {}` 中，是颜色、字体、间距、圆角、阴影、动画等视觉值的唯一真实来源。
+2. **Utility / Component 层**：通过 `@layer utilities` 和 `libs/ui_design_system/` 中的组件封装，把 Token 转成可复用的类名和组件 API。
 
-### 3.2 品牌色 — Primary
+关键原则：
 
-| Token                  | Hex       | 用途                      |
-| ---------------------- | --------- | ------------------------- |
-| `color.primary.900`    | `#1B3255` | 主标题 / 核心指标数值     |
-| `color.primary.700`    | `#2D5990` | 图表主线 / 导航选中态     |
-| `color.primary.500`    | `#4A7DB8` | 选中态 / 次级强调 / 链接  |
-
-### 3.3 品牌色 — Secondary
-
-| Token                  | Hex       | 用途                      |
-| ---------------------- | --------- | ------------------------- |
-| `color.secondary.500`  | `#6374A5` | 冷紫辅助（≤15%）/ 次线    |
-| `color.secondary.300`  | `#8DA5CA` | 模块区分 / 辅助装饰       |
-
-### 3.4 背景色
-
-| Token               | Hex       | 用途                      |
-| -------------------- | --------- | ------------------------- |
-| `color.bg.page`     | `#F7F8FB` | 页面主背景                |
-| `color.bg.card`     | `#FFFFFF` | 卡片 / 模态框 / 面板      |
-| `color.bg.subtle`   | `#EDF0F6` | 分割区域 / 表格交替行     |
-
-> **禁止**：纯黑或深色背景。
-
-### 3.5 文本色
-
-| Token                 | Hex       | 用途                      |
-| --------------------- | --------- | ------------------------- |
-| `color.text.primary`  | `#1D2433` | 正文主文本 / 结论         |
-| `color.text.secondary`| `#5B6779` | 次级说明 / 标签           |
-| `color.text.muted`    | `#8C96A8` | 注释 / 免责声明 / 时间戳  |
-
-### 3.6 状态色
-
-| Token                  | Hex       | 用途                      | 约束           |
-| ---------------------- | --------- | ------------------------- | -------------- |
-| `color.state.up`       | `#9E5350` | 上涨数值                  | 仅限数值标注   |
-| `color.state.down`     | `#4D7D63` | 下跌数值                  | 仅限数值标注   |
-| `color.state.risk`     | `#BF7838` | 风险提示条                | 仅限提示区域   |
-| `color.state.disabled` | `#C1C8D3` | 禁用 / 无数据状态         | opacity: 0.4   |
-
-> **禁止**：红绿用于按钮、标题、装饰或大面积填充。
-
-### 3.7 图表色
-
-| Token                  | Hex       | 用途                      |
-| ---------------------- | --------- | ------------------------- |
-| `color.chart.primary`  | `#2D5990` | 策略净值曲线 / 主指标     |
-| `color.chart.secondary`| `#6374A5` | 基准曲线 / 对比指标       |
-| `color.chart.grid`     | `#E0E5EE` | 图表网格线（弱化）        |
-| `color.chart.axis`     | `#96A1B3` | 坐标轴文字与刻度          |
+- 颜色、间距、圆角、阴影**不得在业务组件中硬编码**。
+- 组件内部只能消费 Token 或 `libs/ui_design_system/` 暴露的封装能力。
+- 如需新增视觉语义，应先更新 `app/styles/app.css` 和本规范，再更新组件实现。
 
 ---
 
-## 4. 字体系统
+## 0.2 可访问性标准
 
-### 4.1 字体族
+### 对比度要求
 
-| 变量          | 值                                              |
-| ------------- | ----------------------------------------------- |
+- 正文文本对比度应满足 WCAG AA，至少 **4.5:1**。
+- 大字号标题与关键指标文本至少 **3:1**。
+- 非文本元素（边框、图标、输入框状态）至少 **3:1**。
+
+### 交互与语义
+
+- 所有交互元素必须有清晰的 `focus-visible` 或等价焦点样式。
+- 表单控件必须与 `<label>` 或等价可访问名称绑定。
+- 错误提示必须与具体字段绑定，并能被辅助技术识别。
+- 图标不能作为唯一信息来源，必要时必须有文字补充。
+
+---
+
+## 1. 技术栈与工具
+
+| 层级 | 当前选型 | 备注 |
+|------|----------|------|
+| 页面框架 | **TanStack Start + React 19** | Web 应用主框架 |
+| CSS 框架 | **Tailwind CSS v4** | 使用 `@theme` 定义 Token |
+| 无头组件 | **Base UI** (`@base-ui/react`) | 底层交互能力 |
+| UI 封装 | `libs/ui_design_system/` | 统一暴露 Button / TextField / Select / Dialog / Table / Toast / Skeleton |
+| 类名工具 | `cn()` = `clsx` 封装 | 见 `libs/ui_design_system/src/utils.ts` |
+| 组件测试 | **Vitest + Testing Library** | 组件与页面单元/UI 测试 |
+| E2E 测试 | **Playwright** | 见 `apps/frontend_web/playwright.config.ts` |
+| Token 权威来源 | `apps/frontend_web/app/styles/app.css` | 当前唯一真实来源 |
+
+---
+
+## 2. 配色系统（Color System）
+
+### 2.1 颜色来源规则
+
+- 所有颜色 Token 定义在 `apps/frontend_web/app/styles/app.css`。
+- 组件和页面中**禁止**直接书写 hex / rgb / hsl。
+- 所有业务组件必须通过 Tailwind Token 类或语义 utility class 使用颜色。
+
+### 2.2 当前核心 Token
+
+#### 品牌主色（Primary）
+
+| Token | 值 | 推荐用途 |
+|------|----|---------|
+| `--color-primary-900` | `#1B3255` | 页面主标题、核心指标、深色主强调 |
+| `--color-primary-700` | `#2D5990` | 主按钮、主图表线、主导航选中态 |
+| `--color-primary-500` | `#4A7DB8` | 链接、次级强调、可交互高亮 |
+
+#### 辅助色（Secondary）
+
+| Token | 值 | 推荐用途 |
+|------|----|---------|
+| `--color-secondary-500` | `#6374A5` | 辅助说明、边界区分、次级信息 |
+| `--color-secondary-300` | `#8DA5CA` | 轻边框、弱强调、背景分层 |
+
+#### 背景与文本
+
+| Token | 值 | 推荐用途 |
+|------|----|---------|
+| `--color-bg-page` | `#F7F8FB` | 页面主背景 |
+| `--color-bg-card` | `#FFFFFF` | 卡片、对话框、浮层主体 |
+| `--color-bg-subtle` | `#EDF0F6` | 弱背景、表格交替行、分区背景 |
+| `--color-text-primary` | `#1D2433` | 主正文、标题说明 |
+| `--color-text-secondary` | `#5B6779` | 次级文本、标签、辅助说明 |
+| `--color-text-muted` | `#8C96A8` | 注释、时间戳、免责声明 |
+| `--color-text-on-primary` | `#FFFFFF` | 主色背景上的前景文字 |
+
+#### 状态色
+
+| Token | 值 | 推荐用途 | 约束 |
+|------|----|---------|------|
+| `--color-state-up` | `#9E5350` | 上涨数值 | 仅限数值与状态标识 |
+| `--color-state-down` | `#4D7D63` | 下跌数值 | 仅限数值与状态标识 |
+| `--color-state-risk` | `#BF7838` | 风险提示、错误边界 | 不得大面积装饰性使用 |
+| `--color-state-disabled` | `#C1C8D3` | 禁用态 | 应与透明度规则配合 |
+
+#### 图表色
+
+| Token | 值 | 推荐用途 |
+|------|----|---------|
+| `--color-chart-primary` | `#2D5990` | 主数据曲线 |
+| `--color-chart-secondary` | `#6374A5` | 对比曲线 |
+| `--color-chart-grid` | `#E0E5EE` | 网格线 |
+| `--color-chart-axis` | `#96A1B3` | 坐标轴与刻度 |
+
+### 2.3 Surface / Foreground 推荐配对
+
+| Surface | Foreground | 用途 |
+|---------|-----------|------|
+| `bg-bg-page` | `text-text-primary` | 页面默认背景与正文 |
+| `bg-bg-card` | `text-text-primary` | 卡片、表单、对话框 |
+| `bg-bg-subtle` | `text-text-secondary` | 弱背景、次级信息区 |
+| `bg-primary-700` | `text-text-on-primary` | 主按钮、主 CTA |
+
+### 2.4 禁止规则
+
+- 禁止在业务组件中直接写 `#fff`、`#000`、`rgb(...)`、`hsl(...)`。
+- 禁止用红绿色做大面积装饰或主导航色。
+- 禁止绕过 Token 体系引入额外“临时色板”。
+
+---
+
+## 3. 字体规范（Typography）
+
+### 3.1 字体族
+
+| 变量 | 值 |
+|------|----|
 | `--font-sans` | `'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif` |
-| `--font-mono` | `'JetBrains Mono', 'Menlo', monospace`          |
+| `--font-mono` | `'JetBrains Mono', 'Menlo', monospace` |
 
-### 4.2 文本样式
+### 3.2 基础字号
 
-| 样式名           | 字族       | 字号  | 字重    | 行高 | 用途               |
-| ---------------- | ---------- | ----- | ------- | ---- | ------------------ |
-| Title / Page     | Inter      | 28px  | Medium  | 1.2  | 页面标题           |
-| Title / Section  | Inter      | 22px  | Medium  | 1.2  | 区域标题           |
-| Title / Card     | Inter      | 18px  | Medium  | 1.2  | 卡片标题           |
-| Data / Primary   | JetBrains  | 22px  | Medium  | 1.2  | 核心指标数值       |
-| Data / Secondary | JetBrains  | 14px  | Regular | 1.5  | 变化率 / 辅助数值  |
-| Data / Mono      | JetBrains  | 12px  | Regular | 1.5  | 日期 / 金额        |
-| Body / Default   | Inter      | 14px  | Regular | 1.5  | 正文               |
-| Body / Secondary | Inter      | 14px  | Regular | 1.5  | 次级说明           |
-| Meta / Caption   | Inter      | 12px  | Regular | 1.5  | 图表标签 / 元数据  |
-| Meta / Disclaimer| Inter      | 12px  | Regular | 1.7  | 免责声明           |
+| Token | 值 |
+|------|----|
+| `--text-h1` | `28px` |
+| `--text-h2` | `22px` |
+| `--text-h3` | `18px` |
+| `--text-body` | `14px` |
+| `--text-caption` | `12px` |
 
-> **禁止**：Heavy/Black/ExtraBold 字重。仅使用 400 (Regular) 和 500 (Medium)。
+### 3.3 规范化文本样式
 
----
+| Utility Class | 用途 |
+|---------------|------|
+| `text-title-page` | 页面标题 |
+| `text-title-section` | 区块标题 |
+| `text-title-card` | 卡片标题 |
+| `text-data-primary` | 关键指标与主要数值 |
+| `text-data-secondary` | 次级数值与辅助指标 |
+| `text-data-mono` | 日期、金额、代码、序列号 |
+| `text-body` | 正文 |
+| `text-body-secondary` | 次级正文 |
+| `text-caption` | 辅助标签 |
+| `text-disclaimer` | 免责声明与弱提示 |
 
-## 5. 间距系统
+### 3.4 字体使用规则
 
-基于 **4px 倍数**尺度：
-
-| Token        | 值   | 用途                 |
-| ------------ | ---- | -------------------- |
-| `space.xs`   | 4px  | 最小间距             |
-| `space.sm`   | 8px  | 紧凑间距             |
-| `space.md`   | 16px | 默认间距             |
-| `space.lg`   | 24px | 区块间距             |
-| `space.xl`   | 32px | 大区块间距           |
-| `space.2xl`  | 48px | 页面级间距           |
-
----
-
-## 6. 圆角与阴影
-
-| Token          | 值                             | 用途               |
-| -------------- | ------------------------------ | ------------------ |
-| `radius-sm`    | 4px                            | 控件 / 按钮 / 徽章 |
-| `radius-md`    | 8px                            | 卡片 / 面板 / 弹窗 |
-| `shadow-card`  | `0 4px 12px rgba(0,0,0,0.06)`  | 卡片唯一阴影       |
-
-> **禁止**：圆角 ≥ 12px；多层叠加阴影；高模糊渐变阴影。
+- 页面标题、区块标题、卡片标题最多使用 `font-medium` 或等价层级。
+- 核心数值优先使用等宽字体（`font-mono` 或 `data-mono`）。
+- 免责声明、风险提示和指标解释不得省略。
 
 ---
 
-## 7. 交互规范
+## 4. 间距规范（Spacing）
 
-### 7.1 状态过渡
+### 4.1 设计 Token
 
-| 属性                     | 值                |
-| ------------------------ | ----------------- |
-| `state.hover.opacity`    | `0.92`            |
-| `state.disabled.opacity` | `0.4`             |
-| `transition.base`        | `120ms ease-out`  |
+| Token | 值 |
+|------|----|
+| `--space-xs` | `4px` |
+| `--space-sm` | `8px` |
+| `--space-md` | `16px` |
+| `--space-lg` | `24px` |
+| `--space-xl` | `32px` |
+| `--space-2xl` | `48px` |
 
-> **禁止**：弹性缓动（spring/bounce/elastic）、回弹效果。
+### 4.2 推荐使用方式
 
-### 7.2 组件状态
+| Utility | 用途 |
+|---------|------|
+| `gap-xs` / `gap-sm` / `gap-md` / `gap-lg` | 组件与列表间距 |
+| `p-sm` / `p-md` / `p-lg` / `p-xl` | 容器内边距 |
+| `px-*` / `py-*` 系列 | 水平/垂直内边距 |
+| `mt-*` / `mb-*` 系列 | 段落与模块节奏控制 |
 
-每个交互组件必须定义并验收以下状态:
+### 4.3 规则
 
-- `default` — 默认态
-- `hover` — 鼠标悬浮（opacity 0.92）
-- `focus` — 键盘焦点（清晰可见的焦点环）
-- `disabled` — 禁用态（opacity 0.4，cursor: not-allowed）
-- `loading` — 加载中
-- `error` — 错误态
+- 间距必须按 4px 倍数体系组织。
+- 避免在业务代码中出现“临时微调”的散乱值。
+- 组件内部优先使用规范 utility class，而不是重复内联样式。
 
-### 7.3 可访问性
+---
 
-- 键盘可达：核心操作可通过 Tab 与 Enter/Space 完成
-- 焦点可见：焦点态必须有清晰视觉反馈
-- 表单错误必须与具体字段绑定，支持屏幕阅读器识别
+## 5. 圆角与阴影规范
+
+### 5.1 圆角
+
+| Token | 值 | 推荐用途 |
+|------|----|---------|
+| `--radius-sm` | `4px` | 按钮、输入框、小徽章 |
+| `--radius-md` | `8px` | 卡片、对话框、较大容器 |
+
+规则：
+
+- 禁止大面积使用超大圆角制造“消费级卡片感”。
+- 输入框、按钮、表格内交互元素优先使用 `rounded-sm`。
+
+### 5.2 阴影
+
+| Token | 值 | 推荐用途 |
+|------|----|---------|
+| `--shadow-card` | `0 4px 12px rgba(0, 0, 0, 0.06)` | 卡片、浮层轻阴影 |
+
+规则：
+
+- 页面默认不依赖大阴影分层。
+- 卡片与浮层尽量只使用单层轻阴影。
+- 禁止高模糊、重投影或多层叠加阴影。
+
+---
+
+## 6. 交互与状态规范
+
+### 6.1 基础交互基线
+
+当前项目在 `libs/ui_design_system/src/utils.ts` 中统一暴露：
+
+- `focusRingClass`：焦点环样式
+- `disabledClass`：禁用态样式
+- `transitionClass`：基础过渡样式
+- `cn()`：类名组合函数
+
+### 6.2 组件最小状态集
+
+所有交互组件至少覆盖以下状态：
+
+- `default`
+- `hover`
+- `focus-visible`
+- `disabled`
+- `loading`（如适用）
+- `error`（如适用）
+
+### 6.3 过渡规范
+
+- 默认过渡基线为 `120ms ease-out`。
+- 仅在确有必要时使用 `transition-all`。
+- 禁止引入弹簧、回弹或高戏剧化动画作为默认交互。
+
+---
+
+## 7. 组件规范（UI Design System）
+
+### 7.1 统一入口
+
+统一从 `libs/ui_design_system/src/index.ts` 暴露组件与工具，避免业务层直接依赖底层实现细节。
+
+当前核心组件包括：
+
+- `Button`
+- `TextField`
+- `Select`
+- `Dialog`
+- `ToastProvider` / `useToast`
+- `Table`
+- `Skeleton` / `Spinner` / `EmptyState`
+- `cn` / `focusRingClass` / `disabledClass` / `transitionClass`
+
+### 7.2 Button
+
+当前 `Button` 规范：
+
+- 变体：`primary` / `secondary` / `ghost`
+- 尺寸：`sm` / `md` / `lg`
+- 状态：`default` / `hover` / `focus-visible` / `disabled` / `loading`
+
+业务页面应优先复用 `Button`，而不是手写按钮样式。
+
+### 7.3 TextField
+
+当前 `TextField` 规范：
+
+- 支持 `label`、`help`、`error`
+- 支持 `startAdornment` / `endAdornment`
+- 错误态必须通过 `aria-invalid` 和关联描述暴露给辅助技术
+
+### 7.4 其他组件
+
+- `Select`、`Dialog` 基于 Base UI 封装，业务代码不直接耦合底层库。
+- `Table` 必须服务于数据可读性，不得为了“科技感”牺牲对齐与可扫描性。
+- `Toast` 仅用于瞬时反馈，不替代表单级错误提示。
+- `Skeleton` / `Spinner` / `EmptyState` 负责 loading / 空态体验的一致性。
 
 ---
 
 ## 8. 页面与信息架构
 
-### 8.1 一级导航
+### 8.1 当前一级页面域
 
-仪表盘 · 策略管理 · 回测中心 · 交易账户 · 风控中心 · 实时监控 · 用户中心
+当前前端路由和页面能力主要围绕以下域展开：
+
+- Landing / Auth
+- Dashboard
+- Strategies
+- Backtests
+- Trading
+- Monitor
+- Settings
 
 ### 8.2 页面结构原则
 
-1. **结论优先** — 先核心结论卡片，再详细数据
-2. **层级递进** — 标题 → 指标 → 图表 → 统计 → 假设 → 免责
-3. 每页必须明确：主目标、关键操作、关键反馈（成功/失败/加载中）
-4. 路由命名使用业务通用语言
+1. **结论优先**：先展示结果、状态、异常，再展示明细。
+2. **层级递进**：标题 → 关键指标 → 图表 / 列表 → 说明 / 风险 / 免责声明。
+3. **关键操作明确**：每个页面都应明确主操作与次操作。
+4. **弱化装饰**：视觉元素为信息服务，避免装饰性 UI 干扰数据阅读。
 
-### 8.3 布局栅格
+### 8.3 图表原则
 
-- 最大内容宽度：1200px，居中
-- 响应断点：sm (640px) / md (768px) / lg (1024px) / xl (1280px)
-- 卡片间距：16px (gap-md)
-- 容器内边距：32px (px-xl)
-
----
-
-## 9. 组件清单
-
-当前仅建立 Design Tokens 与样式基线。组件封装与实现（Base UI + Tailwind）后续统一在 `libs/ui_design_system/` 内落地。
-
-组件实现的最小要求：
-
-- 覆盖 `default/hover/focus/disabled/loading/error`
-- 禁止硬编码颜色（hex/rgb），全部来自 Design Tokens
-- 交互与可访问性满足本规范第 7 节
+- 图表应优先服务于解释和比较，而不是吸引注意。
+- 轴线、网格线、标签必须足够克制，避免与主曲线争抢视觉优先级。
+- 价格、权益、收益率、时间序列等数值标签优先使用等宽数字。
 
 ---
 
-## 10. 图表设计原则
+## 9. CSS 架构与实现约束
 
-- 图表使用细线（1.5–2px）、低对比坐标轴
-- 网格线弱化（`#E0E5EE`），坐标轴灰色（`#96A1B3`）
-- 目标：**解释数据，而不是吸引注意**
-- Y 轴标签使用等宽字体
-- 交互性：hover 显示具体数值，区间选择器切换时间范围
+### 9.1 权威来源
 
----
+- Design Tokens：`apps/frontend_web/app/styles/app.css`
+- 组件实现：`libs/ui_design_system/src/`
+- 业务页面与 Widget：`apps/frontend_web/app/`
 
-## 11. 文案语气
+### 9.2 实现规则
 
-| 场景       | 语气要求                             | 示例                                                   |
-| ---------- | ------------------------------------ | ------------------------------------------------------ |
-| 结论       | 客观陈述 + 数值佐证                  | "年化收益 12.34%，优于基准 +1.5pp"                     |
-| 风险提示   | 中性、不制造恐慌                     | "回撤明显放大，建议关注适用性局限"                     |
-| 免责声明   | 规范法律措辞                         | "不构成投资建议。回测结果不代表未来表现。"             |
-| 空状态     | 引导下一步                           | "暂无回测数据。请先创建策略并提交回测。"               |
+- 组件中禁止硬编码颜色与阴影值。
+- 类名组合必须通过 `cn()` 完成。
+- 共享交互样式优先通过 `focusRingClass`、`disabledClass`、`transitionClass` 复用。
+- 如需新增公共视觉语义，优先扩展 `app.css` 或 UI 组件库，而不是在业务代码局部发明一套规则。
 
 ---
 
-## 12. CSS 架构
+## 10. 测试与验收规范
 
-### 12.1 文件结构
+### 10.1 测试分层
 
-```
-app/styles/app.css          # Tailwind 入口 + @theme + base/utilities
-libs/ui_design_system/      # 规划：基于 Base UI + Tailwind 的组件封装
-```
+| 层级 | 工具 | 目标 |
+|------|------|------|
+| 单元 / 组件测试 | Vitest + Testing Library | 组件 API、交互状态、无障碍断言 |
+| 页面测试 | Vitest + Testing Library | 页面数据流、错误态、空态、关键文案 |
+| E2E | Playwright | 关键流程稳定回归 |
 
-### 12.2 Tailwind @theme 映射
+### 10.2 相关规范
 
-所有 Design Tokens 定义在 `app/styles/app.css` 的 `@theme { }` 块中，
-Tailwind 自动将其注册为 utility class 前缀（如 `bg-primary-900`、`text-text-secondary`）。
+- BDD 表达方式遵循 `spec/BDD_TestSpec.md`
+- 浏览器测试选型遵循 `spec/BrowserTestStrategy.md`
 
-### 12.3 Typography Utility Classes
+### 10.3 最低验收清单
 
-在 `@layer utilities` 中定义 10 个文本样式 class + 4 个状态色 class：
-
-- `.text-title-page` / `.text-title-section` / `.text-title-card`
-- `.text-data-primary` / `.text-data-secondary` / `.text-data-mono`
-- `.text-body` / `.text-body-secondary`
-- `.text-caption` / `.text-disclaimer`
-- `.state-up` / `.state-down` / `.state-risk` / `.state-disabled`
+- [ ] 颜色、间距、圆角、阴影均来自 Token 或公共 utility
+- [ ] 交互组件具备 `focus-visible`、`disabled`、`error` 等必要状态
+- [ ] 组件与页面具备可访问标签与错误反馈
+- [ ] 页面主流程具备对应测试覆盖
+- [ ] 关键业务页面至少能通过 Playwright 或等价流程验证
 
 ---
 
-## 13. 验收方式（BDD）
+## 11. AI 执行清单
 
-前端功能验收使用 Given/When/Then，输出格式遵循 `spec/BDD_TestSpec.md`。
+AI 助手新增或修改前端代码时，必须至少检查：
 
-### 验收检查清单
+- [ ] 是否优先复用了 `libs/ui_design_system` 中已有组件
+- [ ] 是否使用了 `cn()` 组合类名
+- [ ] 是否避免了硬编码颜色值
+- [ ] 是否保持了当前 Token 体系和 utility class 语义
+- [ ] 是否补齐了 `focus-visible` / `disabled` / `error` 等状态
+- [ ] 是否为新增页面或关键组件补充了 Vitest / Playwright 级验证
 
-- [ ] 所有颜色来自 Design Token，无硬编码 hex
-- [ ] 字重仅使用 400/500
-- [ ] 圆角 ≤ 8px
-- [ ] 阴影仅一层 `shadow-card`
-- [ ] 红绿色仅用于数值标注
-- [ ] 页面底部有免责声明
-- [ ] 键盘可达、焦点可见
-- [ ] 过渡动画 ≤ 120ms ease-out
+---
+
+## 12. 变更历史
+
+| 日期 | 变更 | 作者 |
+|------|------|------|
+| 2026-04-18 | 基于外部新版设计系统规范结构重写，并按 QuantPoly 当前技术栈适配 | Codex |

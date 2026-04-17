@@ -5,11 +5,13 @@
 - `spec/UISpec.md`
 - `spec/FrontendArchitectureSpec.md`
 - `spec/DesignTokensSpec.md`
+- `spec/BrowserTestStrategy.md`
 
 ## 2. 设计与实现原则
 
 - 遵循 `spec/ProgramSpec.md`：Library-First、CLI Mandate、Test-First
 - 遵循 `spec/DDDSpec.md`：限界上下文与通用语言一致
+- 浏览器测试选型与边界遵循 `spec/BrowserTestStrategy.md`
 - 前端仅作为后端能力的 UI 与交互层，不承载用户系统主逻辑
 
 ## 3. 当前实现状态
