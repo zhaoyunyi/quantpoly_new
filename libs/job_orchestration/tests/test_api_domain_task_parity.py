@@ -7,18 +7,20 @@ from fastapi.testclient import TestClient
 
 
 class _User:
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, *, role: str = "user", level: int = 1):
         self.id = user_id
+        self.role = role
+        self.level = level
 
 
-def _build_app(*, current_user_id: str):
+def _build_app(*, current_user_id: str, role: str = "user", level: int = 1):
     from job_orchestration.api import create_router
     from job_orchestration.repository import InMemoryJobRepository
     from job_orchestration.scheduler import InMemoryScheduler
     from job_orchestration.service import JobOrchestrationService
 
     def _get_current_user():
-        return _User(current_user_id)
+        return _User(current_user_id, role=role, level=level)
 
     service = JobOrchestrationService(
         repository=InMemoryJobRepository(),
@@ -229,7 +231,7 @@ def test_job_payload_exposes_started_and_finished_timestamps():
 
 
 def test_system_schedule_templates_recover_and_list_expose_runtime_observability():
-    app, _service = _build_app(current_user_id="u-1")
+    app, _service = _build_app(current_user_id="u-1", role="admin", level=10)
     client = TestClient(app)
 
     recovered = client.post("/jobs/system-schedules/templates/recover")
@@ -245,3 +247,20 @@ def test_system_schedule_templates_recover_and_list_expose_runtime_observability
     assert listed_payload["success"] is True
     assert len(listed_payload["data"]["items"]) >= 4
     assert "runtime" in listed_payload["data"]
+
+
+def test_system_runtime_endpoints_require_admin_role():
+    app, _service = _build_app(current_user_id="u-1", role="user", level=1)
+    client = TestClient(app)
+
+    runtime = client.get("/jobs/runtime")
+    assert runtime.status_code == 403
+    assert runtime.json()["error"]["code"] == "ADMIN_REQUIRED"
+
+    listed = client.get("/jobs/system-schedules/templates")
+    assert listed.status_code == 403
+    assert listed.json()["error"]["code"] == "ADMIN_REQUIRED"
+
+    recovered = client.post("/jobs/system-schedules/templates/recover")
+    assert recovered.status_code == 403
+    assert recovered.json()["error"]["code"] == "ADMIN_REQUIRED"

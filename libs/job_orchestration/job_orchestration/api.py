@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from platform_core.authz import resolve_admin_decision
 from job_orchestration.domain import InvalidJobTransitionError
 from job_orchestration.service import (
     IdempotencyConflictError,
@@ -110,6 +111,13 @@ def _schedule_access_denied_response() -> JSONResponse:
     )
 
 
+def _admin_required_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content=error_response(code="ADMIN_REQUIRED", message="admin role required"),
+    )
+
+
 def create_router(*, service: JobOrchestrationService, get_current_user: Any) -> APIRouter:
     router = APIRouter()
 
@@ -151,13 +159,15 @@ def create_router(*, service: JobOrchestrationService, get_current_user: Any) ->
 
     @router.get("/jobs/runtime")
     def runtime_status(current_user=Depends(get_current_user)):
-        del current_user
+        if not resolve_admin_decision(current_user).is_admin:
+            return _admin_required_response()
         return success_response(data=service.runtime_status())
 
 
     @router.get("/jobs/system-schedules/templates")
     def list_system_schedule_templates(current_user=Depends(get_current_user)):
-        del current_user
+        if not resolve_admin_decision(current_user).is_admin:
+            return _admin_required_response()
         return success_response(
             data={
                 "items": service.list_system_schedule_templates(),
@@ -167,7 +177,8 @@ def create_router(*, service: JobOrchestrationService, get_current_user: Any) ->
 
     @router.post("/jobs/system-schedules/templates/recover")
     def recover_system_schedule_templates(current_user=Depends(get_current_user)):
-        del current_user
+        if not resolve_admin_decision(current_user).is_admin:
+            return _admin_required_response()
         summary = service.recover_system_schedule_templates()
         return success_response(
             data={
