@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AppProviders, bootstrapApiClient } from "../../../app/entry_wiring";
@@ -26,6 +26,11 @@ vi.mock("@tanstack/react-router", async () => {
   );
   return {
     ...actual,
+    Link: ({ children, to, ...props }: Record<string, unknown>) => (
+      <a href={String(to ?? "")} {...(props as Record<string, unknown>)}>
+        {children as any}
+      </a>
+    ),
     useNavigate: () => vi.fn(),
   };
 });
@@ -146,6 +151,9 @@ describe("OrderTicket (下单表单)", () => {
 
     await user.click(screen.getByRole("button", { name: "确认买入" }));
 
+    // Confirmation dialog opens — click "确认下单" to submit
+    await user.click(await screen.findByRole("button", { name: "确认下单" }));
+
     expect(
       await screen.findByText("可用资金不足，无法完成买入。请存入资金后重试。"),
     ).toBeInTheDocument();
@@ -179,9 +187,52 @@ describe("OrderTicket (下单表单)", () => {
 
     await user.click(screen.getByRole("button", { name: "确认卖出" }));
 
+    // Confirmation dialog opens — click "确认下单" to submit
+    await user.click(await screen.findByRole("button", { name: "确认下单" }));
+
     expect(
       await screen.findByText("可用持仓不足，无法完成卖出。请确认持仓数量。"),
     ).toBeInTheDocument();
+  });
+
+  it("given_order_form_filled_when_submit_then_shows_confirmation_dialog", async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OrderTicket accountId="acc-1" />
+      </ToastProvider>,
+    );
+
+    await user.type(screen.getByLabelText("标的代码"), "AAPL");
+    await user.type(screen.getByLabelText("数量"), "10");
+    await user.type(screen.getByLabelText("价格"), "100");
+    await user.click(screen.getByRole("button", { name: "确认买入" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("AAPL")).toBeInTheDocument();
+  });
+
+  it("given_confirmation_dialog_when_cancel_then_closes_without_api_call", async () => {
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OrderTicket accountId="acc-1" />
+      </ToastProvider>,
+    );
+
+    await user.type(screen.getByLabelText("标的代码"), "AAPL");
+    await user.type(screen.getByLabelText("数量"), "10");
+    await user.type(screen.getByLabelText("价格"), "100");
+    await user.click(screen.getByRole("button", { name: "确认买入" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const cancelBtn = within(dialog).getByRole("button", { name: "取消" });
+    await user.click(cancelBtn);
+
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 

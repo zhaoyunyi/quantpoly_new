@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 
@@ -82,9 +82,9 @@ export function ResendVerificationPage() {
           />
 
           <div className="flex items-center justify-between gap-md">
-            <a href="/auth/login" className="text-body text-primary-700 hover:underline">
+            <Link to="/auth/login" className="text-body text-primary-700 hover:underline">
               返回登录
-            </a>
+            </Link>
             <Button type="submit" loading={submitting}>
               重发验证指引
             </Button>

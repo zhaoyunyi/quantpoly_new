@@ -9,6 +9,7 @@ import { HeroSection } from "./HeroSection";
 import { FeaturesSection } from "./FeaturesSection";
 import { HealthIndicator } from "./HealthIndicator";
 import { CtaLink } from "./CtaLink";
+import { Link } from "@tanstack/react-router";
 import { useAuth } from "@qp/api-client";
 
 export function LandingPage() {
@@ -19,11 +20,11 @@ export function LandingPage() {
     <div className="min-h-screen bg-bg-page flex flex-col">
       {/* 顶部导航栏 */}
       <header className="flex items-center justify-between h-14 px-xl border-b border-secondary-300/20 bg-bg-card">
-        <a href="/" className="flex items-center gap-sm">
+        <Link to="/" className="flex items-center gap-sm">
           <span className="text-title-card text-primary-900 font-medium">
             QuantPoly
           </span>
-        </a>
+        </Link>
         <nav className="flex items-center gap-md">
           <HealthIndicator />
           {authState === "authenticated" ? (

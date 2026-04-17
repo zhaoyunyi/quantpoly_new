@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 
@@ -121,9 +121,9 @@ export function RegisterPage() {
           />
 
           <div className="flex items-center justify-between gap-md">
-            <a href="/auth/login" className="text-body text-primary-700 hover:underline">
+            <Link to="/auth/login" className="text-body text-primary-700 hover:underline">
               已有账号？去登录
-            </a>
+            </Link>
             <Button type="submit" loading={submitting}>
               注册
             </Button>

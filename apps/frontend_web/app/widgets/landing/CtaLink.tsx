@@ -1,4 +1,5 @@
 import type { AnchorHTMLAttributes } from "react";
+import { Link } from "@tanstack/react-router";
 import { cn, focusRingClass, transitionClass } from "@qp/ui";
 
 type CtaLinkVariant = "primary" | "secondary" | "ghost";
@@ -32,18 +33,32 @@ export function CtaLink({
   variant = "primary",
   size = "sm",
   className,
+  href,
   ...props
 }: CtaLinkProps) {
+  const classes = cn(
+    "inline-flex items-center justify-center font-medium select-none rounded-sm",
+    transitionClass,
+    focusVisibleClass,
+    variantStyles[variant],
+    sizeStyles[size],
+    className,
+  );
+
+  if (href && href.startsWith("/") && !href.startsWith("//")) {
+    return (
+      <Link
+        to={href}
+        className={classes}
+        {...(props as Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href">)}
+      />
+    );
+  }
+
   return (
     <a
-      className={cn(
-        "inline-flex items-center justify-center font-medium select-none rounded-sm",
-        transitionClass,
-        focusVisibleClass,
-        variantStyles[variant],
-        sizeStyles[size],
-        className,
-      )}
+      href={href}
+      className={classes}
       {...props}
     />
   );

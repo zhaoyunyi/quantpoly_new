@@ -12,6 +12,20 @@ import userEvent from '@testing-library/user-event'
 
 import { AppProviders, bootstrapApiClient } from '../../../app/entry_wiring'
 
+vi.mock('@tanstack/react-router', async () => {
+  const actual = await vi.importActual<typeof import('@tanstack/react-router')>(
+    '@tanstack/react-router',
+  )
+  return {
+    ...actual,
+    Link: ({ children, to, ...props }: Record<string, unknown>) => (
+      <a href={String(to ?? '')} {...(props as Record<string, unknown>)}>
+        {children as any}
+      </a>
+    ),
+  }
+})
+
 vi.mock('../../../app/lib/navigation', () => ({
   redirectTo: vi.fn(),
 }))

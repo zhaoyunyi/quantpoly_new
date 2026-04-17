@@ -8,13 +8,21 @@
  * - 受保护页面外壳（AuthGuard + AppShell）
  */
 
-import type { ReactNode } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 
 import { configureClient } from '@qp/api-client'
 import { AuthProvider } from '@qp/api-client'
 import type { UserProfile } from '@qp/api-client'
+import { useAuth } from '@qp/api-client'
 import { ToastProvider } from '@qp/ui'
+import { ThemeProvider } from '@qp/ui'
 import { AppShell, AuthGuard, ErrorBoundary } from '@qp/shell'
+import { NotificationBell } from './widgets/notifications/NotificationBell'
+import { NotificationPanel } from './widgets/notifications/NotificationPanel'
+import { useNotifications } from './shared/useNotifications'
+import { useHotkey } from './shared/useHotkey'
+import { CommandPalette } from './widgets/search/CommandPalette'
 
 const FALLBACK_BACKEND_ORIGIN = 'http://localhost:8000'
 
@@ -51,12 +59,14 @@ export function AppProviders({
 }) {
   return (
     <ErrorBoundary>
-      <AuthProvider
-        initialUser={initialAuth?.user ?? null}
-        initialResolved={initialAuth?.resolved ?? false}
-      >
-        <ToastProvider>{children}</ToastProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider
+          initialUser={initialAuth?.user ?? null}
+          initialResolved={initialAuth?.resolved ?? false}
+        >
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }
@@ -66,11 +76,50 @@ export function AppProviders({
  * 页面只需要在内部编排业务 UI；鉴权与导航由该外壳统一处理。
  */
 export function ProtectedLayout({ children }: { children: ReactNode }) {
+  const navigate = useNavigate()
+  const { user, loading } = useAuth()
   const currentPath =
     typeof window !== 'undefined' ? window.location.pathname : '/'
+
+  const [notifOpen, setNotifOpen] = useState(false)
+  const notif = useNotifications(Boolean(user) && !loading)
+
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useHotkey('k', 'meta-or-ctrl', useCallback(() => setPaletteOpen(true), []))
+
+  useEffect(() => {
+    if (!notifOpen) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[aria-label*="通知"]') && !target.closest('.absolute')) {
+        setNotifOpen(false)
+      }
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [notifOpen])
+
+  const headerActions = (
+    <div className="relative">
+      <NotificationBell
+        count={notif.summary.total}
+        onClick={() => setNotifOpen(!notifOpen)}
+      />
+      <NotificationPanel
+        open={notifOpen}
+        summary={notif.summary}
+        onNavigate={(path) => {
+          setNotifOpen(false)
+          void navigate({ to: path })
+        }}
+      />
+    </div>
+  )
+
   return (
     <AuthGuard>
-      <AppShell currentPath={currentPath}>{children}</AppShell>
+      <AppShell currentPath={currentPath} headerActions={headerActions}>{children}</AppShell>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </AuthGuard>
   )
 }

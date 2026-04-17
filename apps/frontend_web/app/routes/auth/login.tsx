@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 
@@ -117,18 +117,20 @@ export function LoginPage() {
               <p className="text-body-secondary mt-xs">{formError.message}</p>
               {formError.code === 'EMAIL_NOT_VERIFIED' && (
                 <div className="mt-sm flex flex-wrap gap-sm">
-                  <a
-                    href={`/auth/verify-email?email=${encodeURIComponent(normalizedEmailForLink(email))}`}
+                  <Link
+                    to="/auth/verify-email"
+                    search={{ email: normalizedEmailForLink(email) }}
                     className="text-primary-700 text-body hover:underline"
                   >
                     去验证邮箱
-                  </a>
-                  <a
-                    href={`/auth/resend-verification?email=${encodeURIComponent(normalizedEmailForLink(email))}`}
+                  </Link>
+                  <Link
+                    to="/auth/resend-verification"
+                    search={{ email: normalizedEmailForLink(email) }}
                     className="text-primary-700 text-body hover:underline"
                   >
                     重发验证邮件
-                  </a>
+                  </Link>
                 </div>
               )}
             </div>
@@ -155,12 +157,12 @@ export function LoginPage() {
             error={passwordError}
           />
           <div className="flex items-center justify-between gap-md">
-            <a
-              href="/auth/forgot-password"
+            <Link
+              to="/auth/forgot-password"
               className="text-body text-primary-700 hover:underline"
             >
               忘记密码
-            </a>
+            </Link>
             <Button type="submit" loading={submitting}>
               登录
             </Button>
@@ -168,9 +170,9 @@ export function LoginPage() {
 
           <p className="text-caption text-text-muted">
             还没有账号？{' '}
-            <a href="/auth/register" className="text-primary-700 hover:underline">
+            <Link to="/auth/register" className="text-primary-700 hover:underline">
               去注册
-            </a>
+            </Link>
           </p>
         </form>
       </div>

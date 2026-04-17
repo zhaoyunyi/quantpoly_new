@@ -6,7 +6,7 @@
  * - 401 统一跳转 /auth/login?next=...
  */
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useAuth } from "@qp/api-client";
 import { Spinner } from "@qp/ui";
 import { redirectTo } from "./redirect";
@@ -27,6 +27,17 @@ export function AuthGuard({
 }: AuthGuardProps) {
   const { user, loading } = useAuth();
 
+  useEffect(() => {
+    if (loading || user || typeof window === "undefined") {
+      return;
+    }
+
+    const next = encodeURIComponent(
+      window.location.pathname + window.location.search,
+    );
+    redirectTo(`${loginPath}?next=${next}`);
+  }, [loading, loginPath, user]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-bg-page">
@@ -39,13 +50,6 @@ export function AuthGuard({
   }
 
   if (!user) {
-    // 客户端重定向到登录页
-    if (typeof window !== "undefined") {
-      const next = encodeURIComponent(
-        window.location.pathname + window.location.search,
-      );
-      redirectTo(`${loginPath}?next=${next}`);
-    }
     return null;
   }
 

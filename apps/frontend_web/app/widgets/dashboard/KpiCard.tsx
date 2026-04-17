@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 import { cn, transitionClass } from '@qp/ui'
 
 export type KpiTone = 'default' | 'up' | 'down' | 'risk'
@@ -51,6 +52,14 @@ export function KpiCard({
   )
 
   if (href) {
+    if (href.startsWith('/') && !href.startsWith('//')) {
+      return (
+        <Link to={href} className="block">
+          {content}
+        </Link>
+      )
+    }
+
     return (
       <a href={href} className="block">
         {content}
@@ -60,4 +69,3 @@ export function KpiCard({
 
   return content
 }
-

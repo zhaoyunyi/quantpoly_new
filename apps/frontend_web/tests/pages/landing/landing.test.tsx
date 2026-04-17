@@ -16,6 +16,20 @@ import type { UserProfile } from "@qp/api-client";
 import { AppProviders, bootstrapApiClient } from "../../../app/entry_wiring";
 import { LandingPage } from "../../../app/widgets/landing/LandingContent";
 
+vi.mock("@tanstack/react-router", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
+    "@tanstack/react-router",
+  );
+  return {
+    ...actual,
+    Link: ({ children, to, ...props }: Record<string, unknown>) => (
+      <a href={String(to ?? "")} {...(props as Record<string, unknown>)}>
+        {children as any}
+      </a>
+    ),
+  };
+});
+
 describe("/ (Landing Page)", () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   const authenticatedUser: UserProfile = {

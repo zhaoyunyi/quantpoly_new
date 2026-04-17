@@ -13,11 +13,13 @@ export interface NavItem {
   path: string
   /** SVG 图标（24x24），作为 <svg> 的 children 渲染 */
   icon: ReactNode
+  /** 二级子菜单（展开时渲染为缩进文本链接） */
+  children?: NavItem[]
 }
 
 /**
  * 一级导航项。
- * 顺序对齐 UISpec 8.1：仪表盘 · 策略管理 · 回测中心 · 交易账户 · 风控中心 · 实时监控 · 用户中心
+ * 顺序对齐 UISpec 8.1：仪表盘 · 策略管理 · 回测中心 · 交易账户 · 实时监控 · 用户中心
  */
 export const NAV_ITEMS: NavItem[] = [
   {
@@ -93,27 +95,10 @@ export const NAV_ITEMS: NavItem[] = [
         />
       </>
     ),
-  },
-  {
-    label: '风控中心',
-    path: '/trading/analytics',
-    icon: (
-      <>
-        <path
-          d="M12 2l8 4v6c0 5.5-3.8 10.7-8 12-4.2-1.3-8-6.5-8-12V6l8-4z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M12 8v4m0 4h.01"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </>
-    ),
+    children: [
+      { label: '账户管理', path: '/trading/accounts', icon: null },
+      { label: '分析报表', path: '/trading/analytics', icon: null },
+    ],
   },
   {
     label: '实时监控',

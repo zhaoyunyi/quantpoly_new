@@ -7,6 +7,7 @@
 
 import { type ReactNode } from "react";
 import { cn } from "@qp/ui";
+import { redirectTo } from "./redirect";
 
 export interface PublicLayoutProps {
   children: ReactNode;
@@ -18,7 +19,14 @@ export function PublicLayout({ children, className }: PublicLayoutProps) {
     <div className="min-h-screen bg-bg-page flex flex-col">
       {/* 顶部品牌栏 */}
       <header className="flex items-center h-14 px-xl border-b border-secondary-300/20 bg-bg-card">
-        <a href="/" className="flex items-center gap-sm">
+        <a
+          href="/"
+          className="flex items-center gap-sm"
+          onClick={(event) => {
+            event.preventDefault();
+            redirectTo("/");
+          }}
+        >
           <span className="text-title-card text-primary-900 font-medium">
             QuantPoly
           </span>

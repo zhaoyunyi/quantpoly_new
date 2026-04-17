@@ -22,6 +22,11 @@ vi.mock("@tanstack/react-router", async () => {
   );
   return {
     ...actual,
+    Link: ({ children, to, ...props }: Record<string, unknown>) => (
+      <a href={String(to ?? "")} {...(props as Record<string, unknown>)}>
+        {children as any}
+      </a>
+    ),
     useNavigate: () => vi.fn(),
   };
 });
@@ -298,6 +303,11 @@ describe("/backtests/$id (详情页)", () => {
       >("@tanstack/react-router");
       return {
         ...actual,
+        Link: ({ children, to, ...props }: Record<string, unknown>) => (
+          <a href={String(to ?? "")} {...(props as Record<string, unknown>)}>
+            {children as any}
+          </a>
+        ),
         useNavigate: () => vi.fn(),
       };
     });

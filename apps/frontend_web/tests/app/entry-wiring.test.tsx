@@ -10,9 +10,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 
+const navigateMock = vi.fn()
+
+vi.mock('@tanstack/react-router', async () => {
+  const actual = await vi.importActual<typeof import('@tanstack/react-router')>(
+    '@tanstack/react-router',
+  )
+  return {
+    ...actual,
+    Link: ({ children, ...props }: Record<string, unknown>) => (
+      <a {...(props as Record<string, unknown>)}>{children as any}</a>
+    ),
+    useNavigate: () => navigateMock,
+  }
+})
+
 describe('entry_wiring', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    navigateMock.mockReset()
   })
 
   afterEach(() => {
@@ -132,5 +148,48 @@ describe('entry_wiring', () => {
     if (topNav) {
       expect(within(topNav).queryAllByRole('link')).toHaveLength(0)
     }
+  })
+
+  it('given_auth_not_resolved_when_render_protected_layout_then_does_not_start_notification_polling', async () => {
+    const root = await import('../../app/routes/__root')
+
+    root.bootstrapApiClient('http://localhost:8000')
+
+    const pendingMe = new Promise<unknown>(() => undefined)
+    const mockFetch = vi.fn((url: string) => {
+      if (url.endsWith('/users/me')) {
+        return pendingMe
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () =>
+          Promise.resolve({
+            success: true,
+            message: 'ok',
+            data: {},
+          }),
+      })
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    render(
+      <root.AppProviders>
+        <root.ProtectedLayout>
+          <div>secret</div>
+        </root.ProtectedLayout>
+      </root.AppProviders>,
+    )
+
+    expect(screen.getByText('正在验证身份…')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:8000/users/me',
+      expect.any(Object),
+    )
   })
 })

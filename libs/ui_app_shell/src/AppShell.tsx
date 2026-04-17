@@ -9,17 +9,20 @@
  */
 
 import { type ReactNode, useEffect, useState } from "react";
-import { cn, transitionClass } from "@qp/ui";
+import { cn, transitionClass, useTheme } from "@qp/ui";
 import { healthCheck, useAuth } from "@qp/api-client";
 import { NAV_ITEMS, type NavItem } from "./navigation";
+import { redirectTo } from "./redirect";
 
 export interface AppShellProps {
   children: ReactNode;
   /** 当前路由路径，用于高亮侧栏导航项 */
   currentPath?: string;
+  /** 顶部状态栏右侧自定义操作区（如通知铃铛） */
+  headerActions?: ReactNode;
 }
 
-export function AppShell({ children, currentPath = "/" }: AppShellProps) {
+export function AppShell({ children, currentPath = "/", headerActions }: AppShellProps) {
   const { user, logout } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -108,6 +111,7 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
                 item={item}
                 isActive={currentPath.startsWith(item.path)}
                 collapsed={sidebarCollapsed}
+                currentPath={currentPath}
               />
             ))}
           </ul>
@@ -153,9 +157,11 @@ export function AppShell({ children, currentPath = "/" }: AppShellProps) {
       >
         <header className="border-b border-secondary-300/20 bg-bg-card/95 backdrop-blur-sm">
           <div
-            className="h-14 w-full max-w-[1200px] mx-auto px-xl flex items-center justify-end"
+            className="h-14 w-full max-w-[1200px] mx-auto px-xl flex items-center justify-end gap-sm"
             data-testid="shell-top-status"
           >
+            {headerActions}
+            <ThemeToggle />
             <ShellHealthIndicator />
           </div>
         </header>
@@ -178,15 +184,21 @@ function SidebarNavItem({
   item,
   isActive,
   collapsed,
+  currentPath,
 }: {
   item: NavItem;
   isActive: boolean;
   collapsed: boolean;
+  currentPath: string;
 }) {
   return (
     <li>
       <a
         href={item.path}
+        onClick={(event) => {
+          event.preventDefault();
+          redirectTo(item.path);
+        }}
         className={cn(
           "flex items-center gap-sm px-3 py-2 rounded-sm text-body select-none",
           transitionClass,
@@ -211,7 +223,59 @@ function SidebarNavItem({
         </svg>
         {!collapsed && <span className="truncate">{item.label}</span>}
       </a>
+      {!collapsed && isActive && item.children && (
+        <ul className="mt-0.5 flex flex-col gap-0.5">
+          {item.children.map((child) => (
+            <li key={child.path}>
+              <a
+                href={child.path}
+                onClick={(event) => {
+                  event.preventDefault();
+                  redirectTo(child.path);
+                }}
+                className={cn(
+                  "block pl-10 pr-3 py-1.5 rounded-sm text-caption",
+                  transitionClass,
+                  currentPath === child.path
+                    ? "text-primary-700 font-medium"
+                    : "text-text-secondary hover:text-text-primary hover:bg-bg-subtle",
+                )}
+              >
+                {child.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
+  );
+}
+
+function ThemeToggle() {
+  const { resolved, setTheme } = useTheme();
+  const isDark = resolved === "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      className={cn(
+        "p-1.5 rounded-sm text-text-muted hover:text-text-primary hover:bg-bg-subtle",
+        transitionClass,
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+      )}
+      aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
+    >
+      {isDark ? (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
   );
 }
 
