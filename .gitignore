@@ -8,6 +8,7 @@ __pycache__/
 apps/frontend_web/dist/
 apps/frontend_web/test-results/
 README.md
+!README.md
 !docs/README.md
 !docs/guides/README.md
 

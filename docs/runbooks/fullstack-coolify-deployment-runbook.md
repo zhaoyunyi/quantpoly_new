@@ -1,6 +1,8 @@
 # 全栈 Coolify 部署手册（frontend + backend + postgres）
 
 > 目标：在 Coolify 上以单个 Docker Compose 资源部署新前端与新后端，并覆盖线上流量。
+>
+> `2026-04-18` 已重新验证前端 npm 构建基线：`npm ci && npm run build` 可通过。收敛记录见：`docs/migration/2026-04-18-doc-code-consistency-audit.md`。
 
 ## 1. 对应部署资产
 
@@ -54,16 +56,101 @@ Coolify 控制台建议按下列位置配置：
 
 ## 5. 首次部署与验证
 
-1. 点击 `Deploy`。
-2. 等待三个服务都变为 `Healthy`。
-3. 验证：
+1. 先在仓库内验证前端构建基线：
+
+```bash
+cd apps/frontend_web && npm run build
+```
+
+2. 如需验证锁文件可复现性，可在干净目录执行：
+
+```bash
+cd apps/frontend_web && npm ci && npm run build
+```
+
+3. 确认前端构建通过后，再点击 `Deploy`。
+4. 等待三个服务都变为 `Healthy`。
+5. 验证：
 
 ```bash
 curl -f https://api.example.com/health
 curl -I https://app.example.com/
 ```
 
-4. 登录一次，确认响应头 `Set-Cookie` 带 `Secure`（生产环境必须）。
+6. 登录一次，确认响应头 `Set-Cookie` 带 `Secure`（生产环境必须）。
+
+## 5.1 本地浏览器级部署验证
+
+如需在本机模拟一套“接近 Coolify 生产编排”的全栈栈，并通过宿主机端口做浏览器验证，可使用：
+
+- 基础编排：`docker-compose.coolify.yml`
+- 本地 override：`docker-compose.coolify.local.yml`
+- 一键脚本：`scripts/verify_coolify_local_stack.py`
+
+最省事的入口：
+
+```bash
+./.venv/bin/python scripts/verify_coolify_local_stack.py
+```
+
+辅助开关：
+
+- 只看执行计划：`./.venv/bin/python scripts/verify_coolify_local_stack.py --print-only`
+- 验证完成后保留栈：`./.venv/bin/python scripts/verify_coolify_local_stack.py --keep-stack`
+
+建议命令：
+
+```bash
+export POSTGRES_PASSWORD=quantpoly_local_pw
+export VITE_BACKEND_ORIGIN=http://localhost:18000
+export BACKEND_CORS_ALLOWED_ORIGINS=http://localhost:13000
+export USER_AUTH_COOKIE_SECURE=false
+export USER_AUTH_COOKIE_SAMESITE=lax
+
+docker compose \
+  -p quantpoly_local_browser \
+  -f docker-compose.coolify.yml \
+  -f docker-compose.coolify.local.yml \
+  up -d --build
+```
+
+本地端口约定：
+
+- frontend: `http://localhost:13000`
+- backend: `http://localhost:18000`
+- postgres: `localhost:15432`
+
+验证要点：
+
+- 三个服务都达到 `healthy`
+- `curl http://localhost:18000/health`
+- 浏览器访问 `http://localhost:13000/`
+- 浏览器登录后跳转到 `/dashboard`
+- 浏览器中存在后端 `session_token` cookie
+- 如需跑完整浏览器回归：
+
+```bash
+cd apps/frontend_web && PLAYWRIGHT_BACKEND_PORT=18000 npx playwright test --config playwright.compose.config.ts
+```
+
+重要：
+
+- 本地浏览器联调必须统一使用 `localhost`，不要混用 `127.0.0.1`
+- 否则会出现 CORS origin 与 Cookie host 不一致，导致登录后无法建立会话
+
+清理命令：
+
+```bash
+docker compose \
+  -p quantpoly_local_browser \
+  -f docker-compose.coolify.yml \
+  -f docker-compose.coolify.local.yml \
+  down -v
+```
+
+如需在干净 CI 环境重复执行同一条链路，仓库已提供工作流：
+
+- `.github/workflows/verify-coolify-local-stack.yml`
 
 ## 6. 覆盖线上建议（低风险）
 
