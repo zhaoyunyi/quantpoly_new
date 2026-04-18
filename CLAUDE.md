@@ -45,3 +45,28 @@
 - 部署入口：`deploy/AGENTS.md`
 - 后端运行与门禁：`docs/runbooks/backend-operations-runbook.md`、`docs/gates/backend-gate-handbook.md`
 - Skill 约定、多 Agent 约束与 `jj` 工作流：`AGENTS.md`
+
+## gstack
+
+- 当前仓库允许按需使用 `gstack` 的 slash workflows。
+- 涉及网页浏览、站点验证、截图、交互式 QA 时，优先使用 `gstack` 的 `/browse`、`/qa`、`/qa-only`、`/open-gstack-browser`。
+- 常用流程命令包括：`/office-hours`、`/autoplan`、`/review`、`/investigate`、`/ship`、`/cso`。
+- 使用 `gstack` 相关文件路径时，优先使用全局安装路径 `~/.claude/skills/gstack/...`。
+- 不使用 `mcp__claude-in-chrome__*` 作为本仓库默认网页浏览方案。
+
+## Skill routing
+
+适用范围：仅适用于已安装 `gstack` 的 Claude Code 会话。对于不支持 `gstack` slash workflows 的宿主，不要求模拟这些命令。
+
+- 当用户请求明显匹配已安装的 `gstack` skill 时，优先先调用对应 skill，不要先直接自由回答，也不要先走其他网页工具。
+- 产品想法、是否值得做、头脑风暴、方案方向判断，优先用 `/office-hours`。
+- Bug、报错、异常行为、线上故障排查，优先用 `/investigate`。
+- 发版、部署、推送、创建 PR，优先用 `/ship`；若已进入部署验证阶段，优先用 `/land-and-deploy`。
+- 网页浏览、打开站点、截图、页面交互、人工验收式测试，优先用 `/browse`；如果需要完整可视浏览器，优先用 `/open-gstack-browser`。
+- QA、测试站点、找 bug、回归验证，优先用 `/qa`；如果只需要报告问题不改代码，优先用 `/qa-only`。
+- 代码评审、检查 diff、查潜在回归与风险，优先用 `/review`。
+- 更新发布文档、同步 README / runbook / 说明文档，优先用 `/document-release`。
+- 每周回顾、阶段复盘，优先用 `/retro`。
+- 设计系统、品牌、视觉方向探索，优先用 `/design-consultation`；视觉审查与设计修正，优先用 `/design-review`。
+- 架构评审、数据流、边界条件、测试设计，优先用 `/plan-eng-review`。
+- 安全审计、威胁建模、OWASP / STRIDE 视角检查，优先用 `/cso`。

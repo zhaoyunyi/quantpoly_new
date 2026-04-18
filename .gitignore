@@ -18,3 +18,5 @@ deploy/secrets/*.local.env
 deploy/secrets/*.secret.env
 !deploy/secrets/.gitkeep
 !deploy/secrets/README.md
+.omc/
+.gstack/
