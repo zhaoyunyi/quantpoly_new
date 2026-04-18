@@ -17,6 +17,7 @@ _DEFAULT_CONTEXTS = {
     "risk-control",
     "signal-execution",
     "monitoring-realtime",
+    "strategy-health",
 }
 
 

@@ -42,6 +42,10 @@ from strategy_management.api import create_router as create_strategy_router
 from strategy_management.repository import InMemoryStrategyRepository
 from strategy_management.repository_postgres import PostgresStrategyRepository
 from strategy_management.service import StrategyService
+from strategy_health.api import create_router as create_health_router
+from strategy_health.repository import HealthReportRepository, InMemoryHealthReportRepository
+from strategy_health.repository_postgres import PostgresHealthReportRepository
+from strategy_health.service import StrategyHealthService
 from trading_account.api import create_router as create_trading_router
 from trading_account.domain import TradingAccount
 from trading_account.repository import InMemoryTradingAccountRepository
@@ -136,6 +140,7 @@ class CompositionContext:
     preferences_store: InMemoryPreferencesStore | PostgresPreferencesStore
     market_service: MarketDataService
     backtest_result_store: InMemoryBacktestResultStore | PostgresBacktestResultStore
+    health_repo: HealthReportRepository
 
 
 class MetricsCollector:
@@ -189,6 +194,7 @@ def build_context(
         risk_repo = PostgresRiskRepository(engine=engine)
         signal_repo = PostgresSignalRepository(engine=engine)
         preferences_store = PostgresPreferencesStore(engine=engine)
+        health_repo = PostgresHealthReportRepository(engine=engine)
     else:
         user_repo = UserRepository()
         session_store = SessionStore()
@@ -201,6 +207,7 @@ def build_context(
         risk_repo = InMemoryRiskRepository()
         signal_repo = InMemorySignalRepository()
         preferences_store = InMemoryPreferencesStore()
+        health_repo = InMemoryHealthReportRepository()
 
     market_service = _build_market_service(market_data_provider=market_data_provider)
 
@@ -217,6 +224,7 @@ def build_context(
         preferences_store=preferences_store,
         market_service=market_service,
         backtest_result_store=backtest_result_store,
+        health_repo=health_repo,
     )
 
 def build_current_user_dependency(*, context: CompositionContext) -> AuthUserFn:
@@ -415,6 +423,20 @@ def register_all_routes(
 
     if "signal-execution" in enabled_contexts:
         app.include_router(create_signal_router(service=signal_service, get_current_user=get_current_user, job_service=job_service))
+
+    if "strategy-health" in enabled_contexts:
+        health_service = StrategyHealthService(
+            repository=context.health_repo,
+            market_history_reader=lambda user_id, symbol, start_date, end_date, timeframe, limit: context.market_service.get_history(
+                user_id=user_id,
+                symbol=symbol,
+                start_date=start_date or "1970-01-01",
+                end_date=end_date or "2100-01-01",
+                timeframe=timeframe,
+                limit=limit,
+            ),
+        )
+        app.include_router(create_health_router(service=health_service, get_current_user=get_current_user))
 
     if "monitoring-realtime" in enabled_contexts:
         monitor_app = create_monitoring_app(
