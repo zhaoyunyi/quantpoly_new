@@ -17,8 +17,10 @@
 ## 3. 当前实现状态
 
 - 前端应用框架已落位为 `TanStack Start`（目录：`apps/frontend_web/`）
-- 前端运行时已切换为 `Vite + @tanstack/react-start/plugin/vite`
+- 前端当前运行时基线为 `Vite + @tanstack/react-start/plugin/vite`
+- 前端当前包管理基线为 `npm + package-lock.json`
 - 前端子项目说明：`apps/frontend_web/AGENTS.md`
+- 当前已实现的页面范围包括 Landing、Auth、Dashboard、Monitor、Strategies、Backtests、Trading、Settings
 - 关键运行命令：
   - `cd apps/frontend_web && npm run dev`
   - `cd apps/frontend_web && npm run build`
@@ -30,9 +32,11 @@
 
 ## 4. 当前已知限制
 
-- 前端构建已消除旧 Vinxi runtime 的 `node:fs/node:path externalized for browser compatibility` warning。
-- 仍保留少量非阻断 warning，主要是：
+- 截至 `2026-04-18`，前端构建与测试基线已恢复：
+  - `npm test` 通过
+  - `npm run build` 通过
+  - 干净环境 `npm ci && npm run build` 通过
+- 当前保留的已知事项主要是构建 warning，而非阻断错误：
   - client bundle 体积告警
-  - TanStack Start SSR build 的 unused imports
-  - `tanstack-router` 对 route file named exports 的 code-splitting 提示
-- 这些 warning 当前作为已知事项记录，不代表运行时错误；如需进一步优化，应单独立项而不是混入基础设施迁移。
+  - TanStack Start SSR build 的 unused imports warning
+- 本轮收敛记录见：`docs/migration/2026-04-18-doc-code-consistency-audit.md`

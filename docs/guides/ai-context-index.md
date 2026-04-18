@@ -9,6 +9,7 @@
 - `README.md`
 - `docs/README.md`
 - `docs/migration/2026-02-13-backend-current-state.md`
+- `docs/migration/2026-04-18-doc-code-consistency-audit.md`
 - `openspec/specs/`
 - `openspec/project.md`
 
@@ -64,6 +65,7 @@
 ## 3. 文档类型判断
 
 - 看当前实现事实：优先 `README.md`、`docs/README.md`、`docs/migration/`、`openspec/specs/`
+- 看最近一次文档/代码审计与修正记录：优先 `docs/migration/2026-04-18-doc-code-consistency-audit.md`
 - 看落地实现与测试约束：优先 `spec/`
 - 看操作步骤、runbook、门禁与样例：优先 `docs/runbooks/`、`docs/gates/`
 - 看正在开发中的方案与变更：优先 `openspec/changes/`

@@ -10,7 +10,7 @@ QuantPoly 是一个量化交易平台，目标能力包括：
 - 风控与风险评估（规则、告警、建议）
 - 实时监控（WebSocket/SSE、signals/alerts 推送）
 
-本仓库用于以 **OpenSpec + DDD + Library-First** 的方式，从旧项目逐步迁移/重构后端能力。
+本仓库用于以 **OpenSpec + DDD + Library-First** 的方式，从旧项目逐步迁移/重构后端能力，并补齐前端与部署资产。
 
 ## Tech Stack（拟）
 > 说明：旧项目后端为 FastAPI + SQLModel；迁移阶段尽量保持技术栈一致，避免无谓重写。
@@ -38,7 +38,7 @@ QuantPoly 是一个量化交易平台，目标能力包括：
 - BDD 表达与输出格式遵守 `spec/BDD_TestSpec.md`。
 
 ### Git Workflow
-- 必须使用 `git cnd` 提交（见根目录 `AGENTS.md`）。
+- 本仓库本地版本控制使用 `jj`，本地提交、查看状态与整理历史时应优先使用 `jj` 命令。
 
 ## Domain Context（通用语言草案）
 - User：用户（身份、会话、偏好）
