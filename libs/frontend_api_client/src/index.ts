@@ -109,6 +109,12 @@ export {
   type EquityCurvePoint,
   type TradeStats,
   type RiskAssessment,
+  type OverfitRisk,
+  type ParamVariation,
+  type ParamSensitivity,
+  type StrategyHealthReport,
+  type CreateHealthReportPayload,
+  type HealthReportListResult,
   healthCheck,
   getMonitorSummary,
   getTradingAccountsAggregate,
@@ -192,6 +198,9 @@ export {
   getTradeStats,
   getRiskAssessment,
   evaluateRiskAssessment,
+  createStrategyHealthReport,
+  getStrategyHealthReport,
+  getStrategyHealthReports,
 } from './endpoints'
 
 // React hooks

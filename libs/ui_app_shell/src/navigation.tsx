@@ -46,6 +46,10 @@ export const NAV_ITEMS: NavItem[] = [
         strokeLinecap="round"
       />
     ),
+    children: [
+      { label: '策略列表', path: '/strategies', icon: null },
+      { label: '健康报告', path: '/strategies/health', icon: null },
+    ],
   },
   {
     label: '回测中心',

@@ -19,6 +19,7 @@ import { Route as BacktestsIndexRouteImport } from './routes/backtests/index'
 import { Route as TradingAnalyticsRouteImport } from './routes/trading/analytics'
 import { Route as TradingAccountsRouteImport } from './routes/trading/accounts'
 import { Route as StrategiesSimpleRouteImport } from './routes/strategies/simple'
+import { Route as StrategiesHealthRouteImport } from './routes/strategies/health'
 import { Route as StrategiesCompareRouteImport } from './routes/strategies/compare'
 import { Route as StrategiesAdvancedRouteImport } from './routes/strategies/advanced'
 import { Route as StrategiesIdRouteImport } from './routes/strategies/$id'
@@ -80,6 +81,11 @@ const TradingAccountsRoute = TradingAccountsRouteImport.update({
 const StrategiesSimpleRoute = StrategiesSimpleRouteImport.update({
   id: '/strategies/simple',
   path: '/strategies/simple',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StrategiesHealthRoute = StrategiesHealthRouteImport.update({
+  id: '/strategies/health',
+  path: '/strategies/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StrategiesCompareRoute = StrategiesCompareRouteImport.update({
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
+  '/strategies/health': typeof StrategiesHealthRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
@@ -183,6 +190,7 @@ export interface FileRoutesByTo {
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
+  '/strategies/health': typeof StrategiesHealthRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
@@ -208,6 +216,7 @@ export interface FileRoutesById {
   '/strategies/$id': typeof StrategiesIdRoute
   '/strategies/advanced': typeof StrategiesAdvancedRoute
   '/strategies/compare': typeof StrategiesCompareRoute
+  '/strategies/health': typeof StrategiesHealthRoute
   '/strategies/simple': typeof StrategiesSimpleRoute
   '/trading/accounts': typeof TradingAccountsRoute
   '/trading/analytics': typeof TradingAnalyticsRoute
@@ -234,6 +243,7 @@ export interface FileRouteTypes {
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
+    | '/strategies/health'
     | '/strategies/simple'
     | '/trading/accounts'
     | '/trading/analytics'
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
+    | '/strategies/health'
     | '/strategies/simple'
     | '/trading/accounts'
     | '/trading/analytics'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | '/strategies/$id'
     | '/strategies/advanced'
     | '/strategies/compare'
+    | '/strategies/health'
     | '/strategies/simple'
     | '/trading/accounts'
     | '/trading/analytics'
@@ -307,6 +319,7 @@ export interface RootRouteChildren {
   StrategiesIdRoute: typeof StrategiesIdRoute
   StrategiesAdvancedRoute: typeof StrategiesAdvancedRoute
   StrategiesCompareRoute: typeof StrategiesCompareRoute
+  StrategiesHealthRoute: typeof StrategiesHealthRoute
   StrategiesSimpleRoute: typeof StrategiesSimpleRoute
   TradingAccountsRoute: typeof TradingAccountsRoute
   TradingAnalyticsRoute: typeof TradingAnalyticsRoute
@@ -386,6 +399,13 @@ declare module '@tanstack/react-router' {
       path: '/strategies/simple'
       fullPath: '/strategies/simple'
       preLoaderRoute: typeof StrategiesSimpleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/strategies/health': {
+      id: '/strategies/health'
+      path: '/strategies/health'
+      fullPath: '/strategies/health'
+      preLoaderRoute: typeof StrategiesHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/strategies/compare': {
@@ -491,6 +511,7 @@ const rootRouteChildren: RootRouteChildren = {
   StrategiesIdRoute: StrategiesIdRoute,
   StrategiesAdvancedRoute: StrategiesAdvancedRoute,
   StrategiesCompareRoute: StrategiesCompareRoute,
+  StrategiesHealthRoute: StrategiesHealthRoute,
   StrategiesSimpleRoute: StrategiesSimpleRoute,
   TradingAccountsRoute: TradingAccountsRoute,
   TradingAnalyticsRoute: TradingAnalyticsRoute,

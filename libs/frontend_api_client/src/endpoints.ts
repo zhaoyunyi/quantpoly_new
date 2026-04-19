@@ -1120,3 +1120,77 @@ export function importPreferences(
 ): Promise<UserPreferences> {
   return post<UserPreferences>('/users/me/preferences/import', body)
 }
+
+/* ─── Strategy Health ─── */
+
+export type OverfitRisk = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+
+export interface ParamVariation {
+  perturbation: string
+  value: number
+  returnRate: number
+  changePercent: number
+}
+
+export interface ParamSensitivity {
+  rating: string
+  originalValue: number
+  variations: ParamVariation[]
+}
+
+export interface StrategyHealthReport {
+  reportId: string
+  status: string
+  overallScore?: number
+  overfitRisk?: OverfitRisk
+  inSampleReturn?: number
+  outSampleReturn?: number
+  returnRatio?: number
+  paramSensitivity?: Record<string, ParamSensitivity>
+  tradeCount?: number
+  maxDrawdown?: number
+  sharpeRatio?: number
+  warnings?: string[]
+  createdAt: string
+  completedAt?: string
+  error?: string
+}
+
+export interface CreateHealthReportPayload {
+  template: string
+  parameters: Record<string, number>
+  symbol: string
+  startDate: string
+  endDate: string
+  initialCapital?: number
+  strategyId?: string
+}
+
+export interface HealthReportListResult {
+  items: StrategyHealthReport[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export function createStrategyHealthReport(
+  payload: CreateHealthReportPayload,
+): Promise<StrategyHealthReport> {
+  return post<StrategyHealthReport>('/strategy-health', payload)
+}
+
+export function getStrategyHealthReport(reportId: string): Promise<StrategyHealthReport> {
+  const id = encodeURIComponent(reportId)
+  return get<StrategyHealthReport>(`/strategy-health/${id}`)
+}
+
+export function getStrategyHealthReports(params?: {
+  page?: number
+  pageSize?: number
+}): Promise<HealthReportListResult> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
+  const path = qs.toString() ? `/strategy-health?${qs}` : '/strategy-health'
+  return get<HealthReportListResult>(path)
+}
