@@ -52,4 +52,7 @@ export default defineConfig({
       ],
     },
   },
+  preview: {
+    allowedHosts: ['quantpoly.com', 'www.quantpoly.com'],
+  },
 })

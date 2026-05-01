@@ -30,3 +30,12 @@ def test_backend_prod_dockerfile_should_include_strategy_health_in_pythonpath():
     content = dockerfile_path.read_text(encoding="utf-8")
 
     assert "/workspace/libs/strategy_health" in content
+
+
+def test_frontend_vite_preview_should_allow_public_domains():
+    config_path = Path("apps/frontend_web/vite.config.ts")
+    content = config_path.read_text(encoding="utf-8")
+
+    assert "allowedHosts" in content
+    assert "quantpoly.com" in content
+    assert "www.quantpoly.com" in content
