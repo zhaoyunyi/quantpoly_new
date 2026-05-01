@@ -23,3 +23,10 @@ def test_local_coolify_override_should_publish_ports_for_browser_level_verificat
     assert 'VITE_BACKEND_ORIGIN: http://localhost:18000' in content
     assert 'BACKEND_CORS_ALLOWED_ORIGINS: http://localhost:13000' in content
     assert 'USER_AUTH_COOKIE_SECURE: "false"' in content
+
+
+def test_backend_prod_dockerfile_should_include_strategy_health_in_pythonpath():
+    dockerfile_path = Path("docker/backend.prod.Dockerfile")
+    content = dockerfile_path.read_text(encoding="utf-8")
+
+    assert "/workspace/libs/strategy_health" in content

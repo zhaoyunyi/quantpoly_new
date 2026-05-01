@@ -20,3 +20,4 @@ deploy/secrets/*.secret.env
 !deploy/secrets/README.md
 .omc/
 .gstack/
+.workspaces/

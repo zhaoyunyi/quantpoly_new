@@ -34,6 +34,10 @@ test('trading: buy/sell error mapping', async ({ page }, testInfo) => {
   await page.getByLabel('数量').fill('1000')
   await page.getByLabel('价格').fill('1000')
   await page.getByRole('button', { name: '确认买入' }).click()
+  await page
+    .getByRole('dialog', { name: '确认下单' })
+    .getByRole('button', { name: '确认下单' })
+    .click()
   await expect(page.getByText('可用资金不足，无法完成买入。请存入资金后重试。')).toBeVisible()
 
   // 卖出持仓不足
@@ -42,6 +46,10 @@ test('trading: buy/sell error mapping', async ({ page }, testInfo) => {
   await page.getByLabel('数量').fill('1000')
   await page.getByLabel('价格').fill('100')
   await page.getByRole('button', { name: '确认卖出' }).click()
+  await page
+    .getByRole('dialog', { name: '确认下单' })
+    .getByRole('button', { name: '确认下单' })
+    .click()
   await expect(page.getByText('可用持仓不足，无法完成卖出。请确认持仓数量。')).toBeVisible()
 })
 
@@ -83,4 +91,3 @@ test('trading: accounts page loads filter config and can create account', async 
 
   await expect(page.getByText('测试账户')).toBeVisible()
 })
-

@@ -28,7 +28,7 @@ COPY apps ./apps
 COPY libs ./libs
 COPY scripts ./scripts
 
-ENV PYTHONPATH="/workspace:/workspace/libs/platform_core:/workspace/libs/user_auth:/workspace/libs/monitoring_realtime:/workspace/libs/strategy_management:/workspace/libs/backtest_runner:/workspace/libs/trading_account:/workspace/libs/market_data:/workspace/libs/risk_control:/workspace/libs/signal_execution:/workspace/libs/data_topology_boundary:/workspace/libs/job_orchestration:/workspace/libs/admin_governance:/workspace/libs/user_preferences"
+ENV PYTHONPATH="/workspace:/workspace/libs/platform_core:/workspace/libs/user_auth:/workspace/libs/monitoring_realtime:/workspace/libs/strategy_management:/workspace/libs/backtest_runner:/workspace/libs/trading_account:/workspace/libs/market_data:/workspace/libs/risk_control:/workspace/libs/signal_execution:/workspace/libs/data_topology_boundary:/workspace/libs/job_orchestration:/workspace/libs/admin_governance:/workspace/libs/user_preferences:/workspace/libs/strategy_health"
 
 EXPOSE 8000
 
