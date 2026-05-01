@@ -54,7 +54,8 @@ cd apps/frontend_web && npm test
 ## 自动化入口
 
 - 本地一键验证：`./.venv/bin/python scripts/verify_coolify_local_stack.py`
-- GitHub Actions 工作流：`.github/workflows/verify-coolify-local-stack.yml`
+- 生产 Coolify 状态/部署：`./.venv/bin/python scripts/deploy_coolify_production.py --status-only`
+- GitHub Actions 工作流：`.github/workflows/verify-coolify-local-stack.yml`（当前只做本地 Coolify 栈验证，不触发生产部署）
 
 ## 版本控制
 

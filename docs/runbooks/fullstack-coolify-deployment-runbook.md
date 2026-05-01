@@ -4,6 +4,25 @@
 >
 > `2026-04-18` 已重新验证前端 npm 构建基线：`npm ci && npm run build` 可通过。收敛记录见：`docs/migration/2026-04-18-doc-code-consistency-audit.md`。
 
+## 0. 当前生产资源快照（2026-05-01）
+
+- Coolify 控制台：`https://coolify.quantpoly.com/`
+- Project：`QuantPoly_Backend`
+- Environment：`production`
+- Application：`quantpoly-fullstack-root`
+- Application UUID：`wgsoo0gow8wkwow8kkg00kks`
+- Source：`zhaoyunyi/quantpoly_new`
+- Branch：`master`
+- Compose Path：`/docker-compose.coolify.yml`
+- 生产服务器 IP：`152.53.243.63`
+- 当前已验证状态：Coolify Application `running:healthy`，后端 `https://api.quantpoly.com/health` 返回 200
+
+当前仓库内只有本地 Coolify 栈验证工作流：
+
+- `.github/workflows/verify-coolify-local-stack.yml`
+
+截至本快照，仓库中没有“推送后由 GitHub Actions 触发生产 Coolify 部署”的 workflow。若 Coolify 控制台里开启了 GitHub webhook / auto deploy，那是 Coolify 侧配置；仓库内可审计、可重复执行的生产发布入口以 `scripts/deploy_coolify_production.py` 为准。
+
 ## 1. 对应部署资产
 
 - Compose（生产推荐）：`docker-compose.coolify.yml`
@@ -152,6 +171,97 @@ docker compose \
 
 - `.github/workflows/verify-coolify-local-stack.yml`
 
+## 5.2 生产部署触发（当前推荐入口）
+
+本地令牌文件放在：
+
+- `deploy/secrets/ops_tokens.local.env`
+
+该文件必须保持本地私有，不提交。最小内容示例：
+
+```bash
+COOLIFY_BASE_URL=https://coolify.quantpoly.com/
+COOLIFY_API_TOKEN=请填本地 Coolify API Token
+```
+
+如果还要操作 Cloudflare DNS，可在同一文件补充：
+
+```bash
+CLOUDFLARE_API_TOKEN=请填本地 Cloudflare API Token
+```
+
+提交代码后的当前发布流程：
+
+1. 本地验证变更：
+
+```bash
+./.venv/bin/pytest tests/composition/test_production_docker_assets.py tests/composition/test_coolify_deploy_script.py -q
+cd apps/frontend_web && npm run build
+```
+
+2. 使用 `jj` 提交并推送 `master`。
+
+3. 先读取 Coolify 当前状态：
+
+```bash
+./.venv/bin/python scripts/deploy_coolify_production.py --status-only
+```
+
+4. 触发生产重新部署并等待 `running:healthy`：
+
+```bash
+./.venv/bin/python scripts/deploy_coolify_production.py
+```
+
+5. 验证公网后端与前端入口：
+
+```bash
+curl -f https://api.quantpoly.com/health
+curl -sS -D /tmp/quantpoly.headers -o /tmp/quantpoly.html https://quantpoly.com/
+rg 'x-opennext|_next|/assets/index-|QuantPoly · 可解释' /tmp/quantpoly.headers /tmp/quantpoly.html
+```
+
+说明：
+
+- Coolify v4 当前部署入口是 `GET /api/v1/deploy?uuid=...&force=false`。
+- 不要用 `HEAD` 探测部署 endpoint；历史上 `HEAD` 也可能触发一次部署。
+- `--dry-run` 只打印将调用的 endpoint，不触发联网请求：
+
+```bash
+./.venv/bin/python scripts/deploy_coolify_production.py --dry-run
+```
+
+## 5.3 Cloudflare 前端入口切流
+
+当前 `quantpoly.com` 与 `www.quantpoly.com` 的 DNS 记录已指向生产服务器：
+
+- `quantpoly.com`：A `152.53.243.63`，proxied
+- `www.quantpoly.com`：A `152.53.243.63`，proxied
+
+如果公网响应头仍出现：
+
+- `x-powered-by: Next.js`
+- `x-opennext: 1`
+- HTML 内大量 `/_next/...`
+
+说明请求仍被 Cloudflare Workers / Pages 的自定义域名或 route 在更高优先级接管，没有到达 Coolify origin。这种情况下不是“必须把新前端打包上传到 Cloudflare”，而是需要先选定托管模式：
+
+1. 推荐模式：Coolify 托管前端，Cloudflare 只做 DNS / CDN / TLS 代理。
+   - 移除或禁用 `quantpoly.com`、`www.quantpoly.com` 对应的 Workers route、Workers custom domain 或 Pages custom domain。
+   - 保留 DNS A 记录指向 `152.53.243.63` 且 `proxied=true`。
+   - Purge Cloudflare cache 后重新验证响应头和 HTML。
+2. 备选模式：Cloudflare Pages / Workers 托管前端。
+   - 需要另建 Cloudflare 构建/上传流程。
+   - 后端仍走 `api.quantpoly.com`，同时要重新确认 `VITE_BACKEND_ORIGIN`、CORS 与 Cookie 策略。
+   - 这会把当前“Coolify 全栈单 Compose”拆成前端 Cloudflare + 后端 Coolify，不是本手册默认路径。
+
+当前本地 Cloudflare token 已验证可读取/更新 DNS，但读取 Workers / Pages API 会返回 `Authentication error`。要完成推荐模式，需要以下任一方式：
+
+- 在 Cloudflare 控制台手动授权登录后，进入 Workers & Pages 解除 `quantpoly.com` / `www.quantpoly.com` 绑定。
+- 或提供具备 Workers / Pages 读取与编辑权限、Zone cache purge 权限的 Cloudflare token，仍放在本地 `.local.env` / `.secret.env` 文件中，不提交。
+
+不要为了绕开 Workers / Pages 接管而直接把根域名切成灰云直连，除非已确认 Traefik / Coolify origin 对 `quantpoly.com` 和 `www.quantpoly.com` 返回有效证书；否则浏览器会遇到 origin TLS 证书错误。
+
 ## 6. 覆盖线上建议（低风险）
 
 1. 先在 `staging` 验证回归。
@@ -173,23 +283,16 @@ docker compose \
 - 前端构建依赖 `VITE_BACKEND_ORIGIN` 的构建期注入；修改后端域名需重新部署前端。
 - 当前方案默认后端任务执行模式为 `inprocess`，未启用独立 worker/redis。
 
-## 9. 可选：Coolify API 自动化部署
+## 9. Coolify API Token 权限建议
 
-如果需要我直接通过 API 代你执行部署，需要提供以下信息与权限：
+建议使用只覆盖当前 Project / Environment / Application 的操作 token：
 
-- Coolify Base URL（例如 `https://coolify.example.com`）
-- API Token（建议仅用于该 Project/Environment，避免全局管理员 Token）
-- 目标 Project 名称或 ID
-- 目标 Environment 名称或 ID（如 `staging`、`production`）
-- 目标 Docker Compose Resource 名称或 ID
-
-建议最小权限：
-
-- 可读取并更新 Resource 的环境变量
-- 可触发 Resource 重新部署
-- 可读取部署状态与日志
+- 可读取 Application 状态
+- 可触发 Application redeploy
+- 可读取部署日志
 
 不建议授予的权限：
 
 - 全局删除资源权限
 - 跨项目管理权限（除非你明确需要）
+- 服务器 SSH / 密钥管理权限

@@ -16,6 +16,7 @@
 ## 3. 当前部署事实
 
 - 全栈 Coolify 部署手册：`docs/runbooks/fullstack-coolify-deployment-runbook.md`
+- 生产 Coolify 部署脚本：`scripts/deploy_coolify_production.py`
 - 生产参考 Compose：`deploy/coolify/docker-compose.fullstack.yml`
 - 本地浏览器级验证 override：`docker-compose.coolify.local.yml`
 - 环境变量模板：`deploy/coolify/.env.fullstack.example`
@@ -45,6 +46,9 @@ sed -n '1,220p' deploy/coolify/.env.fullstack.example
 
 # 一键执行本地 Coolify Compose + Playwright 验证
 ./.venv/bin/python scripts/verify_coolify_local_stack.py
+
+# 读取生产 Coolify 应用状态
+./.venv/bin/python scripts/deploy_coolify_production.py --status-only
 
 # GitHub Actions 工作流入口
 sed -n '1,220p' .github/workflows/verify-coolify-local-stack.yml
