@@ -79,3 +79,37 @@ def test_dry_run_output_should_not_need_network_or_expose_authorization_header()
     assert '"api_token"' not in script
     assert 'method="GET"' in script
     assert 'method="HEAD"' not in script
+
+
+def test_extract_deployment_uuids_should_support_coolify_response_shapes():
+    module = _load_script_module()
+
+    assert module.extract_deployment_uuids(
+        {
+            "deployment_uuid": "single",
+            "deployments": [
+                {"deployment_uuid": "single"},
+                {"deployment_uuid": "second"},
+                {"message": "queued"},
+            ],
+        }
+    ) == ["single", "second"]
+
+
+def test_summarize_deployment_should_not_include_logs_or_runtime_env_values():
+    module = _load_script_module()
+
+    summary = module.summarize_deployment(
+        {
+            "deployment_uuid": "abc",
+            "status": "finished",
+            "commit": "deadbeef",
+            "logs": "runtime env should not be printed",
+        }
+    )
+
+    assert summary == {
+        "deployment_uuid": "abc",
+        "status": "finished",
+        "commit": "deadbeef",
+    }

@@ -26,6 +26,13 @@ DEFAULT_APPLICATION_UUID = "wgsoo0gow8wkwow8kkg00kks"
 DEFAULT_ENV_FILE = Path("deploy/secrets/ops_tokens.local.env")
 DEFAULT_TARGET_STATUS = "running:healthy"
 ENV_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+DEPLOYMENT_SUCCESS_STATUSES = {"finished"}
+DEPLOYMENT_FAILURE_STATUSES = {
+    "failed",
+    "cancelled",
+    "cancelled-by-user",
+    "cancelled_by_user",
+}
 
 
 @dataclass(frozen=True)
@@ -179,13 +186,40 @@ def _deploy_url(config: CoolifyConfig, *, force: bool) -> str:
     return f"{config.base_url}/api/v1/deploy?{query}"
 
 
+def _deployments_url(config: CoolifyConfig, *, take: int = 10) -> str:
+    query = urllib.parse.urlencode({"take": take})
+    return f"{config.base_url}/api/v1/deployments/applications/{config.application_uuid}?{query}"
+
+
 def get_application(config: CoolifyConfig) -> dict[str, Any]:
     return _request_json(_application_url(config), api_token=config.api_token)
+
+
+def get_application_deployments(config: CoolifyConfig, *, take: int = 10) -> dict[str, Any]:
+    return _request_json(_deployments_url(config, take=take), api_token=config.api_token)
 
 
 def trigger_deploy(config: CoolifyConfig, *, force: bool) -> dict[str, Any]:
     # Coolify v4 的部署入口是 GET；不要用 HEAD 探测该 endpoint，HEAD 也可能触发部署。
     return _request_json(_deploy_url(config, force=force), api_token=config.api_token, method="GET")
+
+
+def extract_deployment_uuids(deployment_response: dict[str, Any]) -> list[str]:
+    uuids: list[str] = []
+    direct_uuid = deployment_response.get("deployment_uuid")
+    if isinstance(direct_uuid, str) and direct_uuid:
+        uuids.append(direct_uuid)
+
+    deployments = deployment_response.get("deployments")
+    if isinstance(deployments, list):
+        for deployment in deployments:
+            if not isinstance(deployment, dict):
+                continue
+            deployment_uuid = deployment.get("deployment_uuid")
+            if isinstance(deployment_uuid, str) and deployment_uuid:
+                uuids.append(deployment_uuid)
+
+    return list(dict.fromkeys(uuids))
 
 
 def summarize_application(application: dict[str, Any]) -> dict[str, Any]:
@@ -202,6 +236,21 @@ def summarize_application(application: dict[str, Any]) -> dict[str, Any]:
         "restart_count",
     ]
     return {key: application.get(key) for key in keys if key in application}
+
+
+def summarize_deployment(deployment: dict[str, Any]) -> dict[str, Any]:
+    keys = [
+        "deployment_uuid",
+        "status",
+        "is_api",
+        "is_webhook",
+        "commit",
+        "commit_message",
+        "created_at",
+        "updated_at",
+        "finished_at",
+    ]
+    return {key: deployment.get(key) for key in keys if key in deployment}
 
 
 def wait_for_application_status(
@@ -222,6 +271,56 @@ def wait_for_application_status(
     raise TimeoutError(
         f"等待 Coolify 应用达到 {target_status} 超时，最后状态为 {latest.get('status')!r}"
     )
+
+
+def _find_deployment(deployments_response: dict[str, Any], deployment_uuid: str) -> dict[str, Any] | None:
+    deployments = deployments_response.get("deployments")
+    if not isinstance(deployments, list):
+        return None
+    for deployment in deployments:
+        if isinstance(deployment, dict) and deployment.get("deployment_uuid") == deployment_uuid:
+            return deployment
+    return None
+
+
+def wait_for_deployments(
+    config: CoolifyConfig,
+    *,
+    deployment_uuids: list[str],
+    timeout_seconds: float,
+    poll_interval_seconds: float,
+) -> list[dict[str, Any]]:
+    if not deployment_uuids:
+        return []
+
+    deadline = time.time() + max(timeout_seconds, 1)
+    latest_by_uuid: dict[str, dict[str, Any]] = {}
+    while time.time() < deadline:
+        deployments_response = get_application_deployments(config, take=max(len(deployment_uuids), 10))
+        for deployment_uuid in deployment_uuids:
+            deployment = _find_deployment(deployments_response, deployment_uuid)
+            if deployment is not None:
+                latest_by_uuid[deployment_uuid] = deployment
+
+        if len(latest_by_uuid) == len(deployment_uuids):
+            statuses = {uuid: str(deployment.get("status") or "") for uuid, deployment in latest_by_uuid.items()}
+            failed = {
+                uuid: status
+                for uuid, status in statuses.items()
+                if status in DEPLOYMENT_FAILURE_STATUSES
+            }
+            if failed:
+                raise RuntimeError(f"Coolify 部署失败: {failed}")
+            if all(status in DEPLOYMENT_SUCCESS_STATUSES for status in statuses.values()):
+                return [latest_by_uuid[uuid] for uuid in deployment_uuids]
+
+        time.sleep(max(poll_interval_seconds, 1))
+
+    latest_statuses = {
+        uuid: latest_by_uuid.get(uuid, {}).get("status", "missing")
+        for uuid in deployment_uuids
+    }
+    raise TimeoutError(f"等待 Coolify 部署完成超时，最后状态为 {latest_statuses}")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -274,6 +373,15 @@ def main(argv: list[str] | None = None) -> int:
 
         before = get_application(config)
         deployment = trigger_deploy(config, force=args.force)
+        deployment_uuids = extract_deployment_uuids(deployment)
+        finished_deployments: list[dict[str, Any]] = []
+        if not args.no_wait:
+            finished_deployments = wait_for_deployments(
+                config,
+                deployment_uuids=deployment_uuids,
+                timeout_seconds=args.timeout_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
         final_application = before if args.no_wait else wait_for_application_status(
             config,
             target_status=args.target_status,
@@ -286,6 +394,11 @@ def main(argv: list[str] | None = None) -> int:
                 "action": "deploy",
                 "application_uuid": config.application_uuid,
                 "deployment": deployment,
+                "deployment_uuids": deployment_uuids,
+                "finished_deployments": [
+                    summarize_deployment(finished_deployment)
+                    for finished_deployment in finished_deployments
+                ],
                 "before": summarize_application(before),
                 "application": summarize_application(final_application),
                 "waited": not args.no_wait,
@@ -293,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         return 0
-    except (ValueError, CoolifyApiError, TimeoutError) as exc:
+    except (ValueError, RuntimeError, CoolifyApiError, TimeoutError) as exc:
         detail: dict[str, Any] = {}
         if isinstance(exc, CoolifyApiError):
             detail = {

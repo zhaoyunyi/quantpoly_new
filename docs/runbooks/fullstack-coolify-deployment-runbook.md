@@ -225,6 +225,7 @@ rg 'x-opennext|_next|/assets/index-|QuantPoly · 可解释' /tmp/quantpoly.heade
 
 - Coolify v4 当前部署入口是 `GET /api/v1/deploy?uuid=...&force=false`。
 - 不要用 `HEAD` 探测部署 endpoint；历史上 `HEAD` 也可能触发一次部署。
+- 脚本会优先根据 Coolify 返回的 `deployment_uuid` 轮询部署记录，直到部署状态 `finished` 且 Application 回到 `running:healthy`。
 - `--dry-run` 只打印将调用的 endpoint，不触发联网请求：
 
 ```bash
