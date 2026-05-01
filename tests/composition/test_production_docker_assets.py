@@ -37,5 +37,7 @@ def test_frontend_vite_preview_should_allow_public_domains():
     content = config_path.read_text(encoding="utf-8")
 
     assert "allowedHosts" in content
+    assert "localhost" in content
+    assert "127.0.0.1" in content
     assert "quantpoly.com" in content
     assert "www.quantpoly.com" in content
