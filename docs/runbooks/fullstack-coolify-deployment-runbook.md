@@ -15,7 +15,11 @@
 - Branch：`master`
 - Compose Path：`/docker-compose.coolify.yml`
 - 生产服务器 IP：`152.53.243.63`
-- 当前已验证状态：Coolify Application `running:healthy`，后端 `https://api.quantpoly.com/health` 返回 200
+- 当前已验证状态：
+  - Coolify Application `running:healthy`
+  - 后端 `https://api.quantpoly.com/health` 返回 200
+  - 前端 `https://quantpoly.com/` 与 `https://www.quantpoly.com/` 经 Cloudflare 返回新 Vite/TanStack 前端 HTML
+  - 旧 Worker `quantpoly-frontend` 的 `quantpoly.com/*`、`www.quantpoly.com/*` 路由已从 Cloudflare Dashboard 删除
 
 当前仓库内只有本地 Coolify 栈验证工作流：
 
@@ -239,7 +243,18 @@ rg 'x-opennext|_next|/assets/index-|QuantPoly · 可解释' /tmp/quantpoly.heade
 - `quantpoly.com`：A `152.53.243.63`，proxied
 - `www.quantpoly.com`：A `152.53.243.63`，proxied
 
-如果公网响应头仍出现：
+`2026-05-01` 已在 Cloudflare Dashboard 中从旧 Worker `quantpoly-frontend` 删除以下路由：
+
+- `quantpoly.com/*`
+- `www.quantpoly.com/*`
+
+删除后，公网验证应满足：
+
+- 响应头不再出现 `x-powered-by: Next.js`
+- 响应头不再出现 `x-opennext: 1`
+- HTML 命中 Vite/TanStack 静态资源，例如 `/assets/index-*`
+
+如果后续公网响应头再次出现：
 
 - `x-powered-by: Next.js`
 - `x-opennext: 1`
@@ -256,10 +271,7 @@ rg 'x-opennext|_next|/assets/index-|QuantPoly · 可解释' /tmp/quantpoly.heade
    - 后端仍走 `api.quantpoly.com`，同时要重新确认 `VITE_BACKEND_ORIGIN`、CORS 与 Cookie 策略。
    - 这会把当前“Coolify 全栈单 Compose”拆成前端 Cloudflare + 后端 Coolify，不是本手册默认路径。
 
-当前本地 Cloudflare token 已验证可读取/更新 DNS，但读取 Workers / Pages API 会返回 `Authentication error`。要完成推荐模式，需要以下任一方式：
-
-- 在 Cloudflare 控制台手动授权登录后，进入 Workers & Pages 解除 `quantpoly.com` / `www.quantpoly.com` 绑定。
-- 或提供具备 Workers / Pages 读取与编辑权限、Zone cache purge 权限的 Cloudflare token，仍放在本地 `.local.env` / `.secret.env` 文件中，不提交。
+当前本地 Cloudflare token 已验证可读取/更新 DNS，但读取 Workers / Pages API 与 purge cache API 仍会返回 `Authentication error`。如后续需要通过 API 自动审计或修改 Workers / Pages，需要提供具备 Workers / Pages 读取与编辑权限、Zone cache purge 权限的新 token，仍放在本地 `.local.env` / `.secret.env` 文件中，不提交。
 
 不要为了绕开 Workers / Pages 接管而直接把根域名切成灰云直连，除非已确认 Traefik / Coolify origin 对 `quantpoly.com` 和 `www.quantpoly.com` 返回有效证书；否则浏览器会遇到 origin TLS 证书错误。
 
